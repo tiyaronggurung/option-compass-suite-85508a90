@@ -18,6 +18,7 @@ const NAV = [
 export default function AppShell() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  useBrowserPush();
 
   return (
     <div className="min-h-screen flex w-full">
