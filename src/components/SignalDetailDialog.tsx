@@ -20,6 +20,10 @@ interface Props {
 export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Props) {
   const { isAdmin } = useIsAdmin();
   const [siblings, setSiblings] = useState<Signal[] | null>(null);
+  const [current, setCurrent] = useState<Signal | null>(signal);
+  const [picking, setPicking] = useState(false);
+
+  useEffect(() => { setCurrent(signal); }, [signal]);
 
   useEffect(() => {
     if (!open || !signal || !isAdmin) { setSiblings(null); return; }
