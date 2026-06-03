@@ -13,6 +13,8 @@ import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
 import { signalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
 import { isExpired } from "@/lib/signalFreshness";
+import { checkRiskGuards, effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
+import { RiskStatusCard } from "@/components/RiskStatusCard";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
@@ -53,18 +55,20 @@ export default function Dashboard() {
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
   const [includeExpired, setIncludeExpired] = useState(false);
   const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
+  const [risk, setRisk] = useState<RiskSettingsLike>(null);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }] = await Promise.all([
+      const [{ data: s }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
         supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).eq("action", "dismissed"),
         supabase.from("provider_configs").select("last_status").eq("provider", "alpaca").maybeSingle(),
+        supabase.from("risk_settings").select("*").eq("user_id", user!.id).maybeSingle(),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
@@ -73,6 +77,7 @@ export default function Dashboard() {
       setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
       if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
       setAlpacaStatus(pc?.last_status ?? null);
+      setRisk(rs as RiskSettingsLike);
     })();
 
     const channel = supabase
@@ -113,8 +118,23 @@ export default function Dashboard() {
   const dailyPL = trades
     .filter((t) => new Date(t.opened_at).toDateString() === new Date().toDateString())
     .reduce((a, t) => a + Number(t.current_pl ?? 0), 0);
+  const todayRealizedPL = useMemo(() => sumTodayRealizedPL(trades as any), [trades]);
+  const effective = useMemo(() => effectiveRisk(risk), [risk]);
 
   async function approve(s: Signal) {
+    const intendedRisk = 100; // matches the risk_amount written below
+    const guard = checkRiskGuards({
+      risk,
+      openTradesCount: openTrades.length,
+      todayRealizedPL,
+      intendedRisk,
+    });
+    if (!guard.ok) {
+      toast.error((guard as { reason: string }).reason);
+      return;
+    }
+
+
     const { error } = await supabase.from("paper_trades").insert({
       user_id: user!.id,
       signal_id: s.id,
@@ -124,13 +144,14 @@ export default function Dashboard() {
       entry_price: s.premium ?? s.price,
       stop_idea: s.premium ? Number(s.premium) * 0.6 : null,
       target_idea: s.premium ? Number(s.premium) * 1.8 : null,
-      risk_amount: 100,
+      risk_amount: intendedRisk,
     });
     if (error) return toast.error(error.message);
     toast.success(`Paper trade opened on ${s.ticker}`);
     const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
     setTrades(data ?? []);
   }
+
 
   async function dismiss(s: Signal) {
     const { error } = await supabase.from("signal_actions").insert({
@@ -184,6 +205,13 @@ export default function Dashboard() {
         <Stat icon={Activity} label="Open paper trades" value={String(openTrades.length)} accent="text-info" />
         <Stat icon={DollarSign} label="Daily P/L (paper)" value={`$${fmtPL(dailyPL)}`} accent={dailyPL >= 0 ? "text-bull" : "text-bear"} />
       </section>
+
+      <RiskStatusCard
+        effective={effective}
+        openTradesCount={openTrades.length}
+        todayRealizedPL={todayRealizedPL}
+      />
+
 
       <DisclaimerBar />
 
