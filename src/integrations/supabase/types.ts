@@ -100,12 +100,16 @@ export type Database = {
           closed_at: string | null
           contract_idea: string | null
           current_pl: number
+          current_pl_pct: number | null
           direction: Database["public"]["Enums"]["signal_direction"]
           entry_price: number | null
           exit_price: number | null
           exit_reason: Database["public"]["Enums"]["trade_close_reason"] | null
           id: string
+          last_mark_at: string | null
+          last_mark_price: number | null
           mae: number | null
+          mark_source: string | null
           max_drawdown: number
           max_gain: number
           mfe: number | null
@@ -123,12 +127,16 @@ export type Database = {
           closed_at?: string | null
           contract_idea?: string | null
           current_pl?: number
+          current_pl_pct?: number | null
           direction: Database["public"]["Enums"]["signal_direction"]
           entry_price?: number | null
           exit_price?: number | null
           exit_reason?: Database["public"]["Enums"]["trade_close_reason"] | null
           id?: string
+          last_mark_at?: string | null
+          last_mark_price?: number | null
           mae?: number | null
+          mark_source?: string | null
           max_drawdown?: number
           max_gain?: number
           mfe?: number | null
@@ -146,12 +154,16 @@ export type Database = {
           closed_at?: string | null
           contract_idea?: string | null
           current_pl?: number
+          current_pl_pct?: number | null
           direction?: Database["public"]["Enums"]["signal_direction"]
           entry_price?: number | null
           exit_price?: number | null
           exit_reason?: Database["public"]["Enums"]["trade_close_reason"] | null
           id?: string
+          last_mark_at?: string | null
+          last_mark_price?: number | null
           mae?: number | null
+          mark_source?: string | null
           max_drawdown?: number
           max_gain?: number
           mfe?: number | null
