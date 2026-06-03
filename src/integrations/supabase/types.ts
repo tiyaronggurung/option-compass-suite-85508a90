@@ -388,6 +388,27 @@ export type Database = {
         }
         Relationships: []
       }
+      scanner_settings: {
+        Row: {
+          debug_mode: boolean
+          id: string
+          profile: Database["public"]["Enums"]["scanner_profile"]
+          updated_at: string
+        }
+        Insert: {
+          debug_mode?: boolean
+          id?: string
+          profile?: Database["public"]["Enums"]["scanner_profile"]
+          updated_at?: string
+        }
+        Update: {
+          debug_mode?: boolean
+          id?: string
+          profile?: Database["public"]["Enums"]["scanner_profile"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       signal_actions: {
         Row: {
           action: Database["public"]["Enums"]["signal_action"]
@@ -484,37 +505,55 @@ export type Database = {
       }
       signal_scan_runs: {
         Row: {
+          avg_score: number | null
+          candidates_scanned: number
           duration_ms: number | null
           error: string | null
           id: string
+          profile: string | null
           ran_at: string
           signals_created: number
+          skipped_candidates: Json
           skipped_count: number
           status: string
+          threshold: number | null
           tickers_scanned: string[]
           trigger: string
+          would_have_created: number
         }
         Insert: {
+          avg_score?: number | null
+          candidates_scanned?: number
           duration_ms?: number | null
           error?: string | null
           id?: string
+          profile?: string | null
           ran_at?: string
           signals_created?: number
+          skipped_candidates?: Json
           skipped_count?: number
           status: string
+          threshold?: number | null
           tickers_scanned?: string[]
           trigger?: string
+          would_have_created?: number
         }
         Update: {
+          avg_score?: number | null
+          candidates_scanned?: number
           duration_ms?: number | null
           error?: string | null
           id?: string
+          profile?: string | null
           ran_at?: string
           signals_created?: number
+          skipped_candidates?: Json
           skipped_count?: number
           status?: string
+          threshold?: number | null
           tickers_scanned?: string[]
           trigger?: string
+          would_have_created?: number
         }
         Relationships: []
       }
@@ -702,6 +741,7 @@ export type Database = {
       provider_mode: "live" | "simulated"
       provider_status: "ok" | "error" | "unknown"
       risk_level: "LOW" | "MEDIUM" | "HIGH"
+      scanner_profile: "conservative" | "balanced" | "active_mvp"
       signal_action: "approved" | "dismissed"
       signal_direction: "CALL" | "PUT"
       signal_status: "LIVE" | "EXPIRED" | "TRIGGERED"
@@ -845,6 +885,7 @@ export const Constants = {
       provider_mode: ["live", "simulated"],
       provider_status: ["ok", "error", "unknown"],
       risk_level: ["LOW", "MEDIUM", "HIGH"],
+      scanner_profile: ["conservative", "balanced", "active_mvp"],
       signal_action: ["approved", "dismissed"],
       signal_direction: ["CALL", "PUT"],
       signal_status: ["LIVE", "EXPIRED", "TRIGGERED"],
