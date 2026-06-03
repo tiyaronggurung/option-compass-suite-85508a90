@@ -303,12 +303,156 @@ const PROFILE_THRESHOLDS: Record<string, number> = {
   testing: 25,
 };
 
-async function loadScannerSettings(): Promise<{ profile: string; threshold: number; debug_mode: boolean }> {
-  const { data } = await admin.from("scanner_settings").select("profile, debug_mode").eq("id", "global").maybeSingle();
+type UniverseMode = "base_8" | "watchlist_earnings" | "top_100" | "top_250" | "top_500";
+
+async function loadScannerSettings(): Promise<{ profile: string; threshold: number; debug_mode: boolean; universe_mode: UniverseMode }> {
+  const { data } = await admin.from("scanner_settings").select("profile, debug_mode, universe_mode").eq("id", "global").maybeSingle();
   const profile = (data?.profile as string) ?? "balanced";
   const debug_mode = !!data?.debug_mode;
+  const universe_mode = ((data as any)?.universe_mode as UniverseMode) ?? "base_8";
   const threshold = PROFILE_THRESHOLDS[profile] ?? 50;
-  return { profile, threshold, debug_mode };
+  return { profile, threshold, debug_mode, universe_mode };
+}
+
+// ---------- Universe resolution ----------
+// Returns the tickers to scan plus diagnostics for signal_scan_runs.
+// Does NOT touch scoring logic.
+async function resolveUniverse(mode: UniverseMode): Promise<{
+  tickers: string[];
+  universe_count: number;
+  watchlist_count: number;
+  earnings_count: number;
+  skipped_due_to_cap: number;
+}> {
+  if (mode === "base_8") {
+    return {
+      tickers: DEFAULT_TICKERS,
+      universe_count: DEFAULT_TICKERS.length,
+      watchlist_count: 0,
+      earnings_count: 0,
+      skipped_due_to_cap: 0,
+    };
+  }
+
+  if (mode === "watchlist_earnings") {
+    const horizon = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const [wlRes, earnRes] = await Promise.all([
+      admin.from("watchlist_items").select("ticker"),
+      admin.from("earnings_events").select("ticker").gte("report_date", today).lte("report_date", horizon),
+    ]);
+    const wl = new Set((wlRes.data ?? []).map((r: any) => r.ticker as string));
+    const earn = new Set((earnRes.data ?? []).map((r: any) => r.ticker as string));
+    const merged = new Set<string>([...wl, ...earn]);
+    return {
+      tickers: [...merged],
+      universe_count: merged.size,
+      watchlist_count: wl.size,
+      earnings_count: earn.size,
+      skipped_due_to_cap: 0,
+    };
+  }
+
+  // top_100 / top_250 / top_500 — pull from tradable_universe with ranking
+  const cap = mode === "top_100" ? 100 : mode === "top_250" ? 250 : 500;
+  const horizon = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [uniRes, wlRes, earnRes] = await Promise.all([
+    admin
+      .from("tradable_universe")
+      .select("ticker, avg_volume, market_cap, last_price")
+      .eq("optionable", true)
+      .eq("active", true)
+      .eq("tradable", true)
+      .order("avg_volume", { ascending: false, nullsFirst: false })
+      .limit(2000),
+    admin.from("watchlist_items").select("ticker"),
+    admin.from("earnings_events").select("ticker, report_date").gte("report_date", today).lte("report_date", horizon),
+  ]);
+
+  const universe = uniRes.data ?? [];
+  const wl = new Set((wlRes.data ?? []).map((r: any) => r.ticker as string));
+  const earningsByTicker = new Map<string, string>();
+  for (const e of (earnRes.data ?? [])) {
+    earningsByTicker.set((e as any).ticker, (e as any).report_date);
+  }
+
+  // Filter price>$5 OR price unknown (heuristic mode — no price yet) AND avg_volume>500k OR unknown
+  const eligible = universe.filter((r: any) => {
+    const price = r.last_price;
+    const vol = r.avg_volume;
+    if (price !== null && price !== undefined && Number(price) <= 5) return false;
+    if (vol !== null && vol !== undefined && Number(vol) < 500_000) return false;
+    return true;
+  });
+
+  // Rank: earnings ≤7d > earnings ≤14d > avg_volume > watchlist > market_cap
+  const now = Date.now();
+  const ranked = eligible
+    .map((r: any) => {
+      const t = r.ticker as string;
+      const earn = earningsByTicker.get(t);
+      let earnScore = 0;
+      if (earn) {
+        const days = Math.floor((new Date(earn).getTime() - now) / 86400000);
+        if (days <= 7) earnScore = 3;
+        else if (days <= 14) earnScore = 2;
+      }
+      const wlScore = wl.has(t) ? 1 : 0;
+      const vol = Number(r.avg_volume ?? 0);
+      const mcap = Number(r.market_cap ?? 0);
+      return { ticker: t, earnScore, wlScore, vol, mcap };
+    })
+    .sort((a, b) => {
+      if (b.earnScore !== a.earnScore) return b.earnScore - a.earnScore;
+      if (b.vol !== a.vol) return b.vol - a.vol;
+      if (b.wlScore !== a.wlScore) return b.wlScore - a.wlScore;
+      return b.mcap - a.mcap;
+    });
+
+  const picked = ranked.slice(0, cap);
+  const pickedSet = new Set(picked.map((p) => p.ticker));
+  const earnings_count = picked.filter((p) => earningsByTicker.has(p.ticker)).length;
+  const watchlist_count = picked.filter((p) => wl.has(p.ticker)).length;
+
+  return {
+    tickers: picked.map((p) => p.ticker),
+    universe_count: eligible.length,
+    watchlist_count,
+    earnings_count,
+    skipped_due_to_cap: Math.max(0, eligible.length - picked.length),
+  };
+}
+
+// ---------- Overlap lock (prevents two scans running at once) ----------
+const SCAN_LOCK_ID = "scan-signals";
+const SCAN_LOCK_TTL_MS = 5 * 60 * 1000; // 5 min safety release
+
+async function acquireScanLock(trigger: string): Promise<boolean> {
+  // Try insert — if conflict, check age and steal if stale
+  const { error } = await admin.from("scan_locks").insert({
+    id: SCAN_LOCK_ID,
+    locked_at: new Date().toISOString(),
+    locked_by: trigger,
+  });
+  if (!error) return true;
+  // Existing lock — check staleness
+  const { data } = await admin.from("scan_locks").select("locked_at").eq("id", SCAN_LOCK_ID).maybeSingle();
+  if (!data) return false;
+  const age = Date.now() - new Date((data as any).locked_at).getTime();
+  if (age > SCAN_LOCK_TTL_MS) {
+    await admin.from("scan_locks").update({
+      locked_at: new Date().toISOString(),
+      locked_by: trigger,
+    }).eq("id", SCAN_LOCK_ID);
+    return true;
+  }
+  return false;
+}
+
+async function releaseScanLock(): Promise<void> {
+  await admin.from("scan_locks").delete().eq("id", SCAN_LOCK_ID);
 }
 
 // ---------- Auth ----------
@@ -346,8 +490,11 @@ Deno.serve(async (req) => {
   if (auth.trigger !== "manual") force = false;
 
   const t0 = Date.now();
-  const tickers = DEFAULT_TICKERS;
   const settings = await loadScannerSettings();
+
+  // Resolve universe based on configured mode
+  const universe = await resolveUniverse(settings.universe_mode);
+  const tickers = universe.tickers;
 
   // Market-hours gate (bypassable by admin force run)
   const market = isMarketOpenET();
@@ -356,6 +503,11 @@ Deno.serve(async (req) => {
       status: market.reason, trigger: auth.trigger, tickers_scanned: tickers,
       signals_created: 0, skipped_count: tickers.length, duration_ms: Date.now() - t0,
       profile: settings.profile, threshold: settings.threshold,
+      universe_mode: settings.universe_mode,
+      universe_count: universe.universe_count,
+      watchlist_count: universe.watchlist_count,
+      earnings_count: universe.earnings_count,
+      skipped_due_to_cap: universe.skipped_due_to_cap,
     });
     return json({ ok: true, status: market.reason, signals_created: 0 });
   }
@@ -365,8 +517,30 @@ Deno.serve(async (req) => {
       status: "error", trigger: auth.trigger, tickers_scanned: tickers,
       error: "Alpaca credentials missing", duration_ms: Date.now() - t0,
       profile: settings.profile, threshold: settings.threshold,
+      universe_mode: settings.universe_mode,
+      universe_count: universe.universe_count,
     });
     return json({ error: "Alpaca not configured" }, 500);
+  }
+
+  if (tickers.length === 0) {
+    await admin.from("signal_scan_runs").insert({
+      status: "empty_universe", trigger: auth.trigger, tickers_scanned: [],
+      signals_created: 0, skipped_count: 0, duration_ms: Date.now() - t0,
+      profile: settings.profile, threshold: settings.threshold,
+      universe_mode: settings.universe_mode,
+      universe_count: universe.universe_count,
+      watchlist_count: universe.watchlist_count,
+      earnings_count: universe.earnings_count,
+      skipped_due_to_cap: universe.skipped_due_to_cap,
+    });
+    return json({ ok: true, status: "empty_universe", signals_created: 0 });
+  }
+
+  // Overlap lock — prevent two scans running at once
+  const gotLock = await acquireScanLock(auth.trigger);
+  if (!gotLock) {
+    return json({ ok: false, status: "scan_in_progress", signals_created: 0 }, 200);
   }
 
   let created = 0;
@@ -380,20 +554,19 @@ Deno.serve(async (req) => {
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
 
-  for (const sym of tickers) {
+  // Per-ticker processor — identical scoring/picker/insert logic, extracted for parallel execution.
+  async function processTicker(sym: string): Promise<void> {
     try {
       const bars = await fetchBars(sym);
       const draft = evaluate(sym, bars);
-      if (!draft) { skipped++; continue; }
+      if (!draft) { skipped++; return; }
 
       candidates++;
       scores.push(draft.confidence);
-      // Accumulate signed component scores for averaging
       for (const k of Object.keys(compSums) as ComponentName[]) {
         compSums[k] += draft.components[k].score;
       }
 
-      // Would-have-created: only when threshold >= 50, count [threshold-10, threshold-1]
       if (settings.threshold >= 50 &&
           draft.confidence >= settings.threshold - 10 &&
           draft.confidence < settings.threshold) {
@@ -408,17 +581,15 @@ Deno.serve(async (req) => {
           score: draft.confidence,
           reasons: draft.reasons,
         });
-        continue;
+        return;
       }
 
       const bucket = Math.floor(Date.now() / (5 * 60 * 1000));
       const dedupeRaw = `${sym}|${draft.direction}|${bucket}`;
       const externalId = await sha1Uuid(dedupeRaw);
 
-      // TTL: stock-bar scanner has no DTE, default to 2h
       const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
-      // ---- Earnings catalyst (never forces a trade — only modifies already-passing signals) ----
       let catalyst: CatalystResult | null = null;
       let finalConfidence = draft.confidence;
       let finalRisk: "LOW" | "MEDIUM" | "HIGH" = draft.risk_level;
@@ -431,18 +602,15 @@ Deno.serve(async (req) => {
           catalystSummary = catalyst.summary;
         }
       } catch (e) {
-        // Graceful: scanner continues without catalyst boost
         errors.push(`${sym} catalyst: ${(e as Error).message}`);
       }
 
-      // ---- 0.35-delta contract picker (best-effort) ----
       let contractFields: Record<string, unknown> = {};
       let contractMeta: Record<string, unknown> | null = null;
       const reasonsWithContract = [...draft.reasons];
       if (catalyst) reasonsWithContract.push(catalyst.summary);
       if (ALPACA_KEY && ALPACA_SECRET) {
         try {
-          // Pre-flight: if cache empty in 14-30 DTE window, best-effort refresh
           const winEnd = new Date(Date.now() + 32 * 86400000).toISOString().slice(0, 10);
           const winStart = new Date(Date.now() + 13 * 86400000).toISOString().slice(0, 10);
           const { count: cached } = await admin
@@ -516,10 +684,10 @@ Deno.serve(async (req) => {
         ...contractFields,
       });
       if (error) {
-        if ((error as any).code === "23505") { skipped++; continue; }
+        if ((error as any).code === "23505") { skipped++; return; }
         errors.push(`${sym}: ${error.message}`);
         skipped++;
-        continue;
+        return;
       }
       created++;
     } catch (e) {
@@ -528,7 +696,17 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Top 3 skipped by score (only persisted when debug_mode is on)
+  // Parallel batches of 20
+  const BATCH_SIZE = 20;
+  try {
+    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+      const batch = tickers.slice(i, i + BATCH_SIZE);
+      await Promise.allSettled(batch.map((sym) => processTicker(sym)));
+    }
+  } finally {
+    await releaseScanLock();
+  }
+
   const topSkipped = settings.debug_mode
     ? skippedList.sort((a, b) => b.score - a.score).slice(0, 3)
     : [];
@@ -537,7 +715,6 @@ Deno.serve(async (req) => {
     ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2))
     : null;
 
-  // Average component scores across candidates (signed −1..+1)
   const avgComponents: Record<string, number | null> & { candidate_count: number } = {
     trend: null, momentum: null, levels: null, volume: null, options: null, macro: null,
     candidate_count: candidates,
@@ -561,6 +738,11 @@ Deno.serve(async (req) => {
     threshold: settings.threshold,
     error: errors.length ? errors.join("; ").slice(0, 1000) : null,
     duration_ms: Date.now() - t0,
+    universe_mode: settings.universe_mode,
+    universe_count: universe.universe_count,
+    watchlist_count: universe.watchlist_count,
+    earnings_count: universe.earnings_count,
+    skipped_due_to_cap: universe.skipped_due_to_cap,
   });
 
   return json({
@@ -568,6 +750,11 @@ Deno.serve(async (req) => {
     would_have_created: wouldHave, candidates_scanned: candidates,
     avg_score: avgScore, avg_components: avgComponents,
     profile: settings.profile, threshold: settings.threshold,
+    universe_mode: settings.universe_mode,
+    universe_count: universe.universe_count,
+    watchlist_count: universe.watchlist_count,
+    earnings_count: universe.earnings_count,
+    skipped_due_to_cap: universe.skipped_due_to_cap,
     errors,
   });
 });

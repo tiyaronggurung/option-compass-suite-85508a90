@@ -424,23 +424,44 @@ export type Database = {
         }
         Relationships: []
       }
+      scan_locks: {
+        Row: {
+          id: string
+          locked_at: string
+          locked_by: string | null
+        }
+        Insert: {
+          id: string
+          locked_at?: string
+          locked_by?: string | null
+        }
+        Update: {
+          id?: string
+          locked_at?: string
+          locked_by?: string | null
+        }
+        Relationships: []
+      }
       scanner_settings: {
         Row: {
           debug_mode: boolean
           id: string
           profile: Database["public"]["Enums"]["scanner_profile"]
+          universe_mode: Database["public"]["Enums"]["scanner_universe_mode"]
           updated_at: string
         }
         Insert: {
           debug_mode?: boolean
           id?: string
           profile?: Database["public"]["Enums"]["scanner_profile"]
+          universe_mode?: Database["public"]["Enums"]["scanner_universe_mode"]
           updated_at?: string
         }
         Update: {
           debug_mode?: boolean
           id?: string
           profile?: Database["public"]["Enums"]["scanner_profile"]
+          universe_mode?: Database["public"]["Enums"]["scanner_universe_mode"]
           updated_at?: string
         }
         Relationships: []
@@ -545,6 +566,7 @@ export type Database = {
           avg_score: number | null
           candidates_scanned: number
           duration_ms: number | null
+          earnings_count: number | null
           error: string | null
           id: string
           profile: string | null
@@ -552,10 +574,14 @@ export type Database = {
           signals_created: number
           skipped_candidates: Json
           skipped_count: number
+          skipped_due_to_cap: number | null
           status: string
           threshold: number | null
           tickers_scanned: string[]
           trigger: string
+          universe_count: number | null
+          universe_mode: string | null
+          watchlist_count: number | null
           would_have_created: number
         }
         Insert: {
@@ -563,6 +589,7 @@ export type Database = {
           avg_score?: number | null
           candidates_scanned?: number
           duration_ms?: number | null
+          earnings_count?: number | null
           error?: string | null
           id?: string
           profile?: string | null
@@ -570,10 +597,14 @@ export type Database = {
           signals_created?: number
           skipped_candidates?: Json
           skipped_count?: number
+          skipped_due_to_cap?: number | null
           status: string
           threshold?: number | null
           tickers_scanned?: string[]
           trigger?: string
+          universe_count?: number | null
+          universe_mode?: string | null
+          watchlist_count?: number | null
           would_have_created?: number
         }
         Update: {
@@ -581,6 +612,7 @@ export type Database = {
           avg_score?: number | null
           candidates_scanned?: number
           duration_ms?: number | null
+          earnings_count?: number | null
           error?: string | null
           id?: string
           profile?: string | null
@@ -588,10 +620,14 @@ export type Database = {
           signals_created?: number
           skipped_candidates?: Json
           skipped_count?: number
+          skipped_due_to_cap?: number | null
           status?: string
           threshold?: number | null
           tickers_scanned?: string[]
           trigger?: string
+          universe_count?: number | null
+          universe_mode?: string | null
+          watchlist_count?: number | null
           would_have_created?: number
         }
         Relationships: []
@@ -671,6 +707,48 @@ export type Database = {
           strike?: number | null
           technical_metrics?: Json
           ticker?: string
+        }
+        Relationships: []
+      }
+      tradable_universe: {
+        Row: {
+          active: boolean
+          asset_class: string | null
+          avg_volume: number | null
+          company_name: string | null
+          exchange: string | null
+          last_price: number | null
+          market_cap: number | null
+          optionable: boolean
+          ticker: string
+          tradable: boolean
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          asset_class?: string | null
+          avg_volume?: number | null
+          company_name?: string | null
+          exchange?: string | null
+          last_price?: number | null
+          market_cap?: number | null
+          optionable?: boolean
+          ticker: string
+          tradable?: boolean
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          asset_class?: string | null
+          avg_volume?: number | null
+          company_name?: string | null
+          exchange?: string | null
+          last_price?: number | null
+          market_cap?: number | null
+          optionable?: boolean
+          ticker?: string
+          tradable?: boolean
+          updated_at?: string
         }
         Relationships: []
       }
@@ -790,6 +868,12 @@ export type Database = {
       provider_status: "ok" | "error" | "unknown"
       risk_level: "LOW" | "MEDIUM" | "HIGH"
       scanner_profile: "conservative" | "balanced" | "active_mvp" | "testing"
+      scanner_universe_mode:
+        | "base_8"
+        | "watchlist_earnings"
+        | "top_100"
+        | "top_250"
+        | "top_500"
       signal_action: "approved" | "dismissed"
       signal_direction: "CALL" | "PUT"
       signal_status: "LIVE" | "EXPIRED" | "TRIGGERED"
@@ -941,6 +1025,13 @@ export const Constants = {
       provider_status: ["ok", "error", "unknown"],
       risk_level: ["LOW", "MEDIUM", "HIGH"],
       scanner_profile: ["conservative", "balanced", "active_mvp", "testing"],
+      scanner_universe_mode: [
+        "base_8",
+        "watchlist_earnings",
+        "top_100",
+        "top_250",
+        "top_500",
+      ],
       signal_action: ["approved", "dismissed"],
       signal_direction: ["CALL", "PUT"],
       signal_status: ["LIVE", "EXPIRED", "TRIGGERED"],
