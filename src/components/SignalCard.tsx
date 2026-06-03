@@ -1,10 +1,11 @@
-import { ArrowDownRight, ArrowUpRight, Clock, Flame, Info, Radio, ShieldAlert, TestTube, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
+import { getFreshness } from "@/lib/signalFreshness";
 
 type Props = {
   signal: Signal;
@@ -20,6 +21,12 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const ring =
     signal.confidence >= 80 ? "ring-bull/40" : signal.confidence >= 65 ? "ring-primary/30" : "ring-border";
   const tags: TagId[] = deriveTags(signal, watchlist ?? new Set());
+  const freshness = getFreshness(signal);
+  const freshClass =
+    freshness === "fresh" ? "bg-bull/15 text-bull"
+    : freshness === "aging" ? "bg-warn/15 text-warn"
+    : "bg-muted text-muted-foreground";
+  const freshLabel = freshness === "fresh" ? "Fresh" : freshness === "aging" ? "Aging" : "Expired";
 
   return (
     <div className={cn("glass-card p-4 ring-1 transition hover:ring-primary/40", ring)}>
@@ -56,6 +63,9 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                   {OUTCOME_LABEL[outcome]}
                 </Badge>
               )}
+              <Badge className={cn("border-0 gap-1 text-[10px]", freshClass)} title={`Signal freshness: ${freshLabel}`}>
+                <Timer className="h-3 w-3" /> {freshLabel}
+              </Badge>
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
               <Clock className="h-3 w-3" />
