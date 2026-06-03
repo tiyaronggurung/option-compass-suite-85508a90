@@ -12,6 +12,7 @@ import { SignalModePanel } from "@/components/SignalModePanel";
 import { SignalAuditPanel } from "@/components/SignalAuditPanel";
 import SignalLearningPanel from "@/components/SignalLearningPanel";
 import MarkingEngineStatus from "@/components/MarkingEngineStatus";
+import OptionsChainPanel from "@/components/OptionsChainPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -91,6 +92,8 @@ export default function Settings() {
       <SignalLearningPanel />
 
       <MarkingEngineStatus />
+
+      <OptionsChainPanel />
 
       <section className="glass-card p-5 space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-warn" /> Compliance</h2>
