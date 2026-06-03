@@ -29,47 +29,50 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const freshLabel = freshness === "fresh" ? "Fresh" : freshness === "aging" ? "Aging" : "Expired";
 
   return (
-    <div className={cn("glass-card p-4 ring-1 transition hover:ring-primary/40", ring)}>
+    <div className={cn("glass-card p-3 sm:p-4 ring-1 transition hover:ring-primary/40", ring)}>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-2.5 min-w-0 flex-1">
           <div
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg font-bold ticker-mono",
+              "flex h-9 w-9 items-center justify-center rounded-md font-bold ticker-mono shrink-0",
               isCall ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear",
             )}
           >
-            {isCall ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+            {isCall ? <ArrowUpRight className="h-4.5 w-4.5" /> : <ArrowDownRight className="h-4.5 w-4.5" />}
           </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="ticker-mono text-lg font-semibold">{signal.ticker}</span>
-              <Badge variant="outline" className={cn("border-0 text-xs font-medium", isCall ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="ticker-mono text-base sm:text-lg font-semibold leading-none">{signal.ticker}</span>
+              <Badge variant="outline" className={cn("border-0 text-[10px] font-medium px-1.5 py-0", isCall ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
                 {signal.direction}
               </Badge>
               {signal.dte === 0 && (
-                <Badge className="bg-warn/15 text-warn border-0 text-xs">0DTE</Badge>
+                <Badge className="bg-warn/15 text-warn border-0 text-[10px] px-1.5 py-0">0DTE</Badge>
               )}
               {signal.is_demo ? (
-                <Badge variant="outline" className="border-border text-muted-foreground gap-1 text-[10px]" title="Seeded demo signal">
+                <Badge variant="outline" className="border-border text-muted-foreground gap-1 text-[10px] px-1.5 py-0" title="Seeded demo signal">
                   <TestTube className="h-3 w-3" /> Demo
                 </Badge>
               ) : (
-                <Badge className="bg-emerald-500/15 text-emerald-400 border-0 gap-1 text-[10px]" title={signal.source ?? "Live"}>
-                  <Radio className="h-3 w-3" /> Live Market Data
+                <Badge className="bg-emerald-500/15 text-emerald-400 border-0 gap-1 text-[10px] px-1.5 py-0" title={signal.source ?? "Live"}>
+                  <Radio className="h-3 w-3" /> Live
                 </Badge>
               )}
               {outcome !== "none" && (
-                <Badge className={cn("border-0 text-[10px]", OUTCOME_CLASS[outcome])} title={`Trade outcome: ${OUTCOME_LABEL[outcome]}`}>
+                <Badge className={cn("border-0 text-[10px] px-1.5 py-0", OUTCOME_CLASS[outcome])} title={`Trade outcome: ${OUTCOME_LABEL[outcome]}`}>
                   {OUTCOME_LABEL[outcome]}
                 </Badge>
               )}
-              <Badge className={cn("border-0 gap-1 text-[10px]", freshClass)} title={`Signal freshness: ${freshLabel}`}>
+              <Badge className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", freshClass)} title={`Signal freshness: ${freshLabel}`}>
                 <Timer className="h-3 w-3" /> {freshLabel}
               </Badge>
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-              <Clock className="h-3 w-3" />
-              {timeAgo(signal.created_at)} · ${fmtPrice(Number(signal.price))}
+            <div className="text-[11px] text-muted-foreground flex items-center gap-x-2 gap-y-0.5 mt-1 flex-wrap">
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {timeAgo(signal.created_at)}
+              </span>
+              <span className="ticker-mono">${fmtPrice(Number(signal.price))}</span>
               {signal.contract_symbol && signal.strike != null ? (
                 <span className="ticker-mono">
                   · {signal.direction} {Number(signal.strike).toFixed(0)}
@@ -77,7 +80,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                   {signal.premium != null ? ` · $${fmtPrice(Number(signal.premium))} mid` : ""}
                 </span>
               ) : (
-                <span>· No contract match yet.</span>
+                <span>· No contract yet</span>
               )}
             </div>
           </div>
@@ -89,30 +92,30 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <RiskBadge level={signal.risk_level} />
         {signal.confidence >= 80 && (
-          <Badge className="bg-primary/15 text-primary border-0 gap-1">
+          <Badge className="bg-primary/15 text-primary border-0 gap-1 text-[10px] px-1.5 py-0">
             <Flame className="h-3 w-3" /> High conviction
           </Badge>
         )}
         {tags.filter((t) => t !== "High Risk" && t !== "0DTE").map((t) => (
-          <Badge key={t} variant="outline" className="border-border/60 text-[10px] text-muted-foreground">
+          <Badge key={t} variant="outline" className="border-border/60 text-[10px] text-muted-foreground px-1.5 py-0">
             {t}
           </Badge>
         ))}
         {signal.dte != null && signal.dte !== 0 && (
-          <Badge variant="outline" className="border-border text-muted-foreground text-[10px]">
+          <Badge variant="outline" className="border-border text-muted-foreground text-[10px] px-1.5 py-0">
             {signal.dte}DTE
           </Badge>
         )}
       </div>
 
       {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
-        <div className="mt-2 text-xs text-muted-foreground line-clamp-1">
+        <div className="mt-2 text-[11px] text-muted-foreground line-clamp-2">
           {(signal.reasons as string[]).slice(0, 2).join(" · ")}
         </div>
       )}
 
-      <div className="mt-4 flex items-center gap-2">
-        <Button size="sm" className={cn(isCall ? "bg-bull text-bull-foreground hover:bg-bull/90" : "bg-bear text-bear-foreground hover:bg-bear/90")}
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <Button size="sm" className={cn("flex-1 sm:flex-none min-w-0", isCall ? "bg-bull text-bull-foreground hover:bg-bull/90" : "bg-bear text-bear-foreground hover:bg-bear/90")}
           onClick={() => onApprove(signal)}>
           Approve paper trade
         </Button>
