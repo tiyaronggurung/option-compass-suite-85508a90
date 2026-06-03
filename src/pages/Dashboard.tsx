@@ -134,6 +134,7 @@ export default function Dashboard() {
     });
     // Unique violation just means already dismissed — silent.
     if (error && error.code !== "23505") toast.error(error.message);
+    setDismissedIds((prev) => new Set(prev).add(s.id));
     setSignals((prev) => prev ? prev.filter((x) => x.id !== s.id) : prev);
     toast("Signal dismissed");
   }
