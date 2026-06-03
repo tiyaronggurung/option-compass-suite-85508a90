@@ -119,3 +119,58 @@ function Row({ label, value, mono, small }: { label: string; value: string; mono
     </div>
   );
 }
+
+const COMPONENT_ORDER = ["trend", "momentum", "levels", "volume", "options", "macro"] as const;
+const COMPONENT_LABEL: Record<string, string> = {
+  trend: "Trend", momentum: "Momentum", levels: "Levels",
+  volume: "Volume", options: "Options", macro: "Macro",
+};
+
+function ComponentBreakdown({ tm }: { tm: Record<string, any> | null | undefined }) {
+  const comps = tm && typeof tm === "object" ? (tm as any).components : null;
+  if (!comps || typeof comps !== "object") return null;
+  const total = typeof (tm as any).score === "number" ? (tm as any).score : null;
+  return (
+    <div className="pt-2 border-t border-border">
+      <div className="text-xs text-muted-foreground mb-1.5 flex items-center justify-between">
+        <span>Score breakdown</span>
+        {total !== null && (
+          <span className={cn("ticker-mono", total >= 0 ? "text-bull" : "text-bear")}>
+            blended {total >= 0 ? "+" : ""}{total.toFixed(2)}
+          </span>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        {COMPONENT_ORDER.map((k) => {
+          const c = comps[k];
+          if (!c) return null;
+          const score = Number(c.score ?? 0);
+          const pct = Math.min(100, Math.abs(score) * 100);
+          const pos = score >= 0;
+          return (
+            <div key={k} className="text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground w-16 shrink-0">{COMPONENT_LABEL[k]}</span>
+                <span className="flex-1 truncate text-foreground/70">{c.reason ?? ""}</span>
+                <span className={cn("ticker-mono w-12 text-right", pos ? "text-bull" : "text-bear")}>
+                  {pos ? "+" : ""}{score.toFixed(2)}
+                </span>
+              </div>
+              <div className="mt-0.5 relative h-1 rounded bg-muted/40 overflow-hidden">
+                <div className="absolute top-0 bottom-0 left-1/2 w-px bg-border" />
+                <div
+                  className={cn("absolute top-0 bottom-0", pos ? "bg-bull/60" : "bg-bear/60")}
+                  style={{
+                    left: pos ? "50%" : `${50 - pct / 2}%`,
+                    width: `${pct / 2}%`,
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
