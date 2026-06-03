@@ -56,6 +56,7 @@ export default function ScannerUniversePanel() {
   const [lastScan, setLastScan] = useState<LastScan | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState<UniverseRow[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
