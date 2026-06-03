@@ -97,16 +97,20 @@ export default function SignalScannerPanel() {
 
   async function runNow() {
     setRunning(true);
-    const { data, error } = await supabase.functions.invoke("scan-signals", { body: { trigger: "manual" } });
+    const { data, error } = await supabase.functions.invoke("scan-signals", {
+      body: { trigger: "manual", force: forceRun },
+    });
     setRunning(false);
     if (error) { toast.error(error.message); return; }
     if ((data as any)?.error) { toast.error((data as any).error); return; }
     const created = (data as any)?.signals_created ?? 0;
+    const would = (data as any)?.would_have_created ?? 0;
+    const cand = (data as any)?.candidates_scanned ?? 0;
     const status = (data as any)?.status ?? "ok";
-    if (status === "ok") toast.success(`Scan complete — ${created} signal${created === 1 ? "" : "s"} created`);
-    else if (status === "outside_hours") toast(`Skipped — market closed`);
-    else if (status === "weekend") toast(`Skipped — weekend`);
-    else toast(`Scan ${status}`);
+    if (status === "outside_hours") toast(`Skipped — market closed (enable Force run to override)`);
+    else if (status === "weekend") toast(`Skipped — weekend (enable Force run to override)`);
+    else if (created > 0) toast.success(`Scan complete — ${created} signal${created === 1 ? "" : "s"} created`);
+    else toast(`Scan ${status} — 0 created · ${cand} candidates${would ? ` · ${would} would-have` : ""}`);
     await loadRuns();
   }
 
@@ -123,10 +127,21 @@ export default function SignalScannerPanel() {
           </h2>
           <p className="text-xs text-muted-foreground">Backend Alpaca scanner. Runs every 5 min during US market hours.</p>
         </div>
-        <Button size="sm" onClick={runNow} disabled={running}>
-          {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <PlayCircle className="h-3 w-3" />}
-          <span className="ml-2">Run scan now</span>
-        </Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={forceRun}
+              onChange={(e) => setForceRun(e.target.checked)}
+              className="h-3 w-3 accent-primary"
+            />
+            Force run (ignore market hours)
+          </label>
+          <Button size="sm" onClick={runNow} disabled={running}>
+            {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <PlayCircle className="h-3 w-3" />}
+            <span className="ml-2">Run scan now</span>
+          </Button>
+        </div>
       </div>
 
       {/* Scanner sensitivity */}
