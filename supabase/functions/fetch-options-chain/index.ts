@@ -19,13 +19,17 @@ Deno.serve(async (req) => {
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const authHeader = req.headers.get("Authorization") ?? "";
-    const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) return json({ error: "unauthorized" }, 401);
-
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
     const admin = createClient(url, service);
-    const { data: roleRow } = await admin.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
-    if (!roleRow) return json({ error: "admin only" }, 403);
+
+    // Service-role bearer (internal calls, e.g. scan-signals) bypasses user check.
+    if (token !== service) {
+      const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return json({ error: "unauthorized" }, 401);
+      const { data: roleRow } = await admin.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
+      if (!roleRow) return json({ error: "admin only" }, 403);
+    }
 
     const body = await req.json().catch(() => ({}));
     const action = body.action ?? "fetch";
