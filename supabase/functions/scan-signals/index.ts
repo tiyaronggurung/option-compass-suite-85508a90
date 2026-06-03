@@ -472,8 +472,6 @@ Deno.serve(async (req) => {
           errors.push(`${sym} picker: ${(e as Error).message}`);
         }
       }
-      // Silence unused-var warning for todayIso (kept inline for readability above)
-      void 0;
 
       const techMetrics = contractMeta
         ? { ...draft.technical_metrics, contract: contractMeta }
