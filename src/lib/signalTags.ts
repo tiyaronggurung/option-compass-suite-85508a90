@@ -7,7 +7,10 @@ export type TagId =
   | "RSI Momentum"
   | "High Risk"
   | "0DTE"
-  | "Watchlist";
+  | "Watchlist"
+  | "Earnings Tomorrow"
+  | "Earnings Soon"
+  | "Post Earnings Drift";
 
 export const ALL_TAGS: TagId[] = [
   "Breakout",
@@ -17,6 +20,9 @@ export const ALL_TAGS: TagId[] = [
   "High Risk",
   "0DTE",
   "Watchlist",
+  "Earnings Tomorrow",
+  "Earnings Soon",
+  "Post Earnings Drift",
 ];
 
 interface FlowMetrics { volume_ratio?: number; volume_oi_ratio?: number; }
@@ -35,6 +41,16 @@ export function deriveTags(signal: Signal, watchlist: Set<string> = new Set()): 
   if (signal.risk_level === "HIGH") tags.push("High Risk");
   if (signal.dte === 0) tags.push("0DTE");
   if (watchlist.has(signal.ticker)) tags.push("Watchlist");
+
+  // Earnings catalyst tags — derived from catalyst_summary text written by scanner.
+  const cs = (signal.catalyst_summary ?? "").toLowerCase();
+  if (cs.includes("earnings report today") || cs.includes("earnings report tomorrow")) {
+    tags.push("Earnings Tomorrow");
+  } else if (cs.startsWith("earnings in ")) {
+    tags.push("Earnings Soon");
+  } else if (cs.startsWith("post-earnings")) {
+    tags.push("Post Earnings Drift");
+  }
 
   return tags;
 }
