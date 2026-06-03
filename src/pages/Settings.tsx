@@ -93,6 +93,8 @@ export default function Settings() {
 
       <MarkingEngineStatus />
 
+      <OptionsChainPanel />
+
       <section className="glass-card p-5 space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-warn" /> Compliance</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">{DISCLAIMER_TEXT}</p>
