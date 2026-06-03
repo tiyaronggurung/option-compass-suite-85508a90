@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import type { Signal } from "@/lib/signalHelpers";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
 
 interface Props {
   signal: Signal | null;
