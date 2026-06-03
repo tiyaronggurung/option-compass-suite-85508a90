@@ -28,7 +28,7 @@ export default function Landing() {
             Options signals,<br />
             <span className="text-primary">explained</span> before you click.
           </h1>
-          <p className="mt-5 text-lg text-muted-foreground max-w-2xl">
+          <p className="mt-5 text-base sm:text-lg text-muted-foreground max-w-2xl">
             Watch live option-flow signals, see why each alert triggered, and approve manual paper trades from a single
             terminal. Built for research and learning — not financial advice.
           </p>
