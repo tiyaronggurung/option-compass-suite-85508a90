@@ -4,6 +4,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { pickBestContract } from "../_shared/pickContract.ts";
 import { getEarningsCatalyst, type CatalystResult } from "../_shared/earningsCatalyst.ts";
+import { buildConfirmations } from "../_shared/confirmations.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -665,6 +666,21 @@ Deno.serve(async (req) => {
         ? { ...draft.technical_metrics, contract: contractMeta }
         : draft.technical_metrics;
 
+      // Multi-source confirmation — purely additive metadata, NEVER alters confidence/threshold.
+      let confirmations: Awaited<ReturnType<typeof buildConfirmations>> | null = null;
+      try {
+        const blendedScore = typeof (draft.technical_metrics as any)?.score === "number"
+          ? (draft.technical_metrics as any).score : 0;
+        confirmations = await buildConfirmations(admin, {
+          ticker: draft.ticker,
+          direction: draft.direction,
+          blendedScore,
+          confidence: finalConfidence,
+        });
+      } catch (e) {
+        errors.push(`${sym} confirmations: ${(e as Error).message}`);
+      }
+
       const { error } = await admin.from("signals").insert({
         ticker: draft.ticker,
         direction: draft.direction,
@@ -681,6 +697,9 @@ Deno.serve(async (req) => {
         external_id: externalId,
         expires_at: expiresAt,
         catalyst_summary: catalystSummary,
+        source_confirmations: confirmations?.matrix ?? {},
+        confirmation_score: confirmations?.score ?? null,
+        confirmation_label: confirmations?.label ?? null,
         ...contractFields,
       });
       if (error) {
