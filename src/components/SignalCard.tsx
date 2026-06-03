@@ -1,10 +1,11 @@
-import { ArrowDownRight, ArrowUpRight, Clock, Flame, Info, Radio, ShieldAlert, TestTube, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
+import { getFreshness } from "@/lib/signalFreshness";
 
 type Props = {
   signal: Signal;
