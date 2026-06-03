@@ -14,7 +14,7 @@ interface Props {
   outcome?: SignalOutcome;
 }
 
-export function SignalDetailDialog({ signal, open, onOpenChange }: Props) {
+export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Props) {
   const { isAdmin } = useIsAdmin();
   const [siblings, setSiblings] = useState<Signal[] | null>(null);
 
