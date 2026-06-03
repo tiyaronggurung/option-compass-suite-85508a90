@@ -49,7 +49,7 @@ export default function Analyst() {
     setAnalysis(null);
     (async () => {
       const { data } = await supabase.from("signal_analyses").select("*").eq("signal_id", selectedId).maybeSingle();
-      if (!cancel) setAnalysis((data as Analysis | null) ?? null);
+      if (!cancel) setAnalysis((data as unknown as Analysis | null) ?? null);
     })();
     return () => { cancel = true; };
   }, [selectedId]);
