@@ -137,6 +137,16 @@ export default function OptionsChainPanel() {
         </Button>
       </div>
 
+      <div className="flex items-center justify-between flex-wrap gap-2 -mt-1">
+        <p className="text-xs text-muted-foreground">
+          Scanner tickers (SPY, QQQ, NVDA, TSLA, AMD, AAPL, META, MSFT) · 10–45 DTE window
+        </p>
+        <Button size="sm" variant="outline" onClick={refreshScannerTickers} disabled={refreshingAll}>
+          {refreshingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          <span className="ml-2">Refresh scanner chains</span>
+        </Button>
+      </div>
+
       <div className="overflow-x-auto border border-border rounded-md">
         {loading ? (
           <div className="p-3 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-6" />)}</div>
