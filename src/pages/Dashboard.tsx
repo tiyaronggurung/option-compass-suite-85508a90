@@ -13,6 +13,8 @@ import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
 import { signalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
 import { isExpired } from "@/lib/signalFreshness";
+import { checkRiskGuards, effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
+import { RiskStatusCard } from "@/components/RiskStatusCard";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
