@@ -78,6 +78,9 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Prop
             </div>
           )}
 
+          <ComponentBreakdown tm={signal.technical_metrics as any} />
+
+
           {isAdmin && (
             <div className="pt-2 border-t border-border">
               <div className="text-xs text-muted-foreground mb-1.5">
