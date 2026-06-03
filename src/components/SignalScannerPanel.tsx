@@ -12,6 +12,12 @@ import { toast } from "sonner";
 
 type SkippedCandidate = { ticker: string; direction: string; score: number; reasons: string[] };
 
+type AvgComponents = {
+  trend?: number | null; momentum?: number | null; levels?: number | null;
+  volume?: number | null; options?: number | null; macro?: number | null;
+  candidate_count?: number;
+};
+
 type Run = {
   id: string;
   ran_at: string;
@@ -25,10 +31,12 @@ type Run = {
   would_have_created: number | null;
   candidates_scanned: number | null;
   avg_score: number | null;
+  avg_components: AvgComponents | null;
   skipped_candidates: SkippedCandidate[] | null;
   profile: string | null;
   threshold: number | null;
 };
+
 
 type ProfileKey = "conservative" | "balanced" | "active_mvp";
 const PROFILE_LABEL: Record<ProfileKey, string> = {
@@ -204,12 +212,15 @@ export default function SignalScannerPanel() {
             <tbody>
               {runs.map((r) => {
                 const hasSkipped = (r.skipped_candidates?.length ?? 0) > 0;
+                const ac = r.avg_components ?? null;
+                const hasAvgComps = !!(ac && (ac.candidate_count ?? 0) > 0);
+                const expandable = hasSkipped || hasAvgComps;
                 const isOpen = !!expanded[r.id];
                 return (
                   <Fragment key={r.id}>
                     <tr className="border-t border-border/50">
                       <td className="p-2">
-                        {hasSkipped ? (
+                        {expandable ? (
                           <button onClick={() => setExpanded((e) => ({ ...e, [r.id]: !e[r.id] }))} className="text-muted-foreground hover:text-foreground">
                             {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                           </button>
@@ -226,29 +237,35 @@ export default function SignalScannerPanel() {
                       <td className="p-2 text-right ticker-mono">{r.duration_ms ? `${r.duration_ms}ms` : "—"}</td>
                       <td className="p-2 text-bear truncate max-w-[200px]" title={r.error ?? undefined}>{r.error ?? ""}</td>
                     </tr>
-                    {isOpen && hasSkipped && (
+                    {isOpen && expandable && (
                       <tr className="bg-muted/10">
                         <td></td>
-                        <td colSpan={10} className="p-2">
-                          <div className="text-[11px] text-muted-foreground mb-1">
-                            Top skipped candidates (below threshold {r.threshold ?? "—"}):
-                          </div>
-                          <div className="space-y-1">
-                            {r.skipped_candidates!.map((c, i) => (
-                              <div key={i} className="flex items-start gap-2 flex-wrap">
-                                <span className="ticker-mono font-medium">{c.ticker}</span>
-                                <Badge variant="outline" className={c.direction === "CALL" ? "text-bull border-bull/40" : "text-bear border-bear/40"}>{c.direction}</Badge>
-                                <span className="ticker-mono">score {c.score}</span>
-                                <span className="text-muted-foreground">— {c.reasons.join(" · ")}</span>
+                        <td colSpan={10} className="p-2 space-y-3">
+                          {hasAvgComps && <AvgComponentRow ac={ac!} />}
+                          {hasSkipped && (
+                            <div>
+                              <div className="text-[11px] text-muted-foreground mb-1">
+                                Top skipped candidates (below threshold {r.threshold ?? "—"}):
                               </div>
-                            ))}
-                          </div>
+                              <div className="space-y-1">
+                                {r.skipped_candidates!.map((c, i) => (
+                                  <div key={i} className="flex items-start gap-2 flex-wrap">
+                                    <span className="ticker-mono font-medium">{c.ticker}</span>
+                                    <Badge variant="outline" className={c.direction === "CALL" ? "text-bull border-bull/40" : "text-bear border-bear/40"}>{c.direction}</Badge>
+                                    <span className="ticker-mono">score {c.score}</span>
+                                    <span className="text-muted-foreground">— {c.reasons.join(" · ")}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}
                   </Fragment>
                 );
               })}
+
             </tbody>
           </table>
         )}
@@ -276,3 +293,38 @@ function StatusBadge({ status }: { status: string }) {
   };
   return <Badge variant="outline" className={map[status] ?? "text-muted-foreground border-border"}>{status}</Badge>;
 }
+
+const AVG_COMP_KEYS = ["trend", "momentum", "levels", "volume", "options", "macro"] as const;
+const AVG_COMP_LABEL: Record<string, string> = {
+  trend: "Trend", momentum: "Mom", levels: "Levels",
+  volume: "Vol", options: "Opt", macro: "Macro",
+};
+
+function AvgComponentRow({ ac }: { ac: AvgComponents }) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground mb-1">
+        Avg component scores ({ac.candidate_count ?? 0} candidates, range −1.0 to +1.0):
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {AVG_COMP_KEYS.map((k) => {
+          const v = ac[k];
+          const num = typeof v === "number" ? v : null;
+          const cls = num == null ? "text-muted-foreground border-border"
+            : num > 0.05 ? "text-bull border-bull/40"
+            : num < -0.05 ? "text-bear border-bear/40"
+            : "text-muted-foreground border-border";
+          return (
+            <Badge key={k} variant="outline" className={`${cls} gap-1.5 font-normal`}>
+              <span className="text-[10px] uppercase tracking-wide">{AVG_COMP_LABEL[k]}</span>
+              <span className="ticker-mono">
+                {num == null ? "—" : `${num >= 0 ? "+" : ""}${num.toFixed(2)}`}
+              </span>
+            </Badge>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+

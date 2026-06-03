@@ -505,6 +505,7 @@ export type Database = {
       }
       signal_scan_runs: {
         Row: {
+          avg_components: Json
           avg_score: number | null
           candidates_scanned: number
           duration_ms: number | null
@@ -522,6 +523,7 @@ export type Database = {
           would_have_created: number
         }
         Insert: {
+          avg_components?: Json
           avg_score?: number | null
           candidates_scanned?: number
           duration_ms?: number | null
@@ -539,6 +541,7 @@ export type Database = {
           would_have_created?: number
         }
         Update: {
+          avg_components?: Json
           avg_score?: number | null
           candidates_scanned?: number
           duration_ms?: number | null
