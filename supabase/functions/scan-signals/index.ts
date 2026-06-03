@@ -79,7 +79,6 @@ function vwap(bars: Bar[]): number {
 
 // ---------- Alpaca ----------
 async function fetchBars(symbol: string): Promise<Bar[]> {
-  // Last 5 trading days of 5-minute bars (plenty for EMA21/RSI14/VWAP)
   const end = new Date();
   const start = new Date(end.getTime() - 5 * 24 * 60 * 60 * 1000);
   const params = new URLSearchParams({
@@ -121,7 +120,6 @@ function evaluate(symbol: string, bars: Bar[]): SignalDraft | null {
   const ema9 = ema(closes, 9);
   const ema21 = ema(closes, 21);
   const rsiNow = rsi(closes, 14);
-  // Today-only VWAP (filter to current ET date)
   const etDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
   const todayBars = bars.filter((b) => {
     const d = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(b.t));
@@ -145,13 +143,11 @@ function evaluate(symbol: string, bars: Bar[]): SignalDraft | null {
   let dir: "CALL" | "PUT" | null = null;
   let score = 0;
 
-  // Bullish signals
   if (e9 > e21) { score += 15; reasons.push("EMA9 above EMA21"); }
   if (bullCross) { score += 20; reasons.push("EMA9/EMA21 bullish cross"); dir = "CALL"; }
   if (rsiNow > 55 && rsiNow < 75) { score += 15; reasons.push(`RSI momentum ${rsiNow.toFixed(0)}`); if (!dir) dir = "CALL"; }
   if (vwapReclaim) { score += 20; reasons.push("VWAP reclaim"); if (!dir) dir = "CALL"; }
 
-  // Bearish signals (override only if strong)
   let bearScore = 0;
   const bearReasons: string[] = [];
   if (e9 < e21) { bearScore += 15; bearReasons.push("EMA9 below EMA21"); }
@@ -168,7 +164,8 @@ function evaluate(symbol: string, bars: Bar[]): SignalDraft | null {
 
   if (volSpike >= 1.5) { score += 15; reasons.push(`Volume ${volSpike.toFixed(1)}× avg`); }
 
-  if (!dir || score < 50) return null;
+  // No directional bias at all — not a candidate
+  if (!dir) return null;
 
   const confidence = Math.min(95, Math.round(score));
   const risk_level: "LOW" | "MEDIUM" | "HIGH" =
@@ -189,6 +186,20 @@ function evaluate(symbol: string, bars: Bar[]): SignalDraft | null {
       volume_spike: Number(volSpike.toFixed(2)),
     },
   };
+}
+
+const PROFILE_THRESHOLDS: Record<string, number> = {
+  conservative: 60,
+  balanced: 50,
+  active_mvp: 40,
+};
+
+async function loadScannerSettings(): Promise<{ profile: string; threshold: number; debug_mode: boolean }> {
+  const { data } = await admin.from("scanner_settings").select("profile, debug_mode").eq("id", "global").maybeSingle();
+  const profile = (data?.profile as string) ?? "balanced";
+  const debug_mode = !!data?.debug_mode;
+  const threshold = PROFILE_THRESHOLDS[profile] ?? 50;
+  return { profile, threshold, debug_mode };
 }
 
 // ---------- Auth ----------
@@ -219,6 +230,7 @@ Deno.serve(async (req) => {
 
   const t0 = Date.now();
   const tickers = DEFAULT_TICKERS;
+  const settings = await loadScannerSettings();
 
   // Market-hours gate
   const market = isMarketOpenET();
@@ -226,6 +238,7 @@ Deno.serve(async (req) => {
     await admin.from("signal_scan_runs").insert({
       status: market.reason, trigger: auth.trigger, tickers_scanned: tickers,
       signals_created: 0, skipped_count: tickers.length, duration_ms: Date.now() - t0,
+      profile: settings.profile, threshold: settings.threshold,
     });
     return json({ ok: true, status: market.reason, signals_created: 0 });
   }
@@ -234,12 +247,17 @@ Deno.serve(async (req) => {
     await admin.from("signal_scan_runs").insert({
       status: "error", trigger: auth.trigger, tickers_scanned: tickers,
       error: "Alpaca credentials missing", duration_ms: Date.now() - t0,
+      profile: settings.profile, threshold: settings.threshold,
     });
     return json({ error: "Alpaca not configured" }, 500);
   }
 
   let created = 0;
   let skipped = 0;
+  let wouldHave = 0;
+  let candidates = 0;
+  const scores: number[] = [];
+  const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
 
   for (const sym of tickers) {
@@ -248,7 +266,27 @@ Deno.serve(async (req) => {
       const draft = evaluate(sym, bars);
       if (!draft) { skipped++; continue; }
 
-      // Dedupe key per ticker+direction+5min bucket
+      candidates++;
+      scores.push(draft.confidence);
+
+      // Would-have-created: only when threshold >= 50, count [threshold-10, threshold-1]
+      if (settings.threshold >= 50 &&
+          draft.confidence >= settings.threshold - 10 &&
+          draft.confidence < settings.threshold) {
+        wouldHave++;
+      }
+
+      if (draft.confidence < settings.threshold) {
+        skipped++;
+        skippedList.push({
+          ticker: draft.ticker,
+          direction: draft.direction,
+          score: draft.confidence,
+          reasons: draft.reasons,
+        });
+        continue;
+      }
+
       const bucket = Math.floor(Date.now() / (5 * 60 * 1000));
       const dedupeRaw = `${sym}|${draft.direction}|${bucket}`;
       const externalId = await sha1Uuid(dedupeRaw);
@@ -269,7 +307,6 @@ Deno.serve(async (req) => {
         external_id: externalId,
       });
       if (error) {
-        // Unique violation on external_id = dedupe hit
         if ((error as any).code === "23505") { skipped++; continue; }
         errors.push(`${sym}: ${error.message}`);
         skipped++;
@@ -282,15 +319,35 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Top 3 skipped by score (only persisted when debug_mode is on)
+  const topSkipped = settings.debug_mode
+    ? skippedList.sort((a, b) => b.score - a.score).slice(0, 3)
+    : [];
+
+  const avgScore = scores.length
+    ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2))
+    : null;
+
   const status = errors.length === 0 ? "ok" : created > 0 ? "partial" : "error";
   await admin.from("signal_scan_runs").insert({
     status, trigger: auth.trigger, tickers_scanned: tickers,
     signals_created: created, skipped_count: skipped,
+    would_have_created: wouldHave,
+    candidates_scanned: candidates,
+    avg_score: avgScore,
+    skipped_candidates: topSkipped,
+    profile: settings.profile,
+    threshold: settings.threshold,
     error: errors.length ? errors.join("; ").slice(0, 1000) : null,
     duration_ms: Date.now() - t0,
   });
 
-  return json({ ok: true, status, signals_created: created, skipped, errors });
+  return json({
+    ok: true, status, signals_created: created, skipped,
+    would_have_created: wouldHave, candidates_scanned: candidates,
+    avg_score: avgScore, profile: settings.profile, threshold: settings.threshold,
+    errors,
+  });
 });
 
 function json(b: unknown, status = 200) {
@@ -299,7 +356,7 @@ function json(b: unknown, status = 200) {
   });
 }
 
-// Build a deterministic UUID from a string (sha1, formatted as UUID v5-style layout).
+// Deterministic UUID from a string (sha1, formatted as UUID layout).
 async function sha1Uuid(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-1", data));
