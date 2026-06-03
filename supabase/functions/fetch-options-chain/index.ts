@@ -63,7 +63,8 @@ Deno.serve(async (req) => {
 
     if (!res.ok) {
       const txt = await res.text();
-      return json({ error: `Alpaca ${res.status}: ${txt.slice(0, 300)}` }, 502);
+      const status = res.status === 400 ? 400 : 502;
+      return json({ error: `Alpaca ${res.status}: ${txt.slice(0, 300)}` }, status);
     }
 
     const data = await res.json();
