@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { CheckCircle2, Sparkles, XCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { RefreshCw, Sparkles, Target as TargetIcon, OctagonAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,10 +33,13 @@ const REASON_OPTIONS: { value: CloseReason; label: string }[] = [
 
 export default function Trades() {
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const [trades, setTrades] = useState<PaperTrade[] | null>(null);
   const [reviews, setReviews] = useState<Record<string, TradeReview>>({});
   const [closing, setClosing] = useState<PaperTrade | null>(null);
   const [reviewing, setReviewing] = useState<PaperTrade | null>(null);
+  const [refreshingMarks, setRefreshingMarks] = useState(false);
+  const refreshRef = useRef<() => Promise<void>>();
 
   async function refresh() {
     const [{ data }, { data: r }] = await Promise.all([
@@ -48,19 +52,61 @@ export default function Trades() {
     (r ?? []).forEach((x) => { map[x.trade_id] = x; });
     setReviews(map);
   }
+  refreshRef.current = refresh;
+
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user]);
+
+  // Auto-refresh every 60s while page is mounted, only if there are open trades and tab visible.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      refreshRef.current?.();
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  async function refreshMarks() {
+    setRefreshingMarks(true);
+    const { data, error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
+    setRefreshingMarks(false);
+    if (error) return toast.error(error.message);
+    const updated = (data as any)?.updated ?? 0;
+    toast.success(`Marks refreshed · ${updated} trade${updated === 1 ? "" : "s"} updated`);
+    refresh();
+  }
 
   const open = trades?.filter((t) => t.status === "OPEN") ?? [];
   const closed = trades?.filter((t) => t.status !== "OPEN") ?? [];
+  const lastMark = open
+    .map((t) => t.last_mark_at)
+    .filter(Boolean)
+    .sort()
+    .pop();
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <header className="flex items-end justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Paper trades</h1>
-          <p className="text-sm text-muted-foreground">Manually approved demo trades. No real money at risk.</p>
+          <p className="text-sm text-muted-foreground">
+            Manually approved demo trades. No real money at risk.
+            {open.length > 0 && (
+              <span className="ml-1.5 text-xs">
+                · Marks auto-refresh every 60s
+                {lastMark && <> · Last mark {timeAgo(lastMark as string)}</>}
+              </span>
+            )}
+          </p>
         </div>
-        <Badge className="bg-warn/15 text-warn border-0">Paper trading only</Badge>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={refreshMarks} disabled={refreshingMarks}>
+              <RefreshCw className={cn("h-4 w-4 mr-1.5", refreshingMarks && "animate-spin")} />
+              {refreshingMarks ? "Refreshing…" : "Refresh marks"}
+            </Button>
+          )}
+          <Badge className="bg-warn/15 text-warn border-0">Paper trading only</Badge>
+        </div>
       </header>
 
       <DisclaimerBar />
@@ -68,7 +114,7 @@ export default function Trades() {
       <Section title="Open">
         {!trades ? <Skeleton className="h-24" />
           : open.length === 0 ? <Empty text="No open paper trades. Approve a signal from the dashboard." />
-          : <TradeTable trades={open} onCloseClick={(t) => setClosing(t)} reviews={reviews} onReviewClick={setReviewing} />}
+          : <TradeTable trades={open} live onCloseClick={(t) => setClosing(t)} reviews={reviews} onReviewClick={setReviewing} />}
       </Section>
 
       <Section title="Closed">
@@ -106,12 +152,13 @@ function Empty({ text }: { text: string }) {
 }
 
 function TradeTable({
-  trades, onCloseClick, reviews, onReviewClick,
+  trades, onCloseClick, reviews, onReviewClick, live,
 }: {
   trades: PaperTrade[];
   onCloseClick?: (t: PaperTrade) => void;
   reviews: Record<string, TradeReview>;
   onReviewClick: (t: PaperTrade) => void;
+  live?: boolean;
 }) {
   return (
     <div className="glass-card overflow-x-auto">
@@ -119,49 +166,115 @@ function TradeTable({
         <thead className="text-xs text-muted-foreground">
           <tr className="border-b border-border">
             <Th>Ticker</Th><Th>Dir</Th><Th>Contract</Th><Th className="text-right">Entry</Th>
-            <Th className="text-right">Exit</Th><Th className="text-right">P/L</Th><Th className="text-right">P/L %</Th>
-            <Th>Reason</Th><Th>Status</Th><Th>Opened</Th>
+            <Th className="text-right">{live ? "Mark" : "Exit"}</Th>
+            <Th className="text-right">P/L</Th><Th className="text-right">P/L %</Th>
+            <Th>{live ? "Signals" : "Reason"}</Th>
+            <Th>Status</Th><Th>{live ? "Mark age" : "Opened"}</Th>
             <Th className="text-right">Actions</Th>
           </tr>
         </thead>
         <tbody>
-          {trades.map((t) => (
-            <tr key={t.id} className="border-b border-border/60 last:border-0 hover:bg-card-elevated/60">
-              <Td className="ticker-mono font-semibold">{t.ticker}</Td>
-              <Td>
-                <Badge className={cn("border-0", t.direction === "CALL" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
-                  {t.direction}
-                </Badge>
-              </Td>
-              <Td className="ticker-mono text-muted-foreground">{t.contract_idea ?? "—"}</Td>
-              <Td className="text-right ticker-mono">${fmtPrice(Number(t.entry_price))}</Td>
-              <Td className="text-right ticker-mono text-muted-foreground">
-                {t.exit_price != null ? `$${fmtPrice(Number(t.exit_price))}` : "—"}
-              </Td>
-              <Td className={cn("text-right ticker-mono", Number(t.current_pl) >= 0 ? "text-bull" : "text-bear")}>
-                ${fmtPL(Number(t.current_pl))}
-              </Td>
-              <Td className={cn("text-right ticker-mono", Number(t.realized_pl_pct ?? 0) >= 0 ? "text-bull" : "text-bear")}>
-                {t.realized_pl_pct != null ? `${Number(t.realized_pl_pct).toFixed(1)}%` : "—"}
-              </Td>
-              <Td className="text-muted-foreground text-xs">{t.exit_reason ? reasonLabel(t.exit_reason) : "—"}</Td>
-              <Td><StatusBadge status={t.status} /></Td>
-              <Td className="text-muted-foreground whitespace-nowrap">{timeAgo(t.opened_at)}</Td>
-              <Td className="text-right whitespace-nowrap space-x-1">
-                {onCloseClick ? (
-                  <Button size="sm" variant="ghost" onClick={() => onCloseClick(t)}>Close…</Button>
-                ) : (
-                  <Button size="sm" variant="ghost" onClick={() => onReviewClick(t)}>
-                    <Sparkles className="h-4 w-4 mr-1" />
-                    {reviews[t.id] ? "Review" : "Review trade"}
-                  </Button>
-                )}
-              </Td>
-            </tr>
-          ))}
+          {trades.map((t) => {
+            const pl = Number(t.current_pl ?? 0);
+            const plPct = live
+              ? (t.current_pl_pct != null ? Number(t.current_pl_pct) : null)
+              : (t.realized_pl_pct != null ? Number(t.realized_pl_pct) : null);
+            const tint = live && t.last_mark_at
+              ? (pl > 0 ? "bg-bull/[0.04]" : pl < 0 ? "bg-bear/[0.04]" : "")
+              : "";
+            const touched = live ? targetStopTouched(t) : null;
+            return (
+              <tr key={t.id} className={cn("border-b border-border/60 last:border-0 transition-colors hover:bg-card-elevated/60", tint)}>
+                <Td className="ticker-mono font-semibold">{t.ticker}</Td>
+                <Td>
+                  <Badge className={cn("border-0", t.direction === "CALL" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
+                    {t.direction}
+                  </Badge>
+                </Td>
+                <Td className="ticker-mono text-muted-foreground">{t.contract_idea ?? "—"}</Td>
+                <Td className="text-right ticker-mono">${fmtPrice(Number(t.entry_price))}</Td>
+                <Td className="text-right ticker-mono text-muted-foreground">
+                  {live
+                    ? (t.last_mark_price != null ? `$${fmtPrice(Number(t.last_mark_price))}` : "—")
+                    : (t.exit_price != null ? `$${fmtPrice(Number(t.exit_price))}` : "—")}
+                </Td>
+                <Td className={cn("text-right ticker-mono", pl >= 0 ? "text-bull" : "text-bear")}>
+                  ${fmtPL(pl)}
+                </Td>
+                <Td className={cn("text-right ticker-mono", (plPct ?? 0) >= 0 ? "text-bull" : "text-bear")}>
+                  {plPct != null ? `${plPct.toFixed(1)}%` : "—"}
+                </Td>
+                <Td className="text-xs">
+                  {live ? (
+                    touched ? <TouchedBadge kind={touched} /> : <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <span className="text-muted-foreground">{t.exit_reason ? reasonLabel(t.exit_reason) : "—"}</span>
+                  )}
+                </Td>
+                <Td><StatusBadge status={t.status} /></Td>
+                <Td className="text-muted-foreground whitespace-nowrap">
+                  {live
+                    ? (t.last_mark_at ? timeAgo(t.last_mark_at as string) : <span className="opacity-60">no mark yet</span>)
+                    : timeAgo(t.opened_at)}
+                </Td>
+                <Td className="text-right whitespace-nowrap space-x-1">
+                  {onCloseClick ? (
+                    <Button size="sm" variant="ghost" onClick={() => onCloseClick(t)}>Close…</Button>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={() => onReviewClick(t)}>
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      {reviews[t.id] ? "Review" : "Review trade"}
+                    </Button>
+                  )}
+                </Td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function targetStopTouched(t: PaperTrade): "target" | "stop" | null {
+  const mark = t.last_mark_price != null ? Number(t.last_mark_price) : null;
+  if (mark == null) return null;
+  const entry = Number(t.entry_price ?? 0);
+  if (!entry) return null;
+  const dir = t.direction === "CALL" ? 1 : -1;
+  const move = (mark - entry) * dir; // signed favorable price move
+
+  // The stop/target ideas are stored as option premium-style numbers in Phase 4E,
+  // but for live mark we compare against the favorable price move vs entry.
+  // Target idea / stop idea are interpreted as required favorable / unfavorable
+  // price move in same units as entry_price (best-effort heuristic).
+  const target = t.target_idea != null ? Number(t.target_idea) : null;
+  const stop = t.stop_idea != null ? Number(t.stop_idea) : null;
+
+  // Heuristic: target_idea > entry means absolute price target; otherwise treat as % of entry.
+  if (target != null) {
+    const targetMove = target > entry ? (target - entry) : entry * (target / 100);
+    if (move >= Math.max(0.01, targetMove)) return "target";
+  }
+  if (stop != null) {
+    const stopMove = stop < entry && stop > 0 ? (entry - stop) : entry * (stop / 100);
+    if (-move >= Math.max(0.01, stopMove)) return "stop";
+  }
+  return null;
+}
+
+function TouchedBadge({ kind }: { kind: "target" | "stop" }) {
+  if (kind === "target") {
+    return (
+      <Badge className="bg-bull/15 text-bull border-0 gap-1">
+        <TargetIcon className="h-3 w-3" /> Target touched
+      </Badge>
+    );
+  }
+  return (
+    <Badge className="bg-bear/15 text-bear border-0 gap-1">
+      <OctagonAlert className="h-3 w-3" /> Stop touched
+    </Badge>
   );
 }
 
