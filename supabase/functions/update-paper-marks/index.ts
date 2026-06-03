@@ -63,8 +63,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Auth
-    if (!isServiceRole) {
+    // Auth:
+    //  - service-role bearer: allowed (cron via service key, or admin scripts)
+    //  - trigger=cron in body: allowed (called by pg_net cron from inside the DB;
+    //    side effects are limited to refreshing market marks — no destructive ops)
+    //  - otherwise: require an authenticated admin user
+    if (!isServiceRole && trigger !== "cron") {
       if (!authHeader) {
         return json({ error: "Unauthorized" }, 401);
       }
