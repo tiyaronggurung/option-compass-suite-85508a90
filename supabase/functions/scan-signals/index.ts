@@ -228,13 +228,21 @@ Deno.serve(async (req) => {
   const auth = await authorize(req);
   if (!auth.ok) return json({ error: auth.msg }, auth.status);
 
+  // Optional force flag — honored ONLY for manual (admin) trigger, never for cron
+  let force = false;
+  try {
+    const body = await req.json().catch(() => null);
+    if (body && typeof body === "object" && (body as any).force === true) force = true;
+  } catch { /* ignore */ }
+  if (auth.trigger !== "manual") force = false;
+
   const t0 = Date.now();
   const tickers = DEFAULT_TICKERS;
   const settings = await loadScannerSettings();
 
-  // Market-hours gate
+  // Market-hours gate (bypassable by admin force run)
   const market = isMarketOpenET();
-  if (!market.open) {
+  if (!market.open && !force) {
     await admin.from("signal_scan_runs").insert({
       status: market.reason, trigger: auth.trigger, tickers_scanned: tickers,
       signals_created: 0, skipped_count: tickers.length, duration_ms: Date.now() - t0,
