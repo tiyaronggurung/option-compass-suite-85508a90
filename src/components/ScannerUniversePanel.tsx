@@ -129,6 +129,35 @@ export default function ScannerUniversePanel() {
     loadAll();
   }
 
+  async function backfillVolume() {
+    setBackfilling(true);
+    let offset = 0;
+    let totalProcessed = 0, totalUpdated = 0, totalFailed = 0;
+    const maxIterations = 20; // safety bound
+    try {
+      for (let i = 0; i < maxIterations; i++) {
+        const { data, error } = await supabase.functions.invoke(
+          `backfill-universe-volume?offset=${offset}&limit=1000`,
+          { body: {} },
+        );
+        if (error) throw new Error(error.message);
+        const d = data as any;
+        totalProcessed += d?.processed ?? 0;
+        totalUpdated += d?.updated ?? 0;
+        totalFailed += d?.failed ?? 0;
+        toast.info(`Backfill: ${totalUpdated} updated / ${totalProcessed} processed (${totalFailed} failed)`);
+        if (d?.done) break;
+        offset = d?.next_offset ?? (offset + 1000);
+      }
+      toast.success(`Backfill complete: ${totalUpdated} updated, ${totalFailed} failed`);
+    } catch (e: any) {
+      toast.error(`Backfill error: ${e.message}`);
+    } finally {
+      setBackfilling(false);
+      loadAll();
+    }
+  }
+
   async function openPreview() {
     setPreviewOpen(true);
     setPreviewLoading(true);
