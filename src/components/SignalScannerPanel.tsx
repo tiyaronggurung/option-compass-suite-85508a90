@@ -46,6 +46,7 @@ export default function SignalScannerPanel() {
   const [debugMode, setDebugMode] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [forceRun, setForceRun] = useState(false);
 
   useEffect(() => {
     if (!user) return;
