@@ -137,18 +137,33 @@ export default function Dashboard() {
 
       <DisclaimerBar />
 
-      <section className="flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <Button
-            key={f.id}
-            size="sm"
-            variant={filter === f.id ? "default" : "outline"}
-            className={cn(filter === f.id ? "" : "bg-transparent")}
-            onClick={() => setFilter(f.id)}
-          >
-            {f.label}
-          </Button>
-        ))}
+      <section className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {SOURCE_FILTERS.map((f) => (
+            <Button
+              key={f.id}
+              size="sm"
+              variant={sourceMode === f.id ? "secondary" : "outline"}
+              className={cn(sourceMode === f.id ? "" : "bg-transparent")}
+              onClick={() => setSourceMode(f.id)}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <Button
+              key={f.id}
+              size="sm"
+              variant={filter === f.id ? "default" : "outline"}
+              className={cn(filter === f.id ? "" : "bg-transparent")}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
