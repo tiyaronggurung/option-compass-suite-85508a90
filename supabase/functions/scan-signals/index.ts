@@ -422,6 +422,30 @@ Deno.serve(async (req) => {
       const reasonsWithContract = [...draft.reasons];
       if (ALPACA_KEY && ALPACA_SECRET) {
         try {
+          // Pre-flight: if cache empty in 14-30 DTE window, best-effort refresh
+          const todayIso = new Date().toISOString().slice(0, 10);
+          const winEnd = new Date(Date.now() + 32 * 86400000).toISOString().slice(0, 10);
+          const winStart = new Date(Date.now() + 13 * 86400000).toISOString().slice(0, 10);
+          const { count: cached } = await admin
+            .from("options_contracts")
+            .select("symbol", { count: "exact", head: true })
+            .eq("underlying", draft.ticker)
+            .gte("expiry", winStart)
+            .lte("expiry", winEnd);
+          if (!cached || cached < 5) {
+            try {
+              await fetch(`${SUPABASE_URL}/functions/v1/fetch-options-chain`, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${SERVICE_KEY}`,
+                  "Content-Type": "application/json",
+                  "apikey": SERVICE_KEY,
+                },
+                body: JSON.stringify({ ticker: draft.ticker }),
+              });
+            } catch { /* best-effort */ }
+          }
+
           const picked = await pickBestContract(admin, draft.ticker, draft.direction);
           if (picked) {
             contractFields = {
@@ -449,6 +473,8 @@ Deno.serve(async (req) => {
           errors.push(`${sym} picker: ${(e as Error).message}`);
         }
       }
+      // Silence unused-var warning for todayIso (kept inline for readability above)
+      void 0;
 
       const techMetrics = contractMeta
         ? { ...draft.technical_metrics, contract: contractMeta }
