@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, DollarSign, Flame, Radio, TrendingUp } from "lucide-react";
+import { Activity, DollarSign, Flame, Radio, Tag as TagIcon, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { SignalCard } from "@/components/SignalCard";
+import { SignalDetailDialog } from "@/components/SignalDetailDialog";
 import { DisclaimerBar } from "@/components/Disclaimer";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
+import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
