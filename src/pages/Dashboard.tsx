@@ -83,15 +83,19 @@ export default function Dashboard() {
     return signals.filter((s) => {
       if (sourceMode === "live" && s.is_demo) return false;
       if (sourceMode === "demo" && !s.is_demo) return false;
-      if (filter === "bullish") return s.direction === "CALL";
-      if (filter === "bearish") return s.direction === "PUT";
-      if (filter === "high") return s.confidence >= 80;
-      if (filter === "low") return s.risk_level === "LOW";
-      if (filter === "0dte") return s.dte === 0;
-      if (filter === "watch") return watch.includes(s.ticker);
+      if (filter === "bullish" && s.direction !== "CALL") return false;
+      if (filter === "bearish" && s.direction !== "PUT") return false;
+      if (filter === "high" && s.confidence < 80) return false;
+      if (filter === "low" && s.risk_level !== "LOW") return false;
+      if (filter === "0dte" && s.dte !== 0) return false;
+      if (filter === "watch" && !watchSet.has(s.ticker)) return false;
+      if (tagFilter) {
+        const tags = deriveTags(s, watchSet);
+        if (!tags.includes(tagFilter)) return false;
+      }
       return true;
     });
-  }, [signals, filter, sourceMode, watch]);
+  }, [signals, filter, sourceMode, tagFilter, watchSet]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
