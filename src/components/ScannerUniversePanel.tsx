@@ -271,6 +271,11 @@ export default function ScannerUniversePanel() {
           Refresh Universe
         </Button>
 
+        <Button size="sm" variant="outline" onClick={backfillVolume} disabled={backfilling}>
+          {backfilling ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-1" />}
+          Backfill Volume
+        </Button>
+
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
           <DialogTrigger asChild>
             <Button size="sm" variant="outline" onClick={openPreview}>
