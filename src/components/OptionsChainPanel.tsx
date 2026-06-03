@@ -79,6 +79,29 @@ export default function OptionsChainPanel() {
     await loadCache();
   }
 
+  async function refreshScannerTickers() {
+    setRefreshingAll(true);
+    const { data, error } = await supabase.functions.invoke("fetch-options-chain", {
+      body: { action: "refresh_scanner" },
+    });
+    setRefreshingAll(false);
+    if (error) { toast.error(error.message); return; }
+    if (data?.error) { toast.error(data.error); return; }
+    const results: Array<{ ticker: string; ok: boolean; count: number; error?: string }> = data?.results ?? [];
+    const ok = results.filter((r) => r.ok);
+    const failed = results.filter((r) => !r.ok);
+    const total = ok.reduce((a, b) => a + b.count, 0);
+    if (failed.length === 0) {
+      toast.success(`Refreshed ${ok.length} tickers · ${total} contracts (${data?.start_expiry}→${data?.end_expiry})`);
+    } else {
+      toast.warning(
+        `${ok.length} ok / ${failed.length} failed`,
+        { description: failed.map((f) => `${f.ticker}: ${f.error?.slice(0, 80)}`).join("\n") },
+      );
+    }
+    await loadCache();
+  }
+
   useEffect(() => { if (isAdmin) loadCache(); /* eslint-disable-next-line */ }, [isAdmin]);
 
   if (!isAdmin) return null;
