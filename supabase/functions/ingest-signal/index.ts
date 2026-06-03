@@ -1,6 +1,6 @@
 // POST /functions/v1/ingest-signal
-// Webhook endpoint for the future Python trading engine to push new signals.
-// Auth: requires `x-ingest-secret` header matching SIGNAL_INGEST_SECRET (set in project secrets).
+// Secure webhook for the OptionFlow Python trading engine.
+// Auth: HARD-REQUIRED `x-ingest-secret` header matching SIGNAL_INGEST_SECRET.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -11,11 +11,23 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const json = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 const SignalSchema = z.object({
+  signal_id: z.string().uuid().optional(), // external dedup id
+  source: z.string().min(1).max(100).optional(),
   ticker: z.string().min(1).max(10),
   direction: z.enum(["CALL", "PUT"]),
   confidence: z.number().int().min(0).max(100),
-  risk_level: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),
+  risk_level: z
+    .string()
+    .transform((s) => s.toUpperCase())
+    .pipe(z.enum(["LOW", "MEDIUM", "HIGH"]))
+    .default("MEDIUM"),
   price: z.number().nullable().optional(),
   contract_symbol: z.string().max(50).nullable().optional(),
   dte: z.number().int().min(0).max(365).nullable().optional(),
@@ -31,58 +43,87 @@ const SignalSchema = z.object({
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
+  // 1. Fail closed if secret not configured
   const secret = Deno.env.get("SIGNAL_INGEST_SECRET");
-  if (secret) {
-    const provided = req.headers.get("x-ingest-secret");
-    if (provided !== secret) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+  if (!secret) {
+    console.error("[ingest-signal] config_error: SIGNAL_INGEST_SECRET not set");
+    return json(500, { error: "config_error", message: "Ingest secret not configured" });
   }
 
+  // 2. Hard-required auth
+  const provided = req.headers.get("x-ingest-secret");
+  const ua = req.headers.get("user-agent") ?? "unknown";
+  const fwd = req.headers.get("x-forwarded-for") ?? "unknown";
+
+  if (!provided) {
+    console.warn(`[ingest-signal] auth_fail: missing header ua="${ua}" ip="${fwd}"`);
+    return json(401, { error: "unauthorized", message: "Missing x-ingest-secret header" });
+  }
+  if (provided !== secret) {
+    console.warn(`[ingest-signal] auth_fail: bad secret ua="${ua}" ip="${fwd}"`);
+    return json(401, { error: "unauthorized", message: "Invalid x-ingest-secret" });
+  }
+
+  // 3. Parse body
   let body: unknown;
-  try { body = await req.json(); } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  try {
+    body = await req.json();
+  } catch {
+    return json(400, { error: "invalid_json" });
   }
 
+  // 4. Validate
   const parsed = SignalSchema.safeParse(body);
   if (!parsed.success) {
-    return new Response(JSON.stringify({ error: "Validation failed", details: parsed.error.flatten() }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json(400, { error: "validation_failed", details: parsed.error.flatten() });
   }
+
+  const { signal_id, ...rest } = parsed.data;
+  const row = {
+    ...rest,
+    ticker: rest.ticker.toUpperCase(),
+    external_id: signal_id ?? null,
+  };
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // 5. Dedup by external_id when provided
+  if (signal_id) {
+    const { data: existing } = await supabase
+      .from("signals")
+      .select("id")
+      .eq("external_id", signal_id)
+      .maybeSingle();
+    if (existing) {
+      return json(200, { ok: true, deduped: true, signal_id: existing.id });
+    }
+  }
+
   const { data, error } = await supabase
     .from("signals")
-    .insert({ ...parsed.data, ticker: parsed.data.ticker.toUpperCase() })
+    .insert(row)
     .select()
     .single();
 
   if (error) {
-    console.error("ingest-signal insert error", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Unique violation race -> treat as dedup
+    if (error.code === "23505" && signal_id) {
+      const { data: existing } = await supabase
+        .from("signals")
+        .select("id")
+        .eq("external_id", signal_id)
+        .maybeSingle();
+      return json(200, { ok: true, deduped: true, signal_id: existing?.id });
+    }
+    console.error("[ingest-signal] insert error", error);
+    return json(500, { error: "insert_failed", message: error.message });
   }
 
-  return new Response(JSON.stringify({ ok: true, signal: data }), {
-    status: 201,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  console.log(`[ingest-signal] inserted ${data.ticker} ${data.direction} src="${data.source ?? "n/a"}"`);
+  return json(201, { ok: true, signal: data });
 });
