@@ -123,30 +123,30 @@ export default function TopSignals() {
       <DisclaimerBar />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-        <TabsList>
-          <TabsTrigger value="calls">Top Calls</TabsTrigger>
-          <TabsTrigger value="puts">Top Puts</TabsTrigger>
-          <TabsTrigger value="all">All</TabsTrigger>
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="calls" className="flex-1 sm:flex-none">Top Calls</TabsTrigger>
+          <TabsTrigger value="puts" className="flex-1 sm:flex-none">Top Puts</TabsTrigger>
+          <TabsTrigger value="all" className="flex-1 sm:flex-none">All</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      <section className="glass-card p-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="flex items-center justify-between gap-3">
-          <label className="text-sm text-muted-foreground">Watchlist only</label>
+      <section className="glass-card p-3 sm:p-4 grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <label className="text-sm text-muted-foreground truncate">Watchlist only</label>
           <Switch checked={watchOnly} onCheckedChange={setWatchOnly} />
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <label className="text-sm text-muted-foreground">Fresh only (&lt;1h)</label>
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <label className="text-sm text-muted-foreground truncate">Fresh only (&lt;1h)</label>
           <Switch checked={freshOnly} onCheckedChange={setFreshOnly} />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Min ranking score</span>
             <span className="ticker-mono text-foreground">{minScore}</span>
           </div>
           <Slider value={[minScore]} max={100} step={5} onValueChange={(v) => setMinScore(v[0] ?? 0)} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <span className="text-sm text-muted-foreground mr-1">Max risk</span>
           {(["LOW", "MEDIUM", "HIGH"] as const).map((r) => (
             <Button
@@ -160,8 +160,8 @@ export default function TopSignals() {
             </Button>
           ))}
         </div>
-        <div className="md:col-span-2 xl:col-span-4 flex items-center justify-between gap-3 pt-1 border-t border-border">
-          <label className="text-xs text-muted-foreground">Include demo / expired (debug)</label>
+        <div className="md:col-span-2 xl:col-span-4 flex items-center justify-between gap-3 pt-2 border-t border-border min-w-0">
+          <label className="text-xs text-muted-foreground truncate">Include demo / expired (debug)</label>
           <Switch checked={includeDebug} onCheckedChange={setIncludeDebug} />
         </div>
       </section>

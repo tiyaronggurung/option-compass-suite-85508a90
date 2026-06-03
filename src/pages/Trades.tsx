@@ -85,20 +85,20 @@ export default function Trades() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Paper trades</h1>
           <p className="text-sm text-muted-foreground">
             Manually approved demo trades. No real money at risk.
             {open.length > 0 && (
-              <span className="ml-1.5 text-xs">
+              <span className="ml-1.5 text-xs block sm:inline">
                 · Marks auto-refresh every 60s
                 {lastMark && <> · Last mark {timeAgo(lastMark as string)}</>}
               </span>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isAdmin && (
             <Button size="sm" variant="outline" onClick={refreshMarks} disabled={refreshingMarks}>
               <RefreshCw className={cn("h-4 w-4 mr-1.5", refreshingMarks && "animate-spin")} />

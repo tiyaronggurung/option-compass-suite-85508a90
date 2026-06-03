@@ -49,20 +49,20 @@ export default function Watchlist() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Watchlist</h1>
           <p className="text-sm text-muted-foreground">Tickers you want priority alerts on.</p>
         </div>
-        <form onSubmit={addTicker} className="flex items-center gap-2">
+        <form onSubmit={addTicker} className="flex items-center gap-2 w-full sm:w-auto">
           <Input
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
             placeholder="Add ticker (e.g. NVDA)"
-            className="w-48 ticker-mono"
+            className="flex-1 sm:w-48 ticker-mono"
             maxLength={8}
           />
-          <Button type="submit"><Plus className="h-4 w-4 mr-1" /> Add</Button>
+          <Button type="submit" className="shrink-0"><Plus className="h-4 w-4 mr-1" /> Add</Button>
         </form>
       </header>
 
@@ -73,32 +73,42 @@ export default function Watchlist() {
           <div className="p-10 text-center text-sm text-muted-foreground">No tickers yet — add your first one above.</div>
         ) : (
           items.map((it) => (
-            <div key={it.id} className="grid grid-cols-12 items-center gap-3 px-4 py-3">
-              <div className="col-span-3 md:col-span-2 ticker-mono font-semibold">{it.ticker}</div>
-              <div className="col-span-5 md:col-span-5 flex items-center gap-3">
-                <Label htmlFor={`c-${it.id}`} className="text-xs text-muted-foreground w-32">Min confidence</Label>
+            <div
+              key={it.id}
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3 sm:px-4 sm:grid sm:grid-cols-12"
+            >
+              <div className="ticker-mono font-semibold text-base sm:col-span-2">{it.ticker}</div>
+
+              <div className="flex items-center gap-2 sm:col-span-5">
+                <Label htmlFor={`c-${it.id}`} className="text-xs text-muted-foreground whitespace-nowrap">
+                  Min confidence
+                </Label>
                 <Input
                   id={`c-${it.id}`}
                   type="number"
                   min={0}
                   max={100}
                   defaultValue={it.min_confidence}
-                  className="w-20 ticker-mono"
+                  className="w-16 h-8 ticker-mono"
                   onBlur={(e) => {
                     const v = Math.max(0, Math.min(100, Number(e.target.value)));
                     update(it.id, { min_confidence: v });
                   }}
                 />
               </div>
-              <div className="col-span-3 md:col-span-4 flex items-center gap-2">
+
+              <div className="flex items-center gap-2 sm:col-span-4">
                 <Switch
                   id={`d-${it.id}`}
                   checked={it.enable_0dte}
                   onCheckedChange={(v) => update(it.id, { enable_0dte: v })}
                 />
-                <Label htmlFor={`d-${it.id}`} className="text-xs text-muted-foreground">0DTE alerts</Label>
+                <Label htmlFor={`d-${it.id}`} className="text-xs text-muted-foreground whitespace-nowrap">
+                  0DTE alerts
+                </Label>
               </div>
-              <div className="col-span-1 md:col-span-1 text-right">
+
+              <div className="ml-auto sm:col-span-1 sm:text-right">
                 <Button variant="ghost" size="icon" onClick={() => remove(it.id)} aria-label={`Remove ${it.ticker}`}>
                   <Trash2 className="h-4 w-4 text-muted-foreground" />
                 </Button>
