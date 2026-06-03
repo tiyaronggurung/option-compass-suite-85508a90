@@ -12,6 +12,12 @@ import { toast } from "sonner";
 
 type SkippedCandidate = { ticker: string; direction: string; score: number; reasons: string[] };
 
+type AvgComponents = {
+  trend?: number | null; momentum?: number | null; levels?: number | null;
+  volume?: number | null; options?: number | null; macro?: number | null;
+  candidate_count?: number;
+};
+
 type Run = {
   id: string;
   ran_at: string;
@@ -25,10 +31,12 @@ type Run = {
   would_have_created: number | null;
   candidates_scanned: number | null;
   avg_score: number | null;
+  avg_components: AvgComponents | null;
   skipped_candidates: SkippedCandidate[] | null;
   profile: string | null;
   threshold: number | null;
 };
+
 
 type ProfileKey = "conservative" | "balanced" | "active_mvp";
 const PROFILE_LABEL: Record<ProfileKey, string> = {
