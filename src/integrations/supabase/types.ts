@@ -636,6 +636,8 @@ export type Database = {
         Row: {
           catalyst_summary: string | null
           confidence: number
+          confirmation_label: string | null
+          confirmation_score: number | null
           contract_symbol: string | null
           created_at: string
           direction: Database["public"]["Enums"]["signal_direction"]
@@ -653,6 +655,7 @@ export type Database = {
           reasons: Json
           risk_level: Database["public"]["Enums"]["risk_level"]
           source: string | null
+          source_confirmations: Json
           status: Database["public"]["Enums"]["signal_status"]
           strike: number | null
           technical_metrics: Json
@@ -661,6 +664,8 @@ export type Database = {
         Insert: {
           catalyst_summary?: string | null
           confidence: number
+          confirmation_label?: string | null
+          confirmation_score?: number | null
           contract_symbol?: string | null
           created_at?: string
           direction: Database["public"]["Enums"]["signal_direction"]
@@ -678,6 +683,7 @@ export type Database = {
           reasons?: Json
           risk_level?: Database["public"]["Enums"]["risk_level"]
           source?: string | null
+          source_confirmations?: Json
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
           technical_metrics?: Json
@@ -686,6 +692,8 @@ export type Database = {
         Update: {
           catalyst_summary?: string | null
           confidence?: number
+          confirmation_label?: string | null
+          confirmation_score?: number | null
           contract_symbol?: string | null
           created_at?: string
           direction?: Database["public"]["Enums"]["signal_direction"]
@@ -703,6 +711,7 @@ export type Database = {
           reasons?: Json
           risk_level?: Database["public"]["Enums"]["risk_level"]
           source?: string | null
+          source_confirmations?: Json
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
           technical_metrics?: Json
@@ -864,6 +873,10 @@ export type Database = {
         | "unusual_whales"
         | "news"
         | "alpha_vantage"
+        | "x_twitter"
+        | "reddit"
+        | "polymarket"
+        | "kalshi"
       provider_mode: "live" | "simulated"
       provider_status: "ok" | "error" | "unknown"
       risk_level: "LOW" | "MEDIUM" | "HIGH"
@@ -1020,6 +1033,10 @@ export const Constants = {
         "unusual_whales",
         "news",
         "alpha_vantage",
+        "x_twitter",
+        "reddit",
+        "polymarket",
+        "kalshi",
       ],
       provider_mode: ["live", "simulated"],
       provider_status: ["ok", "error", "unknown"],
