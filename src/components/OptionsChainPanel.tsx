@@ -36,6 +36,7 @@ export default function OptionsChainPanel() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -78,6 +79,29 @@ export default function OptionsChainPanel() {
     await loadCache();
   }
 
+  async function refreshScannerTickers() {
+    setRefreshingAll(true);
+    const { data, error } = await supabase.functions.invoke("fetch-options-chain", {
+      body: { action: "refresh_scanner" },
+    });
+    setRefreshingAll(false);
+    if (error) { toast.error(error.message); return; }
+    if (data?.error) { toast.error(data.error); return; }
+    const results: Array<{ ticker: string; ok: boolean; count: number; error?: string }> = data?.results ?? [];
+    const ok = results.filter((r) => r.ok);
+    const failed = results.filter((r) => !r.ok);
+    const total = ok.reduce((a, b) => a + b.count, 0);
+    if (failed.length === 0) {
+      toast.success(`Refreshed ${ok.length} tickers · ${total} contracts (${data?.start_expiry}→${data?.end_expiry})`);
+    } else {
+      toast.warning(
+        `${ok.length} ok / ${failed.length} failed`,
+        { description: failed.map((f) => `${f.ticker}: ${f.error?.slice(0, 80)}`).join("\n") },
+      );
+    }
+    await loadCache();
+  }
+
   useEffect(() => { if (isAdmin) loadCache(); /* eslint-disable-next-line */ }, [isAdmin]);
 
   if (!isAdmin) return null;
@@ -110,6 +134,16 @@ export default function OptionsChainPanel() {
         <Button onClick={refresh} disabled={loading}>
           {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
           <span className="ml-2">Refresh chain</span>
+        </Button>
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-2 -mt-1">
+        <p className="text-xs text-muted-foreground">
+          Scanner tickers (SPY, QQQ, NVDA, TSLA, AMD, AAPL, META, MSFT) · 10–45 DTE window
+        </p>
+        <Button size="sm" variant="outline" onClick={refreshScannerTickers} disabled={refreshingAll}>
+          {refreshingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          <span className="ml-2">Refresh scanner chains</span>
         </Button>
       </div>
 
