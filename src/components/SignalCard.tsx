@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
+import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 
 type Props = {
   signal: Signal;
@@ -11,9 +12,10 @@ type Props = {
   onReject?: (s: Signal) => void;
   onDetails?: (s: Signal) => void;
   watchlist?: Set<string>;
+  outcome?: SignalOutcome;
 };
 
-export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist }: Props) {
+export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none" }: Props) {
   const isCall = signal.direction === "CALL";
   const ring =
     signal.confidence >= 80 ? "ring-bull/40" : signal.confidence >= 65 ? "ring-primary/30" : "ring-border";
