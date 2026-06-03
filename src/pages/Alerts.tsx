@@ -89,6 +89,22 @@ export default function Alerts() {
           <Toggle label="Bullish (CALL) only" v={s.bullish_only} on={(v) => save({ bullish_only: v, bearish_only: v ? false : s.bearish_only })} />
           <Toggle label="Bearish (PUT) only" v={s.bearish_only} on={(v) => save({ bearish_only: v, bullish_only: v ? false : s.bullish_only })} />
         </div>
+
+        <div className="pt-2">
+          <Field label="Cooldown (suppress repeats for same ticker + direction + source)">
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              value={s.cooldown_minutes ?? 15}
+              onChange={(e) => save({ cooldown_minutes: Number(e.target.value) })}
+            >
+              <option value={0}>Off</option>
+              <option value={5}>5 minutes</option>
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+              <option value={60}>60 minutes</option>
+            </select>
+          </Field>
+        </div>
       </section>
 
       <section className="glass-card p-5 space-y-4">
