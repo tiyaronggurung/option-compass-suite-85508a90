@@ -1,20 +1,23 @@
-import { ArrowDownRight, ArrowUpRight, Clock, Flame, Radio, ShieldAlert, TestTube, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Clock, Flame, Info, Radio, ShieldAlert, TestTube, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
+import { deriveTags, type TagId } from "@/lib/signalTags";
 
 type Props = {
   signal: Signal;
   onApprove: (s: Signal) => void;
   onReject?: (s: Signal) => void;
+  onDetails?: (s: Signal) => void;
+  watchlist?: Set<string>;
 };
 
-export function SignalCard({ signal, onApprove, onReject }: Props) {
+export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist }: Props) {
   const isCall = signal.direction === "CALL";
-  const dirColor = isCall ? "text-bull" : "text-bear";
   const ring =
     signal.confidence >= 80 ? "ring-bull/40" : signal.confidence >= 65 ? "ring-primary/30" : "ring-border";
+  const tags: TagId[] = deriveTags(signal, watchlist ?? new Set());
 
   return (
     <div className={cn("glass-card p-4 ring-1 transition hover:ring-primary/40", ring)}>
