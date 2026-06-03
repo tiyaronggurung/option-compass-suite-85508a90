@@ -293,3 +293,38 @@ function StatusBadge({ status }: { status: string }) {
   };
   return <Badge variant="outline" className={map[status] ?? "text-muted-foreground border-border"}>{status}</Badge>;
 }
+
+const AVG_COMP_KEYS = ["trend", "momentum", "levels", "volume", "options", "macro"] as const;
+const AVG_COMP_LABEL: Record<string, string> = {
+  trend: "Trend", momentum: "Mom", levels: "Levels",
+  volume: "Vol", options: "Opt", macro: "Macro",
+};
+
+function AvgComponentRow({ ac }: { ac: AvgComponents }) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground mb-1">
+        Avg component scores ({ac.candidate_count ?? 0} candidates, range −1.0 to +1.0):
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {AVG_COMP_KEYS.map((k) => {
+          const v = ac[k];
+          const num = typeof v === "number" ? v : null;
+          const cls = num == null ? "text-muted-foreground border-border"
+            : num > 0.05 ? "text-bull border-bull/40"
+            : num < -0.05 ? "text-bear border-bear/40"
+            : "text-muted-foreground border-border";
+          return (
+            <Badge key={k} variant="outline" className={`${cls} gap-1.5 font-normal`}>
+              <span className="text-[10px] uppercase tracking-wide">{AVG_COMP_LABEL[k]}</span>
+              <span className="ticker-mono">
+                {num == null ? "—" : `${num >= 0 ? "+" : ""}${num.toFixed(2)}`}
+              </span>
+            </Badge>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
