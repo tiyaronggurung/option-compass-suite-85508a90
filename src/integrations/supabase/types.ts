@@ -149,6 +149,69 @@ export type Database = {
         }
         Relationships: []
       }
+      options_contracts: {
+        Row: {
+          ask: number | null
+          bid: number | null
+          created_at: string
+          delta: number | null
+          expiry: string
+          gamma: number | null
+          id: string
+          iv: number | null
+          last: number | null
+          open_interest: number | null
+          strike: number
+          symbol: string
+          theta: number | null
+          type: string
+          underlying: string
+          updated_at: string
+          vega: number | null
+          volume: number | null
+        }
+        Insert: {
+          ask?: number | null
+          bid?: number | null
+          created_at?: string
+          delta?: number | null
+          expiry: string
+          gamma?: number | null
+          id?: string
+          iv?: number | null
+          last?: number | null
+          open_interest?: number | null
+          strike: number
+          symbol: string
+          theta?: number | null
+          type: string
+          underlying: string
+          updated_at?: string
+          vega?: number | null
+          volume?: number | null
+        }
+        Update: {
+          ask?: number | null
+          bid?: number | null
+          created_at?: string
+          delta?: number | null
+          expiry?: string
+          gamma?: number | null
+          id?: string
+          iv?: number | null
+          last?: number | null
+          open_interest?: number | null
+          strike?: number
+          symbol?: string
+          theta?: number | null
+          type?: string
+          underlying?: string
+          updated_at?: string
+          vega?: number | null
+          volume?: number | null
+        }
+        Relationships: []
+      }
       paper_trades: {
         Row: {
           closed_at: string | null
