@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Activity, BookmarkCheck, ClipboardList, LayoutDashboard, LineChart, LogOut, Settings, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
