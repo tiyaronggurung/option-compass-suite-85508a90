@@ -29,13 +29,22 @@ export function SignalCard({ signal, onApprove, onReject }: Props) {
             {isCall ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="ticker-mono text-lg font-semibold">{signal.ticker}</span>
               <Badge variant="outline" className={cn("border-0 text-xs font-medium", isCall ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
                 {signal.direction}
               </Badge>
               {signal.dte === 0 && (
                 <Badge className="bg-warn/15 text-warn border-0 text-xs">0DTE</Badge>
+              )}
+              {signal.is_demo ? (
+                <Badge variant="outline" className="border-border text-muted-foreground gap-1 text-[10px]" title="Seeded demo signal">
+                  <TestTube className="h-3 w-3" /> Demo
+                </Badge>
+              ) : (
+                <Badge className="bg-emerald-500/15 text-emerald-400 border-0 gap-1 text-[10px]" title={signal.source ?? "Live"}>
+                  <Radio className="h-3 w-3" /> Live Market Data
+                </Badge>
               )}
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
