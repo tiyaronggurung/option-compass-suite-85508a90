@@ -61,13 +61,14 @@ export default function Dashboard() {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }] = await Promise.all([
+      const [{ data: s }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
         supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).eq("action", "dismissed"),
         supabase.from("provider_configs").select("last_status").eq("provider", "alpaca").maybeSingle(),
+        supabase.from("risk_settings").select("*").eq("user_id", user!.id).maybeSingle(),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
@@ -76,6 +77,7 @@ export default function Dashboard() {
       setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
       if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
       setAlpacaStatus(pc?.last_status ?? null);
+      setRisk(rs as RiskSettingsLike);
     })();
 
     const channel = supabase
