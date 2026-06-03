@@ -122,6 +122,18 @@ export default function Dashboard() {
     setTrades(data ?? []);
   }
 
+  async function dismiss(s: Signal) {
+    const { error } = await supabase.from("signal_actions").insert({
+      user_id: user!.id,
+      signal_id: s.id,
+      action: "dismissed",
+    });
+    // Unique violation just means already dismissed — silent.
+    if (error && error.code !== "23505") toast.error(error.message);
+    setSignals((prev) => prev ? prev.filter((x) => x.id !== s.id) : prev);
+    toast("Signal dismissed");
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <header className="space-y-2">
