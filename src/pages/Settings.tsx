@@ -1,25 +1,17 @@
 import { useEffect, useState } from "react";
-import { Database as DbIcon, KeyRound, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ShieldAlert, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { DisclaimerBar, DISCLAIMER_TEXT } from "@/components/Disclaimer";
+import { ProviderEnginesPanel } from "@/components/ProviderEnginesPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
 type Risk = Database["public"]["Tables"]["risk_settings"]["Row"];
-
-const DATA_SOURCES = [
-  { name: "Alpaca", purpose: "Market data + broker" },
-  { name: "Tradier", purpose: "Options chains + execution" },
-  { name: "Polygon", purpose: "Realtime quotes + options" },
-  { name: "Unusual Whales", purpose: "Options flow" },
-  { name: "Alpha Vantage", purpose: "Fundamentals + history" },
-];
 
 export default function Settings() {
   const { user } = useAuth();
