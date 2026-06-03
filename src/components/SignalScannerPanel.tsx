@@ -212,12 +212,15 @@ export default function SignalScannerPanel() {
             <tbody>
               {runs.map((r) => {
                 const hasSkipped = (r.skipped_candidates?.length ?? 0) > 0;
+                const ac = r.avg_components ?? null;
+                const hasAvgComps = !!(ac && (ac.candidate_count ?? 0) > 0);
+                const expandable = hasSkipped || hasAvgComps;
                 const isOpen = !!expanded[r.id];
                 return (
                   <Fragment key={r.id}>
                     <tr className="border-t border-border/50">
                       <td className="p-2">
-                        {hasSkipped ? (
+                        {expandable ? (
                           <button onClick={() => setExpanded((e) => ({ ...e, [r.id]: !e[r.id] }))} className="text-muted-foreground hover:text-foreground">
                             {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                           </button>
@@ -234,29 +237,35 @@ export default function SignalScannerPanel() {
                       <td className="p-2 text-right ticker-mono">{r.duration_ms ? `${r.duration_ms}ms` : "—"}</td>
                       <td className="p-2 text-bear truncate max-w-[200px]" title={r.error ?? undefined}>{r.error ?? ""}</td>
                     </tr>
-                    {isOpen && hasSkipped && (
+                    {isOpen && expandable && (
                       <tr className="bg-muted/10">
                         <td></td>
-                        <td colSpan={10} className="p-2">
-                          <div className="text-[11px] text-muted-foreground mb-1">
-                            Top skipped candidates (below threshold {r.threshold ?? "—"}):
-                          </div>
-                          <div className="space-y-1">
-                            {r.skipped_candidates!.map((c, i) => (
-                              <div key={i} className="flex items-start gap-2 flex-wrap">
-                                <span className="ticker-mono font-medium">{c.ticker}</span>
-                                <Badge variant="outline" className={c.direction === "CALL" ? "text-bull border-bull/40" : "text-bear border-bear/40"}>{c.direction}</Badge>
-                                <span className="ticker-mono">score {c.score}</span>
-                                <span className="text-muted-foreground">— {c.reasons.join(" · ")}</span>
+                        <td colSpan={10} className="p-2 space-y-3">
+                          {hasAvgComps && <AvgComponentRow ac={ac!} />}
+                          {hasSkipped && (
+                            <div>
+                              <div className="text-[11px] text-muted-foreground mb-1">
+                                Top skipped candidates (below threshold {r.threshold ?? "—"}):
                               </div>
-                            ))}
-                          </div>
+                              <div className="space-y-1">
+                                {r.skipped_candidates!.map((c, i) => (
+                                  <div key={i} className="flex items-start gap-2 flex-wrap">
+                                    <span className="ticker-mono font-medium">{c.ticker}</span>
+                                    <Badge variant="outline" className={c.direction === "CALL" ? "text-bull border-bull/40" : "text-bear border-bear/40"}>{c.direction}</Badge>
+                                    <span className="ticker-mono">score {c.score}</span>
+                                    <span className="text-muted-foreground">— {c.reasons.join(" · ")}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}
                   </Fragment>
                 );
               })}
+
             </tbody>
           </table>
         )}
