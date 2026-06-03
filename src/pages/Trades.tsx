@@ -33,10 +33,13 @@ const REASON_OPTIONS: { value: CloseReason; label: string }[] = [
 
 export default function Trades() {
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const [trades, setTrades] = useState<PaperTrade[] | null>(null);
   const [reviews, setReviews] = useState<Record<string, TradeReview>>({});
   const [closing, setClosing] = useState<PaperTrade | null>(null);
   const [reviewing, setReviewing] = useState<PaperTrade | null>(null);
+  const [refreshingMarks, setRefreshingMarks] = useState(false);
+  const refreshRef = useRef<() => Promise<void>>();
 
   async function refresh() {
     const [{ data }, { data: r }] = await Promise.all([
@@ -49,19 +52,61 @@ export default function Trades() {
     (r ?? []).forEach((x) => { map[x.trade_id] = x; });
     setReviews(map);
   }
+  refreshRef.current = refresh;
+
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user]);
+
+  // Auto-refresh every 60s while page is mounted, only if there are open trades and tab visible.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      refreshRef.current?.();
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  async function refreshMarks() {
+    setRefreshingMarks(true);
+    const { data, error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
+    setRefreshingMarks(false);
+    if (error) return toast.error(error.message);
+    const updated = (data as any)?.updated ?? 0;
+    toast.success(`Marks refreshed · ${updated} trade${updated === 1 ? "" : "s"} updated`);
+    refresh();
+  }
 
   const open = trades?.filter((t) => t.status === "OPEN") ?? [];
   const closed = trades?.filter((t) => t.status !== "OPEN") ?? [];
+  const lastMark = open
+    .map((t) => t.last_mark_at)
+    .filter(Boolean)
+    .sort()
+    .pop();
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <header className="flex items-end justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Paper trades</h1>
-          <p className="text-sm text-muted-foreground">Manually approved demo trades. No real money at risk.</p>
+          <p className="text-sm text-muted-foreground">
+            Manually approved demo trades. No real money at risk.
+            {open.length > 0 && (
+              <span className="ml-1.5 text-xs">
+                · Marks auto-refresh every 60s
+                {lastMark && <> · Last mark {timeAgo(lastMark as string)}</>}
+              </span>
+            )}
+          </p>
         </div>
-        <Badge className="bg-warn/15 text-warn border-0">Paper trading only</Badge>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={refreshMarks} disabled={refreshingMarks}>
+              <RefreshCw className={cn("h-4 w-4 mr-1.5", refreshingMarks && "animate-spin")} />
+              {refreshingMarks ? "Refreshing…" : "Refresh marks"}
+            </Button>
+          )}
+          <Badge className="bg-warn/15 text-warn border-0">Paper trading only</Badge>
+        </div>
       </header>
 
       <DisclaimerBar />
@@ -69,7 +114,7 @@ export default function Trades() {
       <Section title="Open">
         {!trades ? <Skeleton className="h-24" />
           : open.length === 0 ? <Empty text="No open paper trades. Approve a signal from the dashboard." />
-          : <TradeTable trades={open} onCloseClick={(t) => setClosing(t)} reviews={reviews} onReviewClick={setReviewing} />}
+          : <TradeTable trades={open} live onCloseClick={(t) => setClosing(t)} reviews={reviews} onReviewClick={setReviewing} />}
       </Section>
 
       <Section title="Closed">
