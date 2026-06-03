@@ -95,6 +95,60 @@ export type Database = {
         }
         Relationships: []
       }
+      mark_engine_config: {
+        Row: {
+          enabled: boolean
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      mark_engine_runs: {
+        Row: {
+          duration_ms: number | null
+          error: string | null
+          id: string
+          missing_prices: string[]
+          ran_at: string
+          skipped_count: number
+          status: string
+          trigger: string
+          updated_count: number
+        }
+        Insert: {
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          missing_prices?: string[]
+          ran_at?: string
+          skipped_count?: number
+          status: string
+          trigger?: string
+          updated_count?: number
+        }
+        Update: {
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          missing_prices?: string[]
+          ran_at?: string
+          skipped_count?: number
+          status?: string
+          trigger?: string
+          updated_count?: number
+        }
+        Relationships: []
+      }
       paper_trades: {
         Row: {
           closed_at: string | null
