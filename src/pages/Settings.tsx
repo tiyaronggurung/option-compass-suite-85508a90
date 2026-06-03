@@ -79,6 +79,8 @@ export default function Settings() {
         )}
       </section>
 
+      <SignalModePanel />
+
       <ProviderEnginesPanel />
 
       <section className="glass-card p-5 space-y-3">
