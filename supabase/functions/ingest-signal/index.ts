@@ -1,5 +1,5 @@
 // POST /functions/v1/ingest-signal
-// Secure webhook for the OptionFlow Python trading engine.
+// Secure webhook for the Tradingflow 101 Python trading engine.
 // Auth: HARD-REQUIRED `x-ingest-secret` header matching SIGNAL_INGEST_SECRET.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";

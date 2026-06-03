@@ -11,7 +11,7 @@ export default function Landing() {
           <div className="h-8 w-8 rounded-md bg-primary/20 text-primary grid place-items-center">
             <Activity className="h-4 w-4" />
           </div>
-          <span className="text-sm font-semibold">OptionFlow <span className="text-primary">AI Pro</span></span>
+          <span className="text-sm font-semibold">Tradingflow <span className="text-primary">101</span></span>
         </Link>
         <div className="flex items-center gap-2">
           <Link to="/auth"><Button variant="ghost" size="sm">Sign in</Button></Link>
@@ -51,7 +51,7 @@ export default function Landing() {
       </section>
 
       <footer className="container max-w-7xl py-8 text-xs text-muted-foreground flex items-center gap-2">
-        <ShieldCheck className="h-3.5 w-3.5" /> © OptionFlow AI Pro — educational use only.
+        <ShieldCheck className="h-3.5 w-3.5" /> © Tradingflow 101 — educational use only.
       </footer>
     </div>
   );

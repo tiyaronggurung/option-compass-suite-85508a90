@@ -48,7 +48,7 @@ export default function Alerts() {
     }
     await save({ browser_push_enabled: enable });
     if (enable) {
-      try { new Notification("OptionFlow alerts enabled", { body: "You'll receive alerts that match your thresholds." }); } catch {}
+      try { new Notification("Tradingflow 101 alerts enabled", { body: "You'll receive alerts that match your thresholds." }); } catch {}
     }
   }
 
@@ -123,7 +123,7 @@ export default function Alerts() {
           }
         >
           <p className="text-xs text-muted-foreground">
-            Live in this browser tab. Shows desktop notifications for matching signals while OptionFlow is open.
+            Live in this browser tab. Shows desktop notifications for matching signals while Tradingflow 101 is open.
           </p>
           {s.browser_push_enabled && permission === "granted" && (
             <Button size="sm" variant="outline" className="mt-2" onClick={() => {
