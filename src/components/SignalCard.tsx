@@ -69,7 +69,16 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
               <Clock className="h-3 w-3" />
-              {timeAgo(signal.created_at)} · ${fmtPrice(Number(signal.price))} · {signal.contract_symbol ?? "—"}
+              {timeAgo(signal.created_at)} · ${fmtPrice(Number(signal.price))}
+              {signal.contract_symbol && signal.strike != null ? (
+                <span className="ticker-mono">
+                  · {signal.direction} {Number(signal.strike).toFixed(0)}
+                  {signal.dte != null ? ` · ${signal.dte}d` : ""}
+                  {signal.premium != null ? ` · $${fmtPrice(Number(signal.premium))} mid` : ""}
+                </span>
+              ) : (
+                <span>· No contract match yet.</span>
+              )}
             </div>
           </div>
         </div>
