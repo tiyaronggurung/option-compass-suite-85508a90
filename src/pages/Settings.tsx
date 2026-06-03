@@ -12,6 +12,7 @@ import { SignalModePanel } from "@/components/SignalModePanel";
 import { SignalAuditPanel } from "@/components/SignalAuditPanel";
 import SignalLearningPanel from "@/components/SignalLearningPanel";
 import MarkingEngineStatus from "@/components/MarkingEngineStatus";
+import OptionsChainPanel from "@/components/OptionsChainPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
