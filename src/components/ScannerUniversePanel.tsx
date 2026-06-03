@@ -11,7 +11,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Globe, RefreshCw, Eye, PlayCircle, Loader2 } from "lucide-react";
+import { Globe, RefreshCw, Eye, PlayCircle, Loader2, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 
 type UniverseMode = "base_8" | "watchlist_earnings" | "top_100" | "top_250" | "top_500";
@@ -56,6 +56,7 @@ export default function ScannerUniversePanel() {
   const [lastScan, setLastScan] = useState<LastScan | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState<UniverseRow[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -126,6 +127,35 @@ export default function ScannerUniversePanel() {
       toast.success(`Scan complete: ${d?.signals_created ?? 0} signals from ${d?.universe_count ?? 0} stocks`);
     }
     loadAll();
+  }
+
+  async function backfillVolume() {
+    setBackfilling(true);
+    let offset = 0;
+    let totalProcessed = 0, totalUpdated = 0, totalFailed = 0;
+    const maxIterations = 20; // safety bound
+    try {
+      for (let i = 0; i < maxIterations; i++) {
+        const { data, error } = await supabase.functions.invoke(
+          `backfill-universe-volume?offset=${offset}&limit=1000`,
+          { body: {} },
+        );
+        if (error) throw new Error(error.message);
+        const d = data as any;
+        totalProcessed += d?.processed ?? 0;
+        totalUpdated += d?.updated ?? 0;
+        totalFailed += d?.failed ?? 0;
+        toast.info(`Backfill: ${totalUpdated} updated / ${totalProcessed} processed (${totalFailed} failed)`);
+        if (d?.done) break;
+        offset = d?.next_offset ?? (offset + 1000);
+      }
+      toast.success(`Backfill complete: ${totalUpdated} updated, ${totalFailed} failed`);
+    } catch (e: any) {
+      toast.error(`Backfill error: ${e.message}`);
+    } finally {
+      setBackfilling(false);
+      loadAll();
+    }
   }
 
   async function openPreview() {
@@ -239,6 +269,11 @@ export default function ScannerUniversePanel() {
         <Button size="sm" variant="outline" onClick={refreshUniverse} disabled={refreshing}>
           {refreshing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
           Refresh Universe
+        </Button>
+
+        <Button size="sm" variant="outline" onClick={backfillVolume} disabled={backfilling}>
+          {backfilling ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-1" />}
+          Backfill Volume
         </Button>
 
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
