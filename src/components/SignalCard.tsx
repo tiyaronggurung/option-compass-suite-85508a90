@@ -51,6 +51,11 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                   <Radio className="h-3 w-3" /> Live Market Data
                 </Badge>
               )}
+              {outcome !== "none" && (
+                <Badge className={cn("border-0 text-[10px]", OUTCOME_CLASS[outcome])} title={`Trade outcome: ${OUTCOME_LABEL[outcome]}`}>
+                  {OUTCOME_LABEL[outcome]}
+                </Badge>
+              )}
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
               <Clock className="h-3 w-3" />
