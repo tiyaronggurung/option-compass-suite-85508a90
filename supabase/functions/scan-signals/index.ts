@@ -303,12 +303,156 @@ const PROFILE_THRESHOLDS: Record<string, number> = {
   testing: 25,
 };
 
-async function loadScannerSettings(): Promise<{ profile: string; threshold: number; debug_mode: boolean }> {
-  const { data } = await admin.from("scanner_settings").select("profile, debug_mode").eq("id", "global").maybeSingle();
+type UniverseMode = "base_8" | "watchlist_earnings" | "top_100" | "top_250" | "top_500";
+
+async function loadScannerSettings(): Promise<{ profile: string; threshold: number; debug_mode: boolean; universe_mode: UniverseMode }> {
+  const { data } = await admin.from("scanner_settings").select("profile, debug_mode, universe_mode").eq("id", "global").maybeSingle();
   const profile = (data?.profile as string) ?? "balanced";
   const debug_mode = !!data?.debug_mode;
+  const universe_mode = ((data as any)?.universe_mode as UniverseMode) ?? "base_8";
   const threshold = PROFILE_THRESHOLDS[profile] ?? 50;
-  return { profile, threshold, debug_mode };
+  return { profile, threshold, debug_mode, universe_mode };
+}
+
+// ---------- Universe resolution ----------
+// Returns the tickers to scan plus diagnostics for signal_scan_runs.
+// Does NOT touch scoring logic.
+async function resolveUniverse(mode: UniverseMode): Promise<{
+  tickers: string[];
+  universe_count: number;
+  watchlist_count: number;
+  earnings_count: number;
+  skipped_due_to_cap: number;
+}> {
+  if (mode === "base_8") {
+    return {
+      tickers: DEFAULT_TICKERS,
+      universe_count: DEFAULT_TICKERS.length,
+      watchlist_count: 0,
+      earnings_count: 0,
+      skipped_due_to_cap: 0,
+    };
+  }
+
+  if (mode === "watchlist_earnings") {
+    const horizon = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const [wlRes, earnRes] = await Promise.all([
+      admin.from("watchlist_items").select("ticker"),
+      admin.from("earnings_events").select("ticker").gte("report_date", today).lte("report_date", horizon),
+    ]);
+    const wl = new Set((wlRes.data ?? []).map((r: any) => r.ticker as string));
+    const earn = new Set((earnRes.data ?? []).map((r: any) => r.ticker as string));
+    const merged = new Set<string>([...wl, ...earn]);
+    return {
+      tickers: [...merged],
+      universe_count: merged.size,
+      watchlist_count: wl.size,
+      earnings_count: earn.size,
+      skipped_due_to_cap: 0,
+    };
+  }
+
+  // top_100 / top_250 / top_500 — pull from tradable_universe with ranking
+  const cap = mode === "top_100" ? 100 : mode === "top_250" ? 250 : 500;
+  const horizon = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [uniRes, wlRes, earnRes] = await Promise.all([
+    admin
+      .from("tradable_universe")
+      .select("ticker, avg_volume, market_cap, last_price")
+      .eq("optionable", true)
+      .eq("active", true)
+      .eq("tradable", true)
+      .order("avg_volume", { ascending: false, nullsFirst: false })
+      .limit(2000),
+    admin.from("watchlist_items").select("ticker"),
+    admin.from("earnings_events").select("ticker, report_date").gte("report_date", today).lte("report_date", horizon),
+  ]);
+
+  const universe = uniRes.data ?? [];
+  const wl = new Set((wlRes.data ?? []).map((r: any) => r.ticker as string));
+  const earningsByTicker = new Map<string, string>();
+  for (const e of (earnRes.data ?? [])) {
+    earningsByTicker.set((e as any).ticker, (e as any).report_date);
+  }
+
+  // Filter price>$5 OR price unknown (heuristic mode — no price yet) AND avg_volume>500k OR unknown
+  const eligible = universe.filter((r: any) => {
+    const price = r.last_price;
+    const vol = r.avg_volume;
+    if (price !== null && price !== undefined && Number(price) <= 5) return false;
+    if (vol !== null && vol !== undefined && Number(vol) < 500_000) return false;
+    return true;
+  });
+
+  // Rank: earnings ≤7d > earnings ≤14d > avg_volume > watchlist > market_cap
+  const now = Date.now();
+  const ranked = eligible
+    .map((r: any) => {
+      const t = r.ticker as string;
+      const earn = earningsByTicker.get(t);
+      let earnScore = 0;
+      if (earn) {
+        const days = Math.floor((new Date(earn).getTime() - now) / 86400000);
+        if (days <= 7) earnScore = 3;
+        else if (days <= 14) earnScore = 2;
+      }
+      const wlScore = wl.has(t) ? 1 : 0;
+      const vol = Number(r.avg_volume ?? 0);
+      const mcap = Number(r.market_cap ?? 0);
+      return { ticker: t, earnScore, wlScore, vol, mcap };
+    })
+    .sort((a, b) => {
+      if (b.earnScore !== a.earnScore) return b.earnScore - a.earnScore;
+      if (b.vol !== a.vol) return b.vol - a.vol;
+      if (b.wlScore !== a.wlScore) return b.wlScore - a.wlScore;
+      return b.mcap - a.mcap;
+    });
+
+  const picked = ranked.slice(0, cap);
+  const pickedSet = new Set(picked.map((p) => p.ticker));
+  const earnings_count = picked.filter((p) => earningsByTicker.has(p.ticker)).length;
+  const watchlist_count = picked.filter((p) => wl.has(p.ticker)).length;
+
+  return {
+    tickers: picked.map((p) => p.ticker),
+    universe_count: eligible.length,
+    watchlist_count,
+    earnings_count,
+    skipped_due_to_cap: Math.max(0, eligible.length - picked.length),
+  };
+}
+
+// ---------- Overlap lock (prevents two scans running at once) ----------
+const SCAN_LOCK_ID = "scan-signals";
+const SCAN_LOCK_TTL_MS = 5 * 60 * 1000; // 5 min safety release
+
+async function acquireScanLock(trigger: string): Promise<boolean> {
+  // Try insert — if conflict, check age and steal if stale
+  const { error } = await admin.from("scan_locks").insert({
+    id: SCAN_LOCK_ID,
+    locked_at: new Date().toISOString(),
+    locked_by: trigger,
+  });
+  if (!error) return true;
+  // Existing lock — check staleness
+  const { data } = await admin.from("scan_locks").select("locked_at").eq("id", SCAN_LOCK_ID).maybeSingle();
+  if (!data) return false;
+  const age = Date.now() - new Date((data as any).locked_at).getTime();
+  if (age > SCAN_LOCK_TTL_MS) {
+    await admin.from("scan_locks").update({
+      locked_at: new Date().toISOString(),
+      locked_by: trigger,
+    }).eq("id", SCAN_LOCK_ID);
+    return true;
+  }
+  return false;
+}
+
+async function releaseScanLock(): Promise<void> {
+  await admin.from("scan_locks").delete().eq("id", SCAN_LOCK_ID);
 }
 
 // ---------- Auth ----------
