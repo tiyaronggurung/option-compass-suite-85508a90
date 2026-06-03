@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
 import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
+import { signalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
