@@ -3,6 +3,7 @@
 // by an admin "Run Scan Now" button. Market-hours gated in America/New_York.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { pickBestContract } from "../_shared/pickContract.ts";
+import { getEarningsCatalyst, type CatalystResult } from "../_shared/earningsCatalyst.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
