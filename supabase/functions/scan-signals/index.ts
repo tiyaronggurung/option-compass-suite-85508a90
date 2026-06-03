@@ -1,4 +1,4 @@
-// Backend signal scanner — Alpaca bars → simple TA rules → inserts into public.signals.
+// Backend signal scanner — Alpaca bars → modular weighted scoring → inserts into public.signals.
 // No live orders, paper/signal generation only. Triggered by pg_cron (service role) or
 // by an admin "Run Scan Now" button. Market-hours gated in America/New_York.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -67,6 +67,16 @@ function rsi(closes: number[], period = 14): number {
   const rs = avgG / avgL;
   return 100 - 100 / (1 + rs);
 }
+function macdHist(closes: number[]): number {
+  if (closes.length < 35) return 0;
+  const e12 = ema(closes, 12);
+  const e26 = ema(closes, 26);
+  const macdLine: number[] = e12.map((v, i) => v - e26[i]);
+  const signal = ema(macdLine.slice(-20), 9);
+  const lastMacd = macdLine[macdLine.length - 1];
+  const lastSig = signal[signal.length - 1];
+  return lastMacd - lastSig;
+}
 function vwap(bars: Bar[]): number {
   let pv = 0, vv = 0;
   for (const b of bars) {
@@ -76,6 +86,7 @@ function vwap(bars: Bar[]): number {
   }
   return vv === 0 ? bars[bars.length - 1].c : pv / vv;
 }
+function clamp(v: number, lo = -1, hi = 1) { return Math.max(lo, Math.min(hi, v)); }
 
 // ---------- Alpaca ----------
 async function fetchBars(symbol: string): Promise<Bar[]> {
@@ -101,90 +112,185 @@ async function fetchBars(symbol: string): Promise<Bar[]> {
   return (data.bars ?? []) as Bar[];
 }
 
-// ---------- Rules ----------
-type SignalDraft = {
-  ticker: string;
-  direction: "CALL" | "PUT";
-  price: number;
-  confidence: number;
-  risk_level: "LOW" | "MEDIUM" | "HIGH";
-  reasons: string[];
-  technical_metrics: Record<string, number>;
+// ---------- Scoring components (each -1..+1) ----------
+type ComponentName = "trend" | "momentum" | "levels" | "volume" | "options" | "macro";
+type ComponentResult = { score: number; reason: string; metrics: Record<string, number> };
+type AllComponents = Record<ComponentName, ComponentResult>;
+
+// Weights sum to 1.0
+const WEIGHTS: Record<ComponentName, number> = {
+  trend: 0.30,
+  momentum: 0.25,
+  levels: 0.20,
+  volume: 0.15,
+  options: 0.05,
+  macro: 0.05,
 };
 
-function evaluate(symbol: string, bars: Bar[]): SignalDraft | null {
-  if (bars.length < 30) return null;
-  const closes = bars.map((b) => b.c);
-  const last = bars[bars.length - 1];
-  const prev = bars[bars.length - 2];
+function scoreTrend(closes: number[]): ComponentResult {
   const ema9 = ema(closes, 9);
   const ema21 = ema(closes, 21);
-  const rsiNow = rsi(closes, 14);
+  const e9 = ema9[ema9.length - 1];
+  const e21 = ema21[ema21.length - 1];
+  const e9p = ema9[ema9.length - 2];
+  const e21p = ema21[ema21.length - 2];
+  const gapPct = (e9 - e21) / e21;            // signed
+  const base = clamp(gapPct * 50);              // 2% gap → 1.0
+  const bullCross = e9p <= e21p && e9 > e21;
+  const bearCross = e9p >= e21p && e9 < e21;
+  let score = base;
+  if (bullCross) score = clamp(score + 0.4);
+  if (bearCross) score = clamp(score - 0.4);
+  const reason = bullCross ? "EMA9/EMA21 bullish cross"
+    : bearCross ? "EMA9/EMA21 bearish cross"
+    : e9 > e21 ? "EMA9 above EMA21" : "EMA9 below EMA21";
+  return {
+    score,
+    reason,
+    metrics: { ema9: +e9.toFixed(2), ema21: +e21.toFixed(2), gap_pct: +(gapPct * 100).toFixed(2) },
+  };
+}
+
+function scoreMomentum(closes: number[]): ComponentResult {
+  const r = rsi(closes, 14);
+  const mh = macdHist(closes);
+  const lastClose = closes[closes.length - 1] || 1;
+  const rsiScore = clamp((r - 50) / 25);        // RSI 75/25 → ±1
+  const macdScore = clamp((mh / lastClose) * 200); // 0.5% hist → 1.0
+  const score = clamp(rsiScore * 0.6 + macdScore * 0.4);
+  const parts: string[] = [];
+  if (Math.abs(rsiScore) >= 0.2) parts.push(`RSI ${r.toFixed(0)}`);
+  if (Math.abs(macdScore) >= 0.2) parts.push(`MACD ${mh >= 0 ? "+" : ""}${mh.toFixed(2)}`);
+  return {
+    score,
+    reason: parts.length ? parts.join(" · ") : `RSI ${r.toFixed(0)}`,
+    metrics: { rsi: +r.toFixed(2), macd_hist: +mh.toFixed(4) },
+  };
+}
+
+function scoreLevels(bars: Bar[]): ComponentResult {
+  const last = bars[bars.length - 1];
+  const prev = bars[bars.length - 2];
   const etDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
   const todayBars = bars.filter((b) => {
     const d = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(b.t));
     return d === etDate;
   });
   const vw = todayBars.length >= 3 ? vwap(todayBars) : vwap(bars.slice(-20));
+  const distPct = (last.c - vw) / vw;
+  const base = clamp(distPct * 80);              // 1.25% above vwap → 1.0
+  const reclaim = prev.c < vw && last.c > vw;
+  const breakdown = prev.c > vw && last.c < vw;
+  let score = base;
+  if (reclaim) score = clamp(score + 0.4);
+  if (breakdown) score = clamp(score - 0.4);
+  const reason = reclaim ? "VWAP reclaim"
+    : breakdown ? "VWAP breakdown"
+    : last.c > vw ? "Above VWAP" : "Below VWAP";
+  return {
+    score,
+    reason,
+    metrics: { vwap: +vw.toFixed(2), dist_pct: +(distPct * 100).toFixed(2) },
+  };
+}
+
+function scoreVolume(bars: Bar[], trendSign: number): ComponentResult {
+  const last = bars[bars.length - 1];
   const avgVol20 = bars.slice(-21, -1).reduce((a, b) => a + b.v, 0) / 20;
-  const volSpike = avgVol20 > 0 ? last.v / avgVol20 : 1;
+  const spike = avgVol20 > 0 ? last.v / avgVol20 : 1;
+  // Magnitude from spike, direction follows trend (volume confirms current move)
+  const mag = clamp((spike - 1) / 1.5);          // 2.5x avg → 1.0
+  const dir = trendSign >= 0 ? 1 : -1;
+  const score = clamp(mag * dir);
+  return {
+    score,
+    reason: spike >= 1.2 ? `Volume ${spike.toFixed(1)}× avg` : `Volume ${spike.toFixed(1)}× (light)`,
+    metrics: { volume_spike: +spike.toFixed(2) },
+  };
+}
 
-  const e9 = ema9[ema9.length - 1];
-  const e21 = ema21[ema21.length - 1];
-  const e9p = ema9[ema9.length - 2];
-  const e21p = ema21[ema21.length - 2];
+function scoreOptions(): ComponentResult {
+  return { score: 0, reason: "options flow: n/a", metrics: {} };
+}
+function scoreMacro(): ComponentResult {
+  return { score: 0, reason: "macro regime: n/a", metrics: {} };
+}
 
-  const bullCross = e9p <= e21p && e9 > e21;
-  const bearCross = e9p >= e21p && e9 < e21;
-  const vwapReclaim = prev.c < vw && last.c > vw;
-  const vwapBreakdown = prev.c > vw && last.c < vw;
+// ---------- Blend ----------
+type Draft = {
+  ticker: string;
+  direction: "CALL" | "PUT";
+  price: number;
+  confidence: number;
+  risk_level: "LOW" | "MEDIUM" | "HIGH";
+  reasons: string[];
+  technical_metrics: Record<string, unknown>;
+  components: AllComponents;
+};
 
-  const reasons: string[] = [];
-  let dir: "CALL" | "PUT" | null = null;
-  let score = 0;
+function evaluate(symbol: string, bars: Bar[]): Draft | null {
+  if (bars.length < 35) return null;
+  const closes = bars.map((b) => b.c);
+  const last = bars[bars.length - 1];
 
-  if (e9 > e21) { score += 15; reasons.push("EMA9 above EMA21"); }
-  if (bullCross) { score += 20; reasons.push("EMA9/EMA21 bullish cross"); dir = "CALL"; }
-  if (rsiNow > 55 && rsiNow < 75) { score += 15; reasons.push(`RSI momentum ${rsiNow.toFixed(0)}`); if (!dir) dir = "CALL"; }
-  if (vwapReclaim) { score += 20; reasons.push("VWAP reclaim"); if (!dir) dir = "CALL"; }
+  const trend = scoreTrend(closes);
+  const momentum = scoreMomentum(closes);
+  const levels = scoreLevels(bars);
+  const volume = scoreVolume(bars, trend.score);
+  const options = scoreOptions();
+  const macro = scoreMacro();
 
-  let bearScore = 0;
-  const bearReasons: string[] = [];
-  if (e9 < e21) { bearScore += 15; bearReasons.push("EMA9 below EMA21"); }
-  if (bearCross) { bearScore += 20; bearReasons.push("EMA9/EMA21 bearish cross"); }
-  if (rsiNow < 45 && rsiNow > 25) { bearScore += 15; bearReasons.push(`RSI weakness ${rsiNow.toFixed(0)}`); }
-  if (vwapBreakdown) { bearScore += 20; bearReasons.push("VWAP breakdown"); }
+  const components: AllComponents = { trend, momentum, levels, volume, options, macro };
 
-  if (bearScore > score) {
-    dir = "PUT";
-    score = bearScore;
-    reasons.length = 0;
-    reasons.push(...bearReasons);
+  let blended = 0;
+  for (const k of Object.keys(WEIGHTS) as ComponentName[]) {
+    blended += components[k].score * WEIGHTS[k];
   }
+  blended = clamp(blended);
 
-  if (volSpike >= 1.5) { score += 15; reasons.push(`Volume ${volSpike.toFixed(1)}× avg`); }
+  // No directional bias at all
+  if (Math.abs(blended) < 0.05) return null;
 
-  // No directional bias at all — not a candidate
-  if (!dir) return null;
-
-  const confidence = Math.min(95, Math.round(score));
+  const direction: "CALL" | "PUT" = blended > 0 ? "CALL" : "PUT";
+  const confidence = Math.max(0, Math.min(100, Math.round(Math.abs(blended) * 100)));
   const risk_level: "LOW" | "MEDIUM" | "HIGH" =
     confidence >= 80 ? "LOW" : confidence >= 65 ? "MEDIUM" : "HIGH";
 
+  // Reasons: pick components whose signed score agrees with direction and is meaningful
+  const sign = blended > 0 ? 1 : -1;
+  const reasons: string[] = [];
+  for (const k of ["trend", "momentum", "levels", "volume"] as ComponentName[]) {
+    const c = components[k];
+    if (c.score * sign >= 0.15) reasons.push(c.reason);
+  }
+  if (reasons.length === 0) reasons.push(components.trend.reason);
+
   return {
     ticker: symbol,
-    direction: dir,
+    direction,
     price: last.c,
     confidence,
     risk_level,
     reasons,
     technical_metrics: {
-      rsi: Number(rsiNow.toFixed(2)),
-      ema9: Number(e9.toFixed(2)),
-      ema21: Number(e21.toFixed(2)),
-      vwap: Number(vw.toFixed(2)),
-      volume_spike: Number(volSpike.toFixed(2)),
+      score: +blended.toFixed(3),
+      profile_weights: WEIGHTS,
+      components: {
+        trend: { score: +trend.score.toFixed(3), reason: trend.reason, ...trend.metrics },
+        momentum: { score: +momentum.score.toFixed(3), reason: momentum.reason, ...momentum.metrics },
+        levels: { score: +levels.score.toFixed(3), reason: levels.reason, ...levels.metrics },
+        volume: { score: +volume.score.toFixed(3), reason: volume.reason, ...volume.metrics },
+        options: { score: 0, reason: options.reason },
+        macro: { score: 0, reason: macro.reason },
+      },
+      // Flat fields kept for back-compat with any UI that read them directly
+      rsi: momentum.metrics.rsi,
+      ema9: trend.metrics.ema9,
+      ema21: trend.metrics.ema21,
+      vwap: levels.metrics.vwap,
+      volume_spike: volume.metrics.volume_spike,
     },
+    components,
   };
 }
 
@@ -265,6 +371,9 @@ Deno.serve(async (req) => {
   let wouldHave = 0;
   let candidates = 0;
   const scores: number[] = [];
+  const compSums: Record<ComponentName, number> = {
+    trend: 0, momentum: 0, levels: 0, volume: 0, options: 0, macro: 0,
+  };
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
 
@@ -276,6 +385,10 @@ Deno.serve(async (req) => {
 
       candidates++;
       scores.push(draft.confidence);
+      // Accumulate signed component scores for averaging
+      for (const k of Object.keys(compSums) as ComponentName[]) {
+        compSums[k] += draft.components[k].score;
+      }
 
       // Would-have-created: only when threshold >= 50, count [threshold-10, threshold-1]
       if (settings.threshold >= 50 &&
@@ -314,7 +427,7 @@ Deno.serve(async (req) => {
         status: "LIVE",
         is_demo: false,
         hidden: false,
-        source: "Alpaca Backend Scanner v1",
+        source: "Alpaca Backend Scanner v2",
         external_id: externalId,
         expires_at: expiresAt,
       });
@@ -340,6 +453,17 @@ Deno.serve(async (req) => {
     ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2))
     : null;
 
+  // Average component scores across candidates (signed −1..+1)
+  const avgComponents: Record<string, number | null> & { candidate_count: number } = {
+    trend: null, momentum: null, levels: null, volume: null, options: null, macro: null,
+    candidate_count: candidates,
+  };
+  if (candidates > 0) {
+    for (const k of Object.keys(compSums) as ComponentName[]) {
+      avgComponents[k] = Number((compSums[k] / candidates).toFixed(3));
+    }
+  }
+
   const status = errors.length === 0 ? "ok" : created > 0 ? "partial" : "error";
   await admin.from("signal_scan_runs").insert({
     status, trigger: auth.trigger, tickers_scanned: tickers,
@@ -347,6 +471,7 @@ Deno.serve(async (req) => {
     would_have_created: wouldHave,
     candidates_scanned: candidates,
     avg_score: avgScore,
+    avg_components: avgComponents,
     skipped_candidates: topSkipped,
     profile: settings.profile,
     threshold: settings.threshold,
@@ -357,7 +482,8 @@ Deno.serve(async (req) => {
   return json({
     ok: true, status, signals_created: created, skipped,
     would_have_created: wouldHave, candidates_scanned: candidates,
-    avg_score: avgScore, profile: settings.profile, threshold: settings.threshold,
+    avg_score: avgScore, avg_components: avgComponents,
+    profile: settings.profile, threshold: settings.threshold,
     errors,
   });
 });
