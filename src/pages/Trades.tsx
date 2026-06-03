@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { CheckCircle2, Sparkles, XCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { RefreshCw, Sparkles, Target as TargetIcon, OctagonAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
