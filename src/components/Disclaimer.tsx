@@ -1,7 +1,7 @@
 import { ShieldAlert } from "lucide-react";
 
 export const DISCLAIMER_TEXT =
-  "OptionFlow AI Pro is educational software for research and paper trading. Signals are not financial advice. Options are risky and can expire worthless. Past performance and backtests do not guarantee future results.";
+  "Tradingflow 101 is educational software for research and paper trading. Signals are not financial advice. Options are risky and can expire worthless. Past performance and backtests do not guarantee future results.";
 
 export function DisclaimerBar({ compact = false }: { compact?: boolean }) {
   return (

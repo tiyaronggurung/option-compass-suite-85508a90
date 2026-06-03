@@ -26,7 +26,7 @@ function SidebarBody({ email, onSignOut, onNavigate }: { email?: string | null; 
           <Activity className="h-3.5 w-3.5" />
         </div>
         <div className="leading-tight">
-          <div className="text-sm font-semibold tracking-tight font-display">OptionFlow</div>
+          <div className="text-sm font-semibold tracking-tight font-display">Tradingflow</div>
           <div className="text-[9px] uppercase tracking-[0.2em] text-primary font-medium">AI Pro</div>
         </div>
       </div>
@@ -95,7 +95,7 @@ export default function AppShell() {
                 <Activity className="h-3 w-3" />
               </div>
               <div className="text-sm font-semibold font-display tracking-tight">
-                OptionFlow <span className="text-primary text-[10px] uppercase tracking-[0.18em] ml-0.5">AI Pro</span>
+                Tradingflow <span className="text-primary text-[10px] uppercase tracking-[0.18em] ml-0.5">101</span>
               </div>
             </div>
           </div>
@@ -108,7 +108,7 @@ export default function AppShell() {
             <Outlet />
           </div>
           <footer className="container max-w-7xl pb-6 text-[10.5px] text-muted-foreground hairline pt-4 leading-relaxed">
-            OptionFlow AI Pro is educational software for research and paper trading. Signals are not financial advice.
+            Tradingflow 101 is educational software for research and paper trading. Signals are not financial advice.
             Options are risky and can expire worthless. Past performance and backtests do not guarantee future results.
           </footer>
         </main>

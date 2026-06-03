@@ -66,8 +66,8 @@ export default function AuthPage() {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold tracking-tight">OptionFlow</div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-primary">AI Pro</div>
+            <div className="text-sm font-semibold tracking-tight">Tradingflow</div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-primary">101</div>
           </div>
         </Link>
         <div className="space-y-4 max-w-md">
@@ -80,7 +80,7 @@ export default function AuthPage() {
           </p>
           <DisclaimerBar />
         </div>
-        <div className="text-xs text-muted-foreground">© OptionFlow AI Pro — educational use only.</div>
+        <div className="text-xs text-muted-foreground">© Tradingflow 101 — educational use only.</div>
       </div>
 
       <div className="flex items-center justify-center p-6">
@@ -89,7 +89,7 @@ export default function AuthPage() {
             <div className="h-8 w-8 rounded-md bg-primary/15 text-primary grid place-items-center">
               <Activity className="h-4 w-4" />
             </div>
-            <span className="text-sm font-semibold">OptionFlow <span className="text-primary">AI Pro</span></span>
+            <span className="text-sm font-semibold">Tradingflow <span className="text-primary">101</span></span>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Sign in to the desk</h2>
           <p className="text-sm text-muted-foreground mt-1">Educational paper-trading dashboard.</p>
