@@ -154,12 +154,12 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       <header className="space-y-2">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Live signals</h1>
             <p className="text-sm text-muted-foreground">Educational paper-trading desk. Approve trades manually.</p>
           </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {alpacaStatus && (
               <div className="flex items-center gap-1.5">
                 <span
