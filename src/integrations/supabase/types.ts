@@ -95,6 +95,42 @@ export type Database = {
         }
         Relationships: []
       }
+      earnings_events: {
+        Row: {
+          created_at: string
+          currency: string | null
+          estimate: number | null
+          fiscal_date_ending: string | null
+          id: string
+          report_date: string
+          source: string
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string | null
+          estimate?: number | null
+          fiscal_date_ending?: string | null
+          id?: string
+          report_date: string
+          source?: string
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string | null
+          estimate?: number | null
+          fiscal_date_ending?: string | null
+          id?: string
+          report_date?: string
+          source?: string
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mark_engine_config: {
         Row: {
           enabled: boolean
@@ -743,7 +779,13 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
-      provider_id: "alpaca" | "tradier" | "polygon" | "unusual_whales" | "news"
+      provider_id:
+        | "alpaca"
+        | "tradier"
+        | "polygon"
+        | "unusual_whales"
+        | "news"
+        | "alpha_vantage"
       provider_mode: "live" | "simulated"
       provider_status: "ok" | "error" | "unknown"
       risk_level: "LOW" | "MEDIUM" | "HIGH"
@@ -887,7 +929,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
-      provider_id: ["alpaca", "tradier", "polygon", "unusual_whales", "news"],
+      provider_id: [
+        "alpaca",
+        "tradier",
+        "polygon",
+        "unusual_whales",
+        "news",
+        "alpha_vantage",
+      ],
       provider_mode: ["live", "simulated"],
       provider_status: ["ok", "error", "unknown"],
       risk_level: ["LOW", "MEDIUM", "HIGH"],

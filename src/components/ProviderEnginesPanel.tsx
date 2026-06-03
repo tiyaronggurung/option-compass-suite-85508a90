@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 
-type ProviderId = "alpaca" | "tradier" | "polygon" | "unusual_whales" | "news";
+type ProviderId = "alpaca" | "tradier" | "polygon" | "unusual_whales" | "news" | "alpha_vantage";
 
 const PROVIDER_META: Record<ProviderId, { name: string; purpose: string }> = {
   alpaca: { name: "Alpaca", purpose: "Stock quotes, bars, paper trading" },
@@ -16,6 +16,7 @@ const PROVIDER_META: Record<ProviderId, { name: string; purpose: string }> = {
   polygon: { name: "Polygon", purpose: "Realtime quotes + options" },
   unusual_whales: { name: "Unusual Whales", purpose: "Options flow + dark pool" },
   news: { name: "News & Catalysts", purpose: "Headlines + earnings" },
+  alpha_vantage: { name: "Alpha Vantage", purpose: "Earnings calendar + catalysts" },
 };
 
 interface ProviderRow {
@@ -81,7 +82,7 @@ export function ProviderEnginesPanel() {
 
   if (roleLoading) return <Skeleton className="h-40" />;
 
-  const order: ProviderId[] = ["alpaca", "tradier", "polygon", "unusual_whales", "news"];
+  const order: ProviderId[] = ["alpaca", "tradier", "polygon", "unusual_whales", "news", "alpha_vantage"];
 
   return (
     <section className="glass-card p-5 space-y-4">

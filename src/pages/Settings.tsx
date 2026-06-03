@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DisclaimerBar, DISCLAIMER_TEXT } from "@/components/Disclaimer";
 import { ProviderEnginesPanel } from "@/components/ProviderEnginesPanel";
+import { EarningsCalendarPanel } from "@/components/EarningsCalendarPanel";
 import { SignalModePanel } from "@/components/SignalModePanel";
 import { SignalAuditPanel } from "@/components/SignalAuditPanel";
 import SignalLearningPanel from "@/components/SignalLearningPanel";
@@ -87,6 +88,9 @@ export default function Settings() {
       <SignalModePanel />
 
       <ProviderEnginesPanel />
+
+      <EarningsCalendarPanel />
+
 
       <SignalAuditPanel />
 
