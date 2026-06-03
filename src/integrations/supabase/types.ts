@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_settings: {
+        Row: {
+          bearish_only: boolean
+          browser_push_enabled: boolean
+          bullish_only: boolean
+          discord_enabled: boolean
+          discord_webhook_url: string | null
+          email_enabled: boolean
+          include_0dte: boolean
+          max_risk_level: string
+          min_confidence: number
+          notify_email: string | null
+          sms_enabled: boolean
+          sms_phone: string | null
+          telegram_chat_id: string | null
+          telegram_enabled: boolean
+          updated_at: string
+          user_id: string
+          watchlist_only: boolean
+        }
+        Insert: {
+          bearish_only?: boolean
+          browser_push_enabled?: boolean
+          bullish_only?: boolean
+          discord_enabled?: boolean
+          discord_webhook_url?: string | null
+          email_enabled?: boolean
+          include_0dte?: boolean
+          max_risk_level?: string
+          min_confidence?: number
+          notify_email?: string | null
+          sms_enabled?: boolean
+          sms_phone?: string | null
+          telegram_chat_id?: string | null
+          telegram_enabled?: boolean
+          updated_at?: string
+          user_id: string
+          watchlist_only?: boolean
+        }
+        Update: {
+          bearish_only?: boolean
+          browser_push_enabled?: boolean
+          bullish_only?: boolean
+          discord_enabled?: boolean
+          discord_webhook_url?: string | null
+          email_enabled?: boolean
+          include_0dte?: boolean
+          max_risk_level?: string
+          min_confidence?: number
+          notify_email?: string | null
+          sms_enabled?: boolean
+          sms_phone?: string | null
+          telegram_chat_id?: string | null
+          telegram_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+          watchlist_only?: boolean
+        }
+        Relationships: []
+      }
       paper_trades: {
         Row: {
           closed_at: string | null
@@ -99,6 +159,98 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      risk_settings: {
+        Row: {
+          daily_loss_cap: number
+          kill_switch: boolean
+          max_open_trades: number
+          max_risk_per_trade: number
+          require_manual_approval: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          daily_loss_cap?: number
+          kill_switch?: boolean
+          max_open_trades?: number
+          max_risk_per_trade?: number
+          require_manual_approval?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          daily_loss_cap?: number
+          kill_switch?: boolean
+          max_open_trades?: number
+          max_risk_per_trade?: number
+          require_manual_approval?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      signal_analyses: {
+        Row: {
+          bear_case: string | null
+          bull_case: string | null
+          catalyst_context: string | null
+          created_at: string
+          desks: Json
+          flow_interpretation: string | null
+          historical: Json
+          macro_context: string | null
+          model: string | null
+          risk_warnings: string | null
+          signal_id: string
+          summary: string | null
+          technical_confirmation: string | null
+          verdict: string | null
+          why_triggered: string | null
+        }
+        Insert: {
+          bear_case?: string | null
+          bull_case?: string | null
+          catalyst_context?: string | null
+          created_at?: string
+          desks?: Json
+          flow_interpretation?: string | null
+          historical?: Json
+          macro_context?: string | null
+          model?: string | null
+          risk_warnings?: string | null
+          signal_id: string
+          summary?: string | null
+          technical_confirmation?: string | null
+          verdict?: string | null
+          why_triggered?: string | null
+        }
+        Update: {
+          bear_case?: string | null
+          bull_case?: string | null
+          catalyst_context?: string | null
+          created_at?: string
+          desks?: Json
+          flow_interpretation?: string | null
+          historical?: Json
+          macro_context?: string | null
+          model?: string | null
+          risk_warnings?: string | null
+          signal_id?: string
+          summary?: string | null
+          technical_confirmation?: string | null
+          verdict?: string | null
+          why_triggered?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_analyses_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: true
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       signals: {
         Row: {
