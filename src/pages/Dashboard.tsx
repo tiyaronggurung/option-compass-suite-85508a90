@@ -173,6 +173,28 @@ export default function Dashboard() {
             </Button>
           ))}
         </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <TagIcon className="h-3.5 w-3.5 text-muted-foreground mr-0.5" />
+          <Button
+            size="sm"
+            variant={tagFilter === null ? "secondary" : "ghost"}
+            className="h-7 text-[11px] px-2"
+            onClick={() => setTagFilter(null)}
+          >
+            Any tag
+          </Button>
+          {ALL_TAGS.map((t) => (
+            <Button
+              key={t}
+              size="sm"
+              variant={tagFilter === t ? "secondary" : "ghost"}
+              className="h-7 text-[11px] px-2"
+              onClick={() => setTagFilter(tagFilter === t ? null : t)}
+            >
+              {t}
+            </Button>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -180,8 +202,23 @@ export default function Dashboard() {
           ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-44 rounded-lg" />)
           : filtered.length === 0
           ? <EmptyState />
-          : filtered.map((s) => <SignalCard key={s.id} signal={s} onApprove={approve} onReject={() => toast("Signal rejected")} />)}
+          : filtered.map((s) => (
+              <SignalCard
+                key={s.id}
+                signal={s}
+                watchlist={watchSet}
+                onApprove={approve}
+                onReject={dismiss}
+                onDetails={(sig) => setDetailSignal(sig)}
+              />
+            ))}
       </section>
+
+      <SignalDetailDialog
+        signal={detailSignal}
+        open={!!detailSignal}
+        onOpenChange={(v) => !v && setDetailSignal(null)}
+      />
     </div>
   );
 }
