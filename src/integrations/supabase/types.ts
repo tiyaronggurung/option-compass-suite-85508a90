@@ -19,6 +19,7 @@ export type Database = {
           bearish_only: boolean
           browser_push_enabled: boolean
           bullish_only: boolean
+          cooldown_minutes: number
           discord_enabled: boolean
           discord_webhook_url: string | null
           email_enabled: boolean
@@ -38,6 +39,7 @@ export type Database = {
           bearish_only?: boolean
           browser_push_enabled?: boolean
           bullish_only?: boolean
+          cooldown_minutes?: number
           discord_enabled?: boolean
           discord_webhook_url?: string | null
           email_enabled?: boolean
@@ -57,6 +59,7 @@ export type Database = {
           bearish_only?: boolean
           browser_push_enabled?: boolean
           bullish_only?: boolean
+          cooldown_minutes?: number
           discord_enabled?: boolean
           discord_webhook_url?: string | null
           email_enabled?: boolean
@@ -240,6 +243,38 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      signal_actions: {
+        Row: {
+          action: Database["public"]["Enums"]["signal_action"]
+          created_at: string
+          id: string
+          signal_id: string
+          user_id: string
+        }
+        Insert: {
+          action: Database["public"]["Enums"]["signal_action"]
+          created_at?: string
+          id?: string
+          signal_id: string
+          user_id: string
+        }
+        Update: {
+          action?: Database["public"]["Enums"]["signal_action"]
+          created_at?: string
+          id?: string
+          signal_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_actions_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       signal_analyses: {
         Row: {
@@ -445,6 +480,7 @@ export type Database = {
       provider_mode: "live" | "simulated"
       provider_status: "ok" | "error" | "unknown"
       risk_level: "LOW" | "MEDIUM" | "HIGH"
+      signal_action: "approved" | "dismissed"
       signal_direction: "CALL" | "PUT"
       signal_status: "LIVE" | "EXPIRED" | "TRIGGERED"
       signal_view_mode: "demo" | "live" | "both"
@@ -581,6 +617,7 @@ export const Constants = {
       provider_mode: ["live", "simulated"],
       provider_status: ["ok", "error", "unknown"],
       risk_level: ["LOW", "MEDIUM", "HIGH"],
+      signal_action: ["approved", "dismissed"],
       signal_direction: ["CALL", "PUT"],
       signal_status: ["LIVE", "EXPIRED", "TRIGGERED"],
       signal_view_mode: ["demo", "live", "both"],
