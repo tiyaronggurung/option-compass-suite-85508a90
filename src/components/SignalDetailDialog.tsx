@@ -9,15 +9,17 @@ import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOu
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
+import type { RankBreakdown } from "@/lib/rankSignals";
 
 interface Props {
   signal: Signal | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   outcome?: SignalOutcome;
+  rankBreakdown?: RankBreakdown;
 }
 
-export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Props) {
+export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBreakdown }: Props) {
   const { isAdmin } = useIsAdmin();
   const [siblings, setSiblings] = useState<Signal[] | null>(null);
   const [current, setCurrent] = useState<Signal | null>(signal);
@@ -150,6 +152,9 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Prop
 
           <ComponentBreakdown tm={s.technical_metrics as any} />
 
+          {rankBreakdown && <RankingBreakdown b={rankBreakdown} />}
+
+
 
 
 
@@ -246,4 +251,52 @@ function ComponentBreakdown({ tm }: { tm: Record<string, any> | null | undefined
     </div>
   );
 }
+
+const RANK_ROWS: Array<{ key: keyof RankBreakdown; label: string; max: number; negative?: boolean }> = [
+  { key: "confidence", label: "Confidence (35%)", max: 35 },
+  { key: "liquidity", label: "Liquidity (20%)", max: 20 },
+  { key: "delta", label: "Delta match (15%)", max: 15 },
+  { key: "spread", label: "Spread quality (15%)", max: 15 },
+  { key: "freshness", label: "Freshness (10%)", max: 10 },
+  { key: "riskPenalty", label: "Risk penalty (−5%)", max: 5, negative: true },
+];
+
+function RankingBreakdown({ b }: { b: RankBreakdown }) {
+  return (
+    <div className="pt-2 border-t border-border">
+      <div className="text-xs text-muted-foreground mb-1.5 flex items-center justify-between">
+        <span>Ranking breakdown</span>
+        <span className={cn(
+          "ticker-mono",
+          b.total >= 75 ? "text-bull" : b.total >= 50 ? "text-primary" : "text-muted-foreground",
+        )}>
+          total {b.total.toFixed(1)}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {RANK_ROWS.map((row) => {
+          const val = b[row.key];
+          const pct = Math.min(100, (val / row.max) * 100);
+          return (
+            <div key={row.key} className="text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">{row.label}</span>
+                <span className={cn("ticker-mono", row.negative ? "text-bear" : "text-foreground/80")}>
+                  {row.negative ? "−" : ""}{val.toFixed(1)} / {row.max}
+                </span>
+              </div>
+              <div className="mt-0.5 h-1 rounded bg-muted/40 overflow-hidden">
+                <div
+                  className={cn("h-full", row.negative ? "bg-bear/60" : "bg-primary/60")}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 

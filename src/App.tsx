@@ -9,6 +9,7 @@ import AppShell from "@/components/AppShell";
 import Landing from "@/pages/Landing";
 import AuthPage from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
+import TopSignals from "@/pages/TopSignals";
 import Watchlist from "@/pages/Watchlist";
 import Trades from "@/pages/Trades";
 import Analyst from "@/pages/Analyst";
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/app" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
               <Route index element={<Dashboard />} />
+              <Route path="top-signals" element={<TopSignals />} />
               <Route path="watchlist" element={<Watchlist />} />
               <Route path="trades" element={<Trades />} />
               <Route path="analyst" element={<Analyst />} />
