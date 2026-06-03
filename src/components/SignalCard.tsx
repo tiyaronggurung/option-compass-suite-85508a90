@@ -1,20 +1,23 @@
-import { ArrowDownRight, ArrowUpRight, Clock, Flame, Radio, ShieldAlert, TestTube, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Clock, Flame, Info, Radio, ShieldAlert, TestTube, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
+import { deriveTags, type TagId } from "@/lib/signalTags";
 
 type Props = {
   signal: Signal;
   onApprove: (s: Signal) => void;
   onReject?: (s: Signal) => void;
+  onDetails?: (s: Signal) => void;
+  watchlist?: Set<string>;
 };
 
-export function SignalCard({ signal, onApprove, onReject }: Props) {
+export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist }: Props) {
   const isCall = signal.direction === "CALL";
-  const dirColor = isCall ? "text-bull" : "text-bear";
   const ring =
     signal.confidence >= 80 ? "ring-bull/40" : signal.confidence >= 65 ? "ring-primary/30" : "ring-border";
+  const tags: TagId[] = deriveTags(signal, watchlist ?? new Set());
 
   return (
     <div className={cn("glass-card p-4 ring-1 transition hover:ring-primary/40", ring)}>
@@ -57,24 +60,30 @@ export function SignalCard({ signal, onApprove, onReject }: Props) {
         <ConfidenceRing value={signal.confidence} />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <RiskBadge level={signal.risk_level} />
         {signal.confidence >= 80 && (
           <Badge className="bg-primary/15 text-primary border-0 gap-1">
             <Flame className="h-3 w-3" /> High conviction
           </Badge>
         )}
-        {signal.dte != null && (
-          <Badge variant="outline" className="border-border text-muted-foreground">
+        {tags.filter((t) => t !== "High Risk" && t !== "0DTE").map((t) => (
+          <Badge key={t} variant="outline" className="border-border/60 text-[10px] text-muted-foreground">
+            {t}
+          </Badge>
+        ))}
+        {signal.dte != null && signal.dte !== 0 && (
+          <Badge variant="outline" className="border-border text-muted-foreground text-[10px]">
             {signal.dte}DTE
           </Badge>
         )}
-        {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
-          <span className="text-xs text-muted-foreground line-clamp-1">
-            · {(signal.reasons as string[]).slice(0, 2).join(" · ")}
-          </span>
-        )}
       </div>
+
+      {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
+        <div className="mt-2 text-xs text-muted-foreground line-clamp-1">
+          {(signal.reasons as string[]).slice(0, 2).join(" · ")}
+        </div>
+      )}
 
       <div className="mt-4 flex items-center gap-2">
         <Button size="sm" className={cn(isCall ? "bg-bull text-bull-foreground hover:bg-bull/90" : "bg-bear text-bear-foreground hover:bg-bear/90")}
@@ -84,6 +93,11 @@ export function SignalCard({ signal, onApprove, onReject }: Props) {
         {onReject && (
           <Button size="sm" variant="ghost" onClick={() => onReject(signal)}>
             <X className="h-4 w-4 mr-1" /> Reject
+          </Button>
+        )}
+        {onDetails && (
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => onDetails(signal)}>
+            <Info className="h-4 w-4" />
           </Button>
         )}
       </div>

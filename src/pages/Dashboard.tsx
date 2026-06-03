@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, DollarSign, Flame, Radio, TrendingUp } from "lucide-react";
+import { Activity, DollarSign, Flame, Radio, Tag as TagIcon, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { SignalCard } from "@/components/SignalCard";
+import { SignalDetailDialog } from "@/components/SignalDetailDialog";
 import { DisclaimerBar } from "@/components/Disclaimer";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
+import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
@@ -44,6 +46,9 @@ export default function Dashboard() {
   const [watch, setWatch] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [sourceMode, setSourceMode] = useState<SourceMode>("both");
+  const [tagFilter, setTagFilter] = useState<TagId | null>(null);
+  const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
+  const watchSet = useMemo(() => new Set(watch), [watch]);
 
   useEffect(() => {
     let cancel = false;
@@ -78,15 +83,19 @@ export default function Dashboard() {
     return signals.filter((s) => {
       if (sourceMode === "live" && s.is_demo) return false;
       if (sourceMode === "demo" && !s.is_demo) return false;
-      if (filter === "bullish") return s.direction === "CALL";
-      if (filter === "bearish") return s.direction === "PUT";
-      if (filter === "high") return s.confidence >= 80;
-      if (filter === "low") return s.risk_level === "LOW";
-      if (filter === "0dte") return s.dte === 0;
-      if (filter === "watch") return watch.includes(s.ticker);
+      if (filter === "bullish" && s.direction !== "CALL") return false;
+      if (filter === "bearish" && s.direction !== "PUT") return false;
+      if (filter === "high" && s.confidence < 80) return false;
+      if (filter === "low" && s.risk_level !== "LOW") return false;
+      if (filter === "0dte" && s.dte !== 0) return false;
+      if (filter === "watch" && !watchSet.has(s.ticker)) return false;
+      if (tagFilter) {
+        const tags = deriveTags(s, watchSet);
+        if (!tags.includes(tagFilter)) return false;
+      }
       return true;
     });
-  }, [signals, filter, sourceMode, watch]);
+  }, [signals, filter, sourceMode, tagFilter, watchSet]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
@@ -111,6 +120,18 @@ export default function Dashboard() {
     toast.success(`Paper trade opened on ${s.ticker}`);
     const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
     setTrades(data ?? []);
+  }
+
+  async function dismiss(s: Signal) {
+    const { error } = await supabase.from("signal_actions").insert({
+      user_id: user!.id,
+      signal_id: s.id,
+      action: "dismissed",
+    });
+    // Unique violation just means already dismissed — silent.
+    if (error && error.code !== "23505") toast.error(error.message);
+    setSignals((prev) => prev ? prev.filter((x) => x.id !== s.id) : prev);
+    toast("Signal dismissed");
   }
 
   return (
@@ -164,6 +185,28 @@ export default function Dashboard() {
             </Button>
           ))}
         </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <TagIcon className="h-3.5 w-3.5 text-muted-foreground mr-0.5" />
+          <Button
+            size="sm"
+            variant={tagFilter === null ? "secondary" : "ghost"}
+            className="h-7 text-[11px] px-2"
+            onClick={() => setTagFilter(null)}
+          >
+            Any tag
+          </Button>
+          {ALL_TAGS.map((t) => (
+            <Button
+              key={t}
+              size="sm"
+              variant={tagFilter === t ? "secondary" : "ghost"}
+              className="h-7 text-[11px] px-2"
+              onClick={() => setTagFilter(tagFilter === t ? null : t)}
+            >
+              {t}
+            </Button>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -171,8 +214,23 @@ export default function Dashboard() {
           ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-44 rounded-lg" />)
           : filtered.length === 0
           ? <EmptyState />
-          : filtered.map((s) => <SignalCard key={s.id} signal={s} onApprove={approve} onReject={() => toast("Signal rejected")} />)}
+          : filtered.map((s) => (
+              <SignalCard
+                key={s.id}
+                signal={s}
+                watchlist={watchSet}
+                onApprove={approve}
+                onReject={dismiss}
+                onDetails={(sig) => setDetailSignal(sig)}
+              />
+            ))}
       </section>
+
+      <SignalDetailDialog
+        signal={detailSignal}
+        open={!!detailSignal}
+        onOpenChange={(v) => !v && setDetailSignal(null)}
+      />
     </div>
   );
 }

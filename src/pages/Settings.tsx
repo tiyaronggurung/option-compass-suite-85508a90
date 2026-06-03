@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DisclaimerBar, DISCLAIMER_TEXT } from "@/components/Disclaimer";
 import { ProviderEnginesPanel } from "@/components/ProviderEnginesPanel";
 import { SignalModePanel } from "@/components/SignalModePanel";
+import { SignalAuditPanel } from "@/components/SignalAuditPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -82,6 +83,8 @@ export default function Settings() {
       <SignalModePanel />
 
       <ProviderEnginesPanel />
+
+      <SignalAuditPanel />
 
       <section className="glass-card p-5 space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-warn" /> Compliance</h2>
