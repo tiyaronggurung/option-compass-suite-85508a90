@@ -80,6 +80,8 @@ export default function OptionsChainPanel() {
 
   useEffect(() => { if (isAdmin) loadCache(); /* eslint-disable-next-line */ }, [isAdmin]);
 
+  if (!isAdmin) return null;
+
   return (
     <section className="glass-card p-5 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
