@@ -12,6 +12,7 @@ import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
 import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
 import { signalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
+import { isExpired } from "@/lib/signalFreshness";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
@@ -50,6 +51,7 @@ export default function Dashboard() {
   const [sourceMode, setSourceMode] = useState<SourceMode>("both");
   const [tagFilter, setTagFilter] = useState<TagId | null>(null);
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
+  const [includeExpired, setIncludeExpired] = useState(false);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   useEffect(() => {
@@ -85,6 +87,7 @@ export default function Dashboard() {
   const filtered = useMemo(() => {
     if (!signals) return [];
     return signals.filter((s) => {
+      if (!includeExpired && isExpired(s)) return false;
       if (sourceMode === "live" && s.is_demo) return false;
       if (sourceMode === "demo" && !s.is_demo) return false;
       if (filter === "bullish" && s.direction !== "CALL") return false;
@@ -99,7 +102,7 @@ export default function Dashboard() {
       }
       return true;
     });
-  }, [signals, filter, sourceMode, tagFilter, watchSet]);
+  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
