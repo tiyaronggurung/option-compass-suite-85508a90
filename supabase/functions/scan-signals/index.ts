@@ -490,8 +490,11 @@ Deno.serve(async (req) => {
   if (auth.trigger !== "manual") force = false;
 
   const t0 = Date.now();
-  const tickers = DEFAULT_TICKERS;
   const settings = await loadScannerSettings();
+
+  // Resolve universe based on configured mode
+  const universe = await resolveUniverse(settings.universe_mode);
+  const tickers = universe.tickers;
 
   // Market-hours gate (bypassable by admin force run)
   const market = isMarketOpenET();
@@ -500,6 +503,11 @@ Deno.serve(async (req) => {
       status: market.reason, trigger: auth.trigger, tickers_scanned: tickers,
       signals_created: 0, skipped_count: tickers.length, duration_ms: Date.now() - t0,
       profile: settings.profile, threshold: settings.threshold,
+      universe_mode: settings.universe_mode,
+      universe_count: universe.universe_count,
+      watchlist_count: universe.watchlist_count,
+      earnings_count: universe.earnings_count,
+      skipped_due_to_cap: universe.skipped_due_to_cap,
     });
     return json({ ok: true, status: market.reason, signals_created: 0 });
   }
@@ -509,8 +517,30 @@ Deno.serve(async (req) => {
       status: "error", trigger: auth.trigger, tickers_scanned: tickers,
       error: "Alpaca credentials missing", duration_ms: Date.now() - t0,
       profile: settings.profile, threshold: settings.threshold,
+      universe_mode: settings.universe_mode,
+      universe_count: universe.universe_count,
     });
     return json({ error: "Alpaca not configured" }, 500);
+  }
+
+  if (tickers.length === 0) {
+    await admin.from("signal_scan_runs").insert({
+      status: "empty_universe", trigger: auth.trigger, tickers_scanned: [],
+      signals_created: 0, skipped_count: 0, duration_ms: Date.now() - t0,
+      profile: settings.profile, threshold: settings.threshold,
+      universe_mode: settings.universe_mode,
+      universe_count: universe.universe_count,
+      watchlist_count: universe.watchlist_count,
+      earnings_count: universe.earnings_count,
+      skipped_due_to_cap: universe.skipped_due_to_cap,
+    });
+    return json({ ok: true, status: "empty_universe", signals_created: 0 });
+  }
+
+  // Overlap lock — prevent two scans running at once
+  const gotLock = await acquireScanLock(auth.trigger);
+  if (!gotLock) {
+    return json({ ok: false, status: "scan_in_progress", signals_created: 0 }, 200);
   }
 
   let created = 0;
@@ -524,20 +554,19 @@ Deno.serve(async (req) => {
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
 
-  for (const sym of tickers) {
+  // Per-ticker processor — identical scoring/picker/insert logic, extracted for parallel execution.
+  async function processTicker(sym: string): Promise<void> {
     try {
       const bars = await fetchBars(sym);
       const draft = evaluate(sym, bars);
-      if (!draft) { skipped++; continue; }
+      if (!draft) { skipped++; return; }
 
       candidates++;
       scores.push(draft.confidence);
-      // Accumulate signed component scores for averaging
       for (const k of Object.keys(compSums) as ComponentName[]) {
         compSums[k] += draft.components[k].score;
       }
 
-      // Would-have-created: only when threshold >= 50, count [threshold-10, threshold-1]
       if (settings.threshold >= 50 &&
           draft.confidence >= settings.threshold - 10 &&
           draft.confidence < settings.threshold) {
@@ -552,17 +581,15 @@ Deno.serve(async (req) => {
           score: draft.confidence,
           reasons: draft.reasons,
         });
-        continue;
+        return;
       }
 
       const bucket = Math.floor(Date.now() / (5 * 60 * 1000));
       const dedupeRaw = `${sym}|${draft.direction}|${bucket}`;
       const externalId = await sha1Uuid(dedupeRaw);
 
-      // TTL: stock-bar scanner has no DTE, default to 2h
       const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
-      // ---- Earnings catalyst (never forces a trade — only modifies already-passing signals) ----
       let catalyst: CatalystResult | null = null;
       let finalConfidence = draft.confidence;
       let finalRisk: "LOW" | "MEDIUM" | "HIGH" = draft.risk_level;
@@ -575,18 +602,15 @@ Deno.serve(async (req) => {
           catalystSummary = catalyst.summary;
         }
       } catch (e) {
-        // Graceful: scanner continues without catalyst boost
         errors.push(`${sym} catalyst: ${(e as Error).message}`);
       }
 
-      // ---- 0.35-delta contract picker (best-effort) ----
       let contractFields: Record<string, unknown> = {};
       let contractMeta: Record<string, unknown> | null = null;
       const reasonsWithContract = [...draft.reasons];
       if (catalyst) reasonsWithContract.push(catalyst.summary);
       if (ALPACA_KEY && ALPACA_SECRET) {
         try {
-          // Pre-flight: if cache empty in 14-30 DTE window, best-effort refresh
           const winEnd = new Date(Date.now() + 32 * 86400000).toISOString().slice(0, 10);
           const winStart = new Date(Date.now() + 13 * 86400000).toISOString().slice(0, 10);
           const { count: cached } = await admin
@@ -660,10 +684,10 @@ Deno.serve(async (req) => {
         ...contractFields,
       });
       if (error) {
-        if ((error as any).code === "23505") { skipped++; continue; }
+        if ((error as any).code === "23505") { skipped++; return; }
         errors.push(`${sym}: ${error.message}`);
         skipped++;
-        continue;
+        return;
       }
       created++;
     } catch (e) {
@@ -672,7 +696,17 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Top 3 skipped by score (only persisted when debug_mode is on)
+  // Parallel batches of 20
+  const BATCH_SIZE = 20;
+  try {
+    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+      const batch = tickers.slice(i, i + BATCH_SIZE);
+      await Promise.allSettled(batch.map((sym) => processTicker(sym)));
+    }
+  } finally {
+    await releaseScanLock();
+  }
+
   const topSkipped = settings.debug_mode
     ? skippedList.sort((a, b) => b.score - a.score).slice(0, 3)
     : [];
@@ -681,7 +715,6 @@ Deno.serve(async (req) => {
     ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2))
     : null;
 
-  // Average component scores across candidates (signed −1..+1)
   const avgComponents: Record<string, number | null> & { candidate_count: number } = {
     trend: null, momentum: null, levels: null, volume: null, options: null, macro: null,
     candidate_count: candidates,
@@ -705,6 +738,11 @@ Deno.serve(async (req) => {
     threshold: settings.threshold,
     error: errors.length ? errors.join("; ").slice(0, 1000) : null,
     duration_ms: Date.now() - t0,
+    universe_mode: settings.universe_mode,
+    universe_count: universe.universe_count,
+    watchlist_count: universe.watchlist_count,
+    earnings_count: universe.earnings_count,
+    skipped_due_to_cap: universe.skipped_due_to_cap,
   });
 
   return json({
@@ -712,6 +750,11 @@ Deno.serve(async (req) => {
     would_have_created: wouldHave, candidates_scanned: candidates,
     avg_score: avgScore, avg_components: avgComponents,
     profile: settings.profile, threshold: settings.threshold,
+    universe_mode: settings.universe_mode,
+    universe_count: universe.universe_count,
+    watchlist_count: universe.watchlist_count,
+    earnings_count: universe.earnings_count,
+    skipped_due_to_cap: universe.skipped_due_to_cap,
     errors,
   });
 });
