@@ -103,54 +103,71 @@ Deno.serve(async (req) => {
       return json({ error: msg }, status);
     }
 
-    const data = await res.json();
-    const snapshots = data.snapshots ?? {};
-    const rows: any[] = [];
-    const now = new Date().toISOString();
-
-    for (const [symbol, snap] of Object.entries<any>(snapshots)) {
-      // OCC symbol: e.g. AAPL250620C00150000
-      const parsed = parseOcc(symbol);
-      if (!parsed) continue;
-      const q = snap.latestQuote ?? {};
-      const t = snap.latestTrade ?? {};
-      const g = snap.greeks ?? {};
-      rows.push({
-        symbol,
-        underlying: parsed.underlying,
-        expiry: parsed.expiry,
-        strike: parsed.strike,
-        type: parsed.type,
-        bid: q.bp ?? null,
-        ask: q.ap ?? null,
-        last: t.p ?? null,
-        volume: snap.dailyBar?.v ?? null,
-        open_interest: snap.openInterest ?? null,
-        delta: g.delta ?? null,
-        gamma: g.gamma ?? null,
-        theta: g.theta ?? null,
-        vega: g.vega ?? null,
-        iv: snap.impliedVolatility ?? null,
-        updated_at: now,
-      });
-    }
-
-    if (rows.length > 0) {
-      // Upsert in chunks
-      const chunk = 500;
-      for (let i = 0; i < rows.length; i += chunk) {
-        const { error } = await admin
-          .from("options_contracts")
-          .upsert(rows.slice(i, i + chunk), { onConflict: "underlying,expiry,strike,type" });
-        if (error) return json({ error: error.message }, 500);
-      }
-    }
-
-    return json({ ok: true, count: rows.length, underlying, expiry: expiry || null });
   } catch (e: any) {
     return json({ error: e?.message ?? String(e) }, 500);
   }
 });
+
+async function fetchAndCache(admin: any, underlying: string, startE: string, endE: string): Promise<number> {
+  const params = new URLSearchParams({ limit: "1000" });
+  if (startE) params.set("expiration_date_gte", startE);
+  if (endE)   params.set("expiration_date_lte", endE);
+  const apiUrl = `${ALPACA_DATA_BASE}/v1beta1/options/snapshots/${underlying}?${params}`;
+  const res = await fetch(apiUrl, {
+    headers: { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET },
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    if (res.status === 400) throw new Error(`ALPACA_400: ${txt.slice(0, 200)}`);
+    throw new Error(`Alpaca ${res.status}: ${txt.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const snapshots = data.snapshots ?? {};
+  const rows: any[] = [];
+  const now = new Date().toISOString();
+  for (const [symbol, snap] of Object.entries<any>(snapshots)) {
+    const parsed = parseOcc(symbol);
+    if (!parsed) continue;
+    const q = snap.latestQuote ?? {};
+    const t = snap.latestTrade ?? {};
+    const g = snap.greeks ?? {};
+    rows.push({
+      symbol,
+      underlying: parsed.underlying,
+      expiry: parsed.expiry,
+      strike: parsed.strike,
+      type: parsed.type,
+      bid: q.bp ?? null,
+      ask: q.ap ?? null,
+      last: t.p ?? null,
+      volume: snap.dailyBar?.v ?? null,
+      open_interest: snap.openInterest ?? null,
+      delta: g.delta ?? null,
+      gamma: g.gamma ?? null,
+      theta: g.theta ?? null,
+      vega: g.vega ?? null,
+      iv: snap.impliedVolatility ?? null,
+      updated_at: now,
+    });
+  }
+  if (rows.length > 0) {
+    const chunk = 500;
+    for (let i = 0; i < rows.length; i += chunk) {
+      const { error } = await admin
+        .from("options_contracts")
+        .upsert(rows.slice(i, i + chunk), { onConflict: "underlying,expiry,strike,type" });
+      if (error) throw new Error(error.message);
+    }
+  }
+  return rows.length;
+}
+
+function addDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setUTCDate(x.getUTCDate() + n);
+  return x;
+}
+function isoDate(d: Date): string { return d.toISOString().slice(0, 10); }
 
 function json(b: unknown, status = 200) {
   return new Response(JSON.stringify(b), {
