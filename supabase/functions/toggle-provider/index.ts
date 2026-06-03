@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 const BodySchema = z.object({
-  provider: z.enum(["alpaca", "tradier", "polygon", "unusual_whales", "news"]),
+  provider: z.enum(["alpaca", "tradier", "polygon", "unusual_whales", "news", "alpha_vantage"]),
   enabled: z.boolean().optional(),
   mode: z.enum(["live", "simulated"]).optional(),
 });
