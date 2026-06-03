@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, BookmarkCheck, ClipboardList, LayoutDashboard, LineChart, LogOut, Settings, Sparkles } from "lucide-react";
+import { Activity, BookmarkCheck, ClipboardList, LayoutDashboard, LineChart, LogOut, Settings, Sparkles, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/app/top-signals", label: "Top Signals", icon: Trophy },
   { to: "/app/watchlist", label: "Watchlist", icon: BookmarkCheck },
   { to: "/app/trades", label: "Paper trades", icon: ClipboardList },
   { to: "/app/analyst", label: "AI Analyst", icon: Sparkles, soon: true },

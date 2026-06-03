@@ -13,7 +13,8 @@ import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
 import { signalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
 import { isExpired } from "@/lib/signalFreshness";
-import { checkRiskGuards, effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
+import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
+import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
@@ -122,35 +123,19 @@ export default function Dashboard() {
   const effective = useMemo(() => effectiveRisk(risk), [risk]);
 
   async function approve(s: Signal) {
-    const intendedRisk = 100; // matches the risk_amount written below
-    const guard = checkRiskGuards({
+    const res = await approveSignalAsPaperTrade({
+      userId: user!.id,
+      signal: s,
       risk,
       openTradesCount: openTrades.length,
       todayRealizedPL,
-      intendedRisk,
     });
-    if (!guard.ok) {
-      toast.error((guard as { reason: string }).reason);
-      return;
-    }
-
-
-    const { error } = await supabase.from("paper_trades").insert({
-      user_id: user!.id,
-      signal_id: s.id,
-      ticker: s.ticker,
-      direction: s.direction,
-      contract_idea: s.contract_symbol,
-      entry_price: s.premium ?? s.price,
-      stop_idea: s.premium ? Number(s.premium) * 0.6 : null,
-      target_idea: s.premium ? Number(s.premium) * 1.8 : null,
-      risk_amount: intendedRisk,
-    });
-    if (error) return toast.error(error.message);
+    if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Paper trade opened on ${s.ticker}`);
     const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
     setTrades(data ?? []);
   }
+
 
 
   async function dismiss(s: Signal) {
