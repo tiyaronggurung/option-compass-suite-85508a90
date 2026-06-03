@@ -416,14 +416,52 @@ Deno.serve(async (req) => {
       // TTL: stock-bar scanner has no DTE, default to 2h
       const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
+      // ---- 0.35-delta contract picker (best-effort) ----
+      let contractFields: Record<string, unknown> = {};
+      let contractMeta: Record<string, unknown> | null = null;
+      const reasonsWithContract = [...draft.reasons];
+      if (ALPACA_KEY && ALPACA_SECRET) {
+        try {
+          const picked = await pickBestContract(admin, draft.ticker, draft.direction);
+          if (picked) {
+            contractFields = {
+              contract_symbol: picked.contract.symbol,
+              expiry: picked.contract.expiry,
+              strike: picked.contract.strike,
+              premium: picked.mid,
+              dte: picked.dte,
+            };
+            contractMeta = {
+              delta: picked.contract.delta,
+              iv: picked.contract.iv,
+              bid: picked.contract.bid,
+              ask: picked.contract.ask,
+              mid: picked.mid,
+              dte: picked.dte,
+              spread_pct: picked.spread_pct,
+              liquidity_score: picked.liquidity_score,
+              reason: picked.reason,
+            };
+          } else {
+            reasonsWithContract.push("No contract match yet.");
+          }
+        } catch (e) {
+          errors.push(`${sym} picker: ${(e as Error).message}`);
+        }
+      }
+
+      const techMetrics = contractMeta
+        ? { ...draft.technical_metrics, contract: contractMeta }
+        : draft.technical_metrics;
+
       const { error } = await admin.from("signals").insert({
         ticker: draft.ticker,
         direction: draft.direction,
         price: draft.price,
         confidence: draft.confidence,
         risk_level: draft.risk_level,
-        reasons: draft.reasons,
-        technical_metrics: draft.technical_metrics,
+        reasons: reasonsWithContract,
+        technical_metrics: techMetrics,
         flow_metrics: {},
         status: "LIVE",
         is_demo: false,
@@ -431,6 +469,7 @@ Deno.serve(async (req) => {
         source: "Alpaca Backend Scanner v2",
         external_id: externalId,
         expires_at: expiresAt,
+        ...contractFields,
       });
       if (error) {
         if ((error as any).code === "23505") { skipped++; continue; }
