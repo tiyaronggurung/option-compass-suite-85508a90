@@ -20,13 +20,15 @@ interface ProbeResult {
 async function probeAlpaca(): Promise<ProbeResult> {
   const key = Deno.env.get("ALPACA_API_KEY_ID");
   const secret = Deno.env.get("ALPACA_API_SECRET_KEY");
-  const base = Deno.env.get("ALPACA_BASE_URL") || "https://paper-api.alpaca.markets";
   if (!key || !secret) {
     return { status: "unknown", latency_ms: null, error: null, configured: false };
   }
+  // Account endpoint lives on the trading API, not the data API — use it explicitly
+  // to avoid 404s when ALPACA_BASE_URL is pointed at data.alpaca.markets or similar.
+  const tradingBase = "https://paper-api.alpaca.markets";
   const t0 = Date.now();
   try {
-    const res = await fetch(`${base.replace(/\/$/, "")}/v2/account`, {
+    const res = await fetch(`${tradingBase}/v2/account`, {
       headers: { "APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret },
     });
     const latency = Date.now() - t0;
