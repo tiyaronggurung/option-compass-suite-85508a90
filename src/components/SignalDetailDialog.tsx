@@ -4,11 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import type { Signal } from "@/lib/signalHelpers";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
+import { cn } from "@/lib/utils";
 
 interface Props {
   signal: Signal | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  outcome?: SignalOutcome;
 }
 
 export function SignalDetailDialog({ signal, open, onOpenChange }: Props) {
