@@ -45,16 +45,43 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Prop
       });
   }, [open, signal, isAdmin]);
 
-  if (!signal) return null;
+  if (!current) return null;
+  const s = current;
+
+  const refreshContract = async () => {
+    setPicking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("pick-contract", {
+        body: { signal_id: s.id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      if ((data as any)?.picked) {
+        toast.success("Contract picked", { description: (data as any).picked.reason });
+      } else {
+        toast.info("No contract match yet.");
+      }
+      const { data: fresh } = await supabase.from("signals").select("*").eq("id", s.id).maybeSingle();
+      if (fresh) setCurrent(fresh as Signal);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to pick contract");
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  const contractMeta = (s.technical_metrics as any)?.contract as
+    | { delta?: number; iv?: number; bid?: number; ask?: number; mid?: number; dte?: number; spread_pct?: number; liquidity_score?: number; reason?: string }
+    | undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <span className="ticker-mono">{signal.ticker}</span>
-            <Badge variant="outline" className="border-border">{signal.direction}</Badge>
-            {signal.is_demo
+            <span className="ticker-mono">{s.ticker}</span>
+            <Badge variant="outline" className="border-border">{s.direction}</Badge>
+            {s.is_demo
               ? <Badge variant="outline" className="text-muted-foreground">Demo</Badge>
               : <Badge className="bg-emerald-500/15 text-emerald-400 border-0">Live</Badge>}
             {outcome && outcome !== "none" && (
@@ -65,27 +92,66 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Prop
 
 
         <div className="space-y-3 text-sm">
-          <Row label="Confidence" value={`${signal.confidence}/100`} />
-          <Row label="Risk" value={signal.risk_level} />
-          <Row label="DTE" value={signal.dte != null ? String(signal.dte) : "—"} />
-          <Row label="Price" value={signal.price != null ? `$${Number(signal.price).toFixed(2)}` : "—"} />
-          <Row label="Source" value={signal.source ?? "—"} mono />
-          <Row label="Created" value={new Date(signal.created_at).toLocaleString()} />
-          {isAdmin && <Row label="signal_id" value={signal.id} mono small />}
-          {isAdmin && <Row label="external_id" value={signal.external_id ?? "—"} mono small />}
+          <Row label="Confidence" value={`${s.confidence}/100`} />
+          <Row label="Risk" value={s.risk_level} />
+          <Row label="DTE" value={s.dte != null ? String(s.dte) : "—"} />
+          <Row label="Price" value={s.price != null ? `$${Number(s.price).toFixed(2)}` : "—"} />
+          <Row label="Source" value={s.source ?? "—"} mono />
+          <Row label="Created" value={new Date(s.created_at).toLocaleString()} />
+          {isAdmin && <Row label="signal_id" value={s.id} mono small />}
+          {isAdmin && <Row label="external_id" value={s.external_id ?? "—"} mono small />}
 
-          {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
+          {Array.isArray(s.reasons) && s.reasons.length > 0 && (
             <div>
               <div className="text-xs text-muted-foreground mb-1">Reasons</div>
               <ul className="space-y-0.5 text-xs">
-                {(signal.reasons as string[]).map((r, i) => (
+                {(s.reasons as string[]).map((r, i) => (
                   <li key={i} className="text-foreground/80">• {r}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          <ComponentBreakdown tm={signal.technical_metrics as any} />
+          <div className="pt-2 border-t border-border">
+            <div className="text-xs text-muted-foreground mb-1.5 flex items-center justify-between">
+              <span>Recommended contract</span>
+              {isAdmin && (
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" disabled={picking} onClick={refreshContract}>
+                  <RefreshCw className={cn("h-3 w-3 mr-1", picking && "animate-spin")} />
+                  {picking ? "Picking…" : "Refresh chain + pick"}
+                </Button>
+              )}
+            </div>
+            {s.contract_symbol ? (
+              <div className="space-y-1 text-xs">
+                <Row label="Symbol" value={s.contract_symbol} mono small />
+                <Row label="Strike" value={s.strike != null ? `$${Number(s.strike).toFixed(2)}` : "—"} />
+                <Row label="Expiry" value={s.expiry ?? "—"} />
+                <Row label="DTE" value={s.dte != null ? `${s.dte}d` : "—"} />
+                {contractMeta?.delta != null && <Row label="Delta" value={contractMeta.delta.toFixed(2)} />}
+                {contractMeta?.iv != null && <Row label="IV" value={`${(contractMeta.iv * 100).toFixed(1)}%`} />}
+                {(contractMeta?.bid != null || contractMeta?.ask != null) && (
+                  <Row
+                    label="Bid / Ask / Mid"
+                    value={`${contractMeta?.bid?.toFixed(2) ?? "—"} / ${contractMeta?.ask?.toFixed(2) ?? "—"} / ${contractMeta?.mid?.toFixed(2) ?? (s.premium != null ? Number(s.premium).toFixed(2) : "—")}`}
+                  />
+                )}
+                {contractMeta?.liquidity_score != null && (
+                  <Row label="Liquidity" value={`${contractMeta.liquidity_score}/100`} />
+                )}
+                {contractMeta?.reason && (
+                  <div className="text-[11px] text-muted-foreground pt-1">{contractMeta.reason}</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">No contract match yet.</div>
+            )}
+          </div>
+
+          <ComponentBreakdown tm={s.technical_metrics as any} />
+
+
+
 
 
           {isAdmin && (
