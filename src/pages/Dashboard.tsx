@@ -118,8 +118,21 @@ export default function Dashboard() {
   const dailyPL = trades
     .filter((t) => new Date(t.opened_at).toDateString() === new Date().toDateString())
     .reduce((a, t) => a + Number(t.current_pl ?? 0), 0);
+  const todayRealizedPL = useMemo(() => sumTodayRealizedPL(trades as any), [trades]);
+  const effective = useMemo(() => effectiveRisk(risk), [risk]);
 
   async function approve(s: Signal) {
+    const intendedRisk = 100; // matches the risk_amount written below
+    const guard = checkRiskGuards({
+      risk,
+      openTradesCount: openTrades.length,
+      todayRealizedPL,
+      intendedRisk,
+    });
+    if (!guard.ok) {
+      toast.error(guard.reason);
+      return;
+    }
     const { error } = await supabase.from("paper_trades").insert({
       user_id: user!.id,
       signal_id: s.id,
@@ -129,13 +142,14 @@ export default function Dashboard() {
       entry_price: s.premium ?? s.price,
       stop_idea: s.premium ? Number(s.premium) * 0.6 : null,
       target_idea: s.premium ? Number(s.premium) * 1.8 : null,
-      risk_amount: 100,
+      risk_amount: intendedRisk,
     });
     if (error) return toast.error(error.message);
     toast.success(`Paper trade opened on ${s.ticker}`);
     const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
     setTrades(data ?? []);
   }
+
 
   async function dismiss(s: Signal) {
     const { error } = await supabase.from("signal_actions").insert({
