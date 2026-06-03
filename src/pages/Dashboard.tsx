@@ -226,6 +226,7 @@ export default function Dashboard() {
                 onApprove={approve}
                 onReject={dismiss}
                 onDetails={(sig) => setDetailSignal(sig)}
+                outcome={signalOutcome(s, trades, dismissedIds)}
               />
             ))}
       </section>
