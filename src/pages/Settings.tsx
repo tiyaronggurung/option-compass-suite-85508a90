@@ -10,6 +10,7 @@ import { DisclaimerBar, DISCLAIMER_TEXT } from "@/components/Disclaimer";
 import { ProviderEnginesPanel } from "@/components/ProviderEnginesPanel";
 import { SignalModePanel } from "@/components/SignalModePanel";
 import { SignalAuditPanel } from "@/components/SignalAuditPanel";
+import SignalLearningPanel from "@/components/SignalLearningPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
