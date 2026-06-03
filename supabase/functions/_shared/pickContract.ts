@@ -112,17 +112,24 @@ export async function pickBestContract(
 
   const rows = data as ContractRow[];
 
+  // Some feeds (e.g. Alpaca IEX) don't expose open_interest; detect that case
+  // and lean on volume as the primary liquidity proxy instead.
+  const hasOI = rows.some((r) => (r.open_interest ?? 0) > 0);
+
   // Pass 1 — strict liquidity
-  const strict = rows.filter(
-    (r) =>
-      (r.open_interest ?? 0) > 100 &&
-      (r.volume ?? 0) > 10 &&
-      (r.bid ?? 0) > 0 &&
-      (r.ask ?? 0) > 0 &&
-      r.delta != null &&
-      r.bid != null && r.ask != null &&
-      (r.ask - r.bid) / (((r.bid + r.ask) / 2) || 1) <= 0.25,
-  );
+  const strict = rows.filter((r) => {
+    if (r.delta == null || r.bid == null || r.ask == null) return false;
+    if (r.bid <= 0 || r.ask <= 0) return false;
+    const mid = (r.bid + r.ask) / 2;
+    if ((r.ask - r.bid) / (mid || 1) > 0.25) return false;
+    if (hasOI) {
+      if ((r.open_interest ?? 0) < 100) return false;
+      if ((r.volume ?? 0) < 10) return false;
+    } else {
+      if ((r.volume ?? 0) < 50) return false;
+    }
+    return true;
+  });
 
   let candidates = strict
     .map((r) => scoreRow(r, opts, today))
@@ -130,13 +137,16 @@ export async function pickBestContract(
 
   // Pass 2 — relaxed
   if (candidates.length === 0) {
-    const relaxed = rows.filter(
-      (r) =>
-        (r.open_interest ?? 0) > 10 &&
-        (r.bid ?? 0) > 0 &&
-        (r.ask ?? 0) > 0 &&
-        r.delta != null,
-    );
+    const relaxed = rows.filter((r) => {
+      if (r.delta == null || r.bid == null || r.ask == null) return false;
+      if (r.bid <= 0 || r.ask <= 0) return false;
+      if (hasOI) {
+        if ((r.open_interest ?? 0) < 10) return false;
+      } else {
+        if ((r.volume ?? 0) < 1) return false;
+      }
+      return true;
+    });
     candidates = relaxed
       .map((r) => scoreRow(r, opts, today))
       .filter((x): x is PickedContract => x !== null);
