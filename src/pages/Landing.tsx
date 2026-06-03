@@ -24,7 +24,7 @@ export default function Landing() {
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card/50 px-3 py-1 text-xs text-muted-foreground">
             <span className="pulse-dot" /> Educational paper-trading desk
           </span>
-          <h1 className="mt-6 text-4xl md:text-6xl font-semibold tracking-tight leading-[1.05]">
+          <h1 className="mt-6 text-3xl sm:text-4xl md:text-6xl font-semibold tracking-tight leading-[1.1] break-words">
             Options signals,<br />
             <span className="text-primary">explained</span> before you click.
           </h1>
