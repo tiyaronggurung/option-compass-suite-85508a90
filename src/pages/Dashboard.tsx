@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
   const [includeExpired, setIncludeExpired] = useState(false);
   const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
+  const [risk, setRisk] = useState<RiskSettingsLike>(null);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   useEffect(() => {
