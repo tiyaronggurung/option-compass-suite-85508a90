@@ -90,7 +90,9 @@
   #root { overflow-x: hidden; }
 
   /* Prevent long unbroken tokens (tickers, URLs, contract symbols) from overflowing */
-  h1, h2, h3, h4, p, span, div, a, li { overflow-wrap: anywhere; }
+  h1, h2, h3, h4, p, a, li { overflow-wrap: anywhere; }
+  /* Don't break individual characters inside tables — they should scroll instead */
+  table, thead, tbody, tr, th, td { overflow-wrap: normal; word-break: normal; }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: "Space Grotesk", "DM Sans", ui-sans-serif, system-ui, sans-serif;
