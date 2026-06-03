@@ -179,6 +179,15 @@ export default function Dashboard() {
               {f.label}
             </Button>
           ))}
+          <Button
+            size="sm"
+            variant={includeExpired ? "secondary" : "outline"}
+            className={cn(includeExpired ? "" : "bg-transparent", "ml-auto")}
+            onClick={() => setIncludeExpired((v) => !v)}
+            title="Show signals past their TTL"
+          >
+            {includeExpired ? "Active + expired" : "Active only"}
+          </Button>
         </div>
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((f) => (
