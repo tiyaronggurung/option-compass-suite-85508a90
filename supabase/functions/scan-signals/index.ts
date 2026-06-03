@@ -417,10 +417,28 @@ Deno.serve(async (req) => {
       // TTL: stock-bar scanner has no DTE, default to 2h
       const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
+      // ---- Earnings catalyst (never forces a trade — only modifies already-passing signals) ----
+      let catalyst: CatalystResult | null = null;
+      let finalConfidence = draft.confidence;
+      let finalRisk: "LOW" | "MEDIUM" | "HIGH" = draft.risk_level;
+      let catalystSummary: string | null = null;
+      try {
+        catalyst = await getEarningsCatalyst(admin, draft.ticker);
+        if (catalyst) {
+          finalConfidence = Math.min(100, draft.confidence + catalyst.confidenceBoost);
+          if (catalyst.forceHighRisk) finalRisk = "HIGH";
+          catalystSummary = catalyst.summary;
+        }
+      } catch (e) {
+        // Graceful: scanner continues without catalyst boost
+        errors.push(`${sym} catalyst: ${(e as Error).message}`);
+      }
+
       // ---- 0.35-delta contract picker (best-effort) ----
       let contractFields: Record<string, unknown> = {};
       let contractMeta: Record<string, unknown> | null = null;
       const reasonsWithContract = [...draft.reasons];
+      if (catalyst) reasonsWithContract.push(catalyst.summary);
       if (ALPACA_KEY && ALPACA_SECRET) {
         try {
           // Pre-flight: if cache empty in 14-30 DTE window, best-effort refresh
@@ -482,8 +500,8 @@ Deno.serve(async (req) => {
         ticker: draft.ticker,
         direction: draft.direction,
         price: draft.price,
-        confidence: draft.confidence,
-        risk_level: draft.risk_level,
+        confidence: finalConfidence,
+        risk_level: finalRisk,
         reasons: reasonsWithContract,
         technical_metrics: techMetrics,
         flow_metrics: {},
@@ -493,6 +511,7 @@ Deno.serve(async (req) => {
         source: "Alpaca Backend Scanner v2",
         external_id: externalId,
         expires_at: expiresAt,
+        catalyst_summary: catalystSummary,
         ...contractFields,
       });
       if (error) {
