@@ -49,20 +49,20 @@ export default function Watchlist() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Watchlist</h1>
           <p className="text-sm text-muted-foreground">Tickers you want priority alerts on.</p>
         </div>
-        <form onSubmit={addTicker} className="flex items-center gap-2">
+        <form onSubmit={addTicker} className="flex items-center gap-2 w-full sm:w-auto">
           <Input
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
             placeholder="Add ticker (e.g. NVDA)"
-            className="w-48 ticker-mono"
+            className="flex-1 sm:w-48 ticker-mono"
             maxLength={8}
           />
-          <Button type="submit"><Plus className="h-4 w-4 mr-1" /> Add</Button>
+          <Button type="submit" className="shrink-0"><Plus className="h-4 w-4 mr-1" /> Add</Button>
         </form>
       </header>
 
