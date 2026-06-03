@@ -20,6 +20,7 @@ const json = (status: number, body: unknown) =>
 const SignalSchema = z.object({
   signal_id: z.string().uuid().optional(), // external dedup id
   source: z.string().min(1).max(100).optional(),
+  is_demo: z.boolean().optional(),
   ticker: z.string().min(1).max(10),
   direction: z.enum(["CALL", "PUT"]),
   confidence: z.number().int().min(0).max(100),
@@ -80,9 +81,18 @@ Deno.serve(async (req) => {
     return json(400, { error: "validation_failed", details: parsed.error.flatten() });
   }
 
-  const { signal_id, ...rest } = parsed.data;
+  const { signal_id, is_demo, source, ...rest } = parsed.data;
+  // Default is_demo: explicit > false when source comes from a live engine > true otherwise
+  const inferredDemo =
+    is_demo !== undefined
+      ? is_demo
+      : source
+        ? !/alpaca|tradier|polygon|unusual.*whales/i.test(source)
+        : true;
   const row = {
     ...rest,
+    source: source ?? null,
+    is_demo: inferredDemo,
     ticker: rest.ticker.toUpperCase(),
     external_id: signal_id ?? null,
   };

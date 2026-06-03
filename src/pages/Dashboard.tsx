@@ -21,6 +21,13 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "watch", label: "Watchlist only" },
 ];
 
+type SourceMode = "both" | "live" | "demo";
+const SOURCE_FILTERS: { id: SourceMode; label: string }[] = [
+  { id: "both", label: "All sources" },
+  { id: "live", label: "Live market data" },
+  { id: "demo", label: "Demo only" },
+];
+
 function marketStatus() {
   const now = new Date();
   const day = now.getUTCDay();
@@ -36,26 +43,31 @@ export default function Dashboard() {
   const [trades, setTrades] = useState<PaperTrade[]>([]);
   const [watch, setWatch] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("both");
 
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }] = await Promise.all([
-        supabase.from("signals").select("*").order("created_at", { ascending: false }).limit(100),
+      const [{ data: s }, { data: t }, { data: w }, { data: settings }] = await Promise.all([
+        supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
+        supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
+      if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
     })();
 
     const channel = supabase
       .channel("signals-stream")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "signals" }, (payload) => {
-        setSignals((prev) => (prev ? [payload.new as Signal, ...prev] : [payload.new as Signal]));
-        toast.success(`New ${(payload.new as Signal).direction} signal on ${(payload.new as Signal).ticker}`);
+        const ns = payload.new as Signal;
+        if (ns.hidden) return;
+        setSignals((prev) => (prev ? [ns, ...prev] : [ns]));
+        toast.success(`New ${ns.direction} signal on ${ns.ticker}`);
       })
       .subscribe();
     return () => { cancel = true; supabase.removeChannel(channel); };
@@ -64,6 +76,8 @@ export default function Dashboard() {
   const filtered = useMemo(() => {
     if (!signals) return [];
     return signals.filter((s) => {
+      if (sourceMode === "live" && s.is_demo) return false;
+      if (sourceMode === "demo" && !s.is_demo) return false;
       if (filter === "bullish") return s.direction === "CALL";
       if (filter === "bearish") return s.direction === "PUT";
       if (filter === "high") return s.confidence >= 80;
@@ -72,7 +86,7 @@ export default function Dashboard() {
       if (filter === "watch") return watch.includes(s.ticker);
       return true;
     });
-  }, [signals, filter, watch]);
+  }, [signals, filter, sourceMode, watch]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
@@ -123,18 +137,33 @@ export default function Dashboard() {
 
       <DisclaimerBar />
 
-      <section className="flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <Button
-            key={f.id}
-            size="sm"
-            variant={filter === f.id ? "default" : "outline"}
-            className={cn(filter === f.id ? "" : "bg-transparent")}
-            onClick={() => setFilter(f.id)}
-          >
-            {f.label}
-          </Button>
-        ))}
+      <section className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {SOURCE_FILTERS.map((f) => (
+            <Button
+              key={f.id}
+              size="sm"
+              variant={sourceMode === f.id ? "secondary" : "outline"}
+              className={cn(sourceMode === f.id ? "" : "bg-transparent")}
+              onClick={() => setSourceMode(f.id)}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <Button
+              key={f.id}
+              size="sm"
+              variant={filter === f.id ? "default" : "outline"}
+              className={cn(filter === f.id ? "" : "bg-transparent")}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

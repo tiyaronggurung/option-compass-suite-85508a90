@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DisclaimerBar, DISCLAIMER_TEXT } from "@/components/Disclaimer";
 import { ProviderEnginesPanel } from "@/components/ProviderEnginesPanel";
+import { SignalModePanel } from "@/components/SignalModePanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -77,6 +78,8 @@ export default function Settings() {
           </div>
         )}
       </section>
+
+      <SignalModePanel />
 
       <ProviderEnginesPanel />
 

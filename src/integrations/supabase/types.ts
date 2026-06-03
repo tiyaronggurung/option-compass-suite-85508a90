@@ -74,6 +74,24 @@ export type Database = {
         }
         Relationships: []
       }
+      app_settings: {
+        Row: {
+          id: string
+          signal_mode: Database["public"]["Enums"]["signal_view_mode"]
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          signal_mode?: Database["public"]["Enums"]["signal_view_mode"]
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          signal_mode?: Database["public"]["Enums"]["signal_view_mode"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       paper_trades: {
         Row: {
           closed_at: string | null
@@ -296,7 +314,9 @@ export type Database = {
           expiry: string | null
           external_id: string | null
           flow_metrics: Json
+          hidden: boolean
           id: string
+          is_demo: boolean
           macro_score: number | null
           premium: number | null
           price: number | null
@@ -318,7 +338,9 @@ export type Database = {
           expiry?: string | null
           external_id?: string | null
           flow_metrics?: Json
+          hidden?: boolean
           id?: string
+          is_demo?: boolean
           macro_score?: number | null
           premium?: number | null
           price?: number | null
@@ -340,7 +362,9 @@ export type Database = {
           expiry?: string | null
           external_id?: string | null
           flow_metrics?: Json
+          hidden?: boolean
           id?: string
+          is_demo?: boolean
           macro_score?: number | null
           premium?: number | null
           price?: number | null
@@ -423,6 +447,7 @@ export type Database = {
       risk_level: "LOW" | "MEDIUM" | "HIGH"
       signal_direction: "CALL" | "PUT"
       signal_status: "LIVE" | "EXPIRED" | "TRIGGERED"
+      signal_view_mode: "demo" | "live" | "both"
       trade_status: "OPEN" | "WIN" | "LOSS" | "CLOSED"
     }
     CompositeTypes: {
@@ -558,6 +583,7 @@ export const Constants = {
       risk_level: ["LOW", "MEDIUM", "HIGH"],
       signal_direction: ["CALL", "PUT"],
       signal_status: ["LIVE", "EXPIRED", "TRIGGERED"],
+      signal_view_mode: ["demo", "live", "both"],
       trade_status: ["OPEN", "WIN", "LOSS", "CLOSED"],
     },
   },
