@@ -236,6 +236,7 @@ export default function Dashboard() {
         signal={detailSignal}
         open={!!detailSignal}
         onOpenChange={(v) => !v && setDetailSignal(null)}
+        outcome={detailSignal ? signalOutcome(detailSignal, trades, dismissedIds) : undefined}
       />
     </div>
   );
