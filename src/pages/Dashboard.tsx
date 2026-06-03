@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [tagFilter, setTagFilter] = useState<TagId | null>(null);
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
   const [includeExpired, setIncludeExpired] = useState(false);
+  const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   useEffect(() => {
