@@ -300,6 +300,7 @@ const PROFILE_THRESHOLDS: Record<string, number> = {
   conservative: 60,
   balanced: 50,
   active_mvp: 40,
+  testing: 25,
 };
 
 async function loadScannerSettings(): Promise<{ profile: string; threshold: number; debug_mode: boolean }> {
