@@ -162,14 +162,19 @@ export default function SignalScannerPanel() {
           </div>
           {savingSettings && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         </div>
-        <RadioGroup value={profile} onValueChange={onProfileChange} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <RadioGroup value={profile} onValueChange={onProfileChange} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           {(Object.keys(PROFILE_LABEL) as ProfileKey[]).map((p) => (
-            <label key={p} htmlFor={`profile-${p}`} className="flex items-center gap-2 rounded-md border border-border p-2 cursor-pointer hover:bg-muted/30">
+            <label key={p} htmlFor={`profile-${p}`} className={`flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-muted/30 ${p === "testing" ? "border-amber-500/60 bg-amber-500/5" : "border-border"}`}>
               <RadioGroupItem value={p} id={`profile-${p}`} />
               <span className="text-xs">{PROFILE_LABEL[p]}</span>
             </label>
           ))}
         </RadioGroup>
+        {profile === "testing" && (
+          <div className="rounded-md border border-amber-500/60 bg-amber-500/5 p-2 text-[11px] text-amber-600 dark:text-amber-400">
+            Testing mode — may generate lower-quality signals. Uses real Alpaca data only. Use for verifying live-signal visibility, not for trading decisions.
+          </div>
+        )}
         <div className="flex items-center justify-between pt-1">
           <div>
             <Label htmlFor="debug-mode" className="text-xs">Debug mode</Label>
