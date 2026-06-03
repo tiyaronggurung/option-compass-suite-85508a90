@@ -21,6 +21,12 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const ring =
     signal.confidence >= 80 ? "ring-bull/40" : signal.confidence >= 65 ? "ring-primary/30" : "ring-border";
   const tags: TagId[] = deriveTags(signal, watchlist ?? new Set());
+  const freshness = getFreshness(signal);
+  const freshClass =
+    freshness === "fresh" ? "bg-bull/15 text-bull"
+    : freshness === "aging" ? "bg-warn/15 text-warn"
+    : "bg-muted text-muted-foreground";
+  const freshLabel = freshness === "fresh" ? "Fresh" : freshness === "aging" ? "Aging" : "Expired";
 
   return (
     <div className={cn("glass-card p-4 ring-1 transition hover:ring-primary/40", ring)}>
@@ -57,6 +63,9 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                   {OUTCOME_LABEL[outcome]}
                 </Badge>
               )}
+              <Badge className={cn("border-0 gap-1 text-[10px]", freshClass)} title={`Signal freshness: ${freshLabel}`}>
+                <Timer className="h-3 w-3" /> {freshLabel}
+              </Badge>
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
               <Clock className="h-3 w-3" />
