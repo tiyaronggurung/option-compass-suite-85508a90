@@ -193,14 +193,14 @@ function evaluate(symbol: string, bars: Bar[]): SignalDraft | null {
 
 // ---------- Auth ----------
 async function authorize(req: Request): Promise<{ ok: true; trigger: string } | { ok: false; status: number; msg: string }> {
-  const apikey = req.headers.get("apikey") ?? "";
   const authz = req.headers.get("Authorization") ?? "";
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
 
-  // Cron path: service-role apikey
-  if (apikey === SERVICE_KEY) return { ok: true, trigger: "cron" };
+  // Cron path: service-role token in Authorization
+  if (token && token === SERVICE_KEY) return { ok: true, trigger: "cron" };
 
   // User path: must be admin
-  if (!authz.startsWith("Bearer ")) return { ok: false, status: 401, msg: "unauthorized" };
+  if (!token) return { ok: false, status: 401, msg: "unauthorized" };
   const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authz } } });
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) return { ok: false, status: 401, msg: "unauthorized" };
