@@ -565,6 +565,7 @@ export type Database = {
           created_at: string
           direction: Database["public"]["Enums"]["signal_direction"]
           dte: number | null
+          expires_at: string | null
           expiry: string | null
           external_id: string | null
           flow_metrics: Json
@@ -589,6 +590,7 @@ export type Database = {
           created_at?: string
           direction: Database["public"]["Enums"]["signal_direction"]
           dte?: number | null
+          expires_at?: string | null
           expiry?: string | null
           external_id?: string | null
           flow_metrics?: Json
@@ -613,6 +615,7 @@ export type Database = {
           created_at?: string
           direction?: Database["public"]["Enums"]["signal_direction"]
           dte?: number | null
+          expires_at?: string | null
           expiry?: string | null
           external_id?: string | null
           flow_metrics?: Json
