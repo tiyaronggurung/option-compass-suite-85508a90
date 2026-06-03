@@ -11,7 +11,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Globe, RefreshCw, Eye, PlayCircle, Loader2 } from "lucide-react";
+import { Globe, RefreshCw, Eye, PlayCircle, Loader2, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 
 type UniverseMode = "base_8" | "watchlist_earnings" | "top_100" | "top_250" | "top_500";
