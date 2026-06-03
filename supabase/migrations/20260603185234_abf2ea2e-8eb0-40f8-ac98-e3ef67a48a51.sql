@@ -1,0 +1,1 @@
+ALTER TYPE scanner_profile ADD VALUE IF NOT EXISTS 'testing';

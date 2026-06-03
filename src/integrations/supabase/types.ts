@@ -789,7 +789,7 @@ export type Database = {
       provider_mode: "live" | "simulated"
       provider_status: "ok" | "error" | "unknown"
       risk_level: "LOW" | "MEDIUM" | "HIGH"
-      scanner_profile: "conservative" | "balanced" | "active_mvp"
+      scanner_profile: "conservative" | "balanced" | "active_mvp" | "testing"
       signal_action: "approved" | "dismissed"
       signal_direction: "CALL" | "PUT"
       signal_status: "LIVE" | "EXPIRED" | "TRIGGERED"
@@ -940,7 +940,7 @@ export const Constants = {
       provider_mode: ["live", "simulated"],
       provider_status: ["ok", "error", "unknown"],
       risk_level: ["LOW", "MEDIUM", "HIGH"],
-      scanner_profile: ["conservative", "balanced", "active_mvp"],
+      scanner_profile: ["conservative", "balanced", "active_mvp", "testing"],
       signal_action: ["approved", "dismissed"],
       signal_direction: ["CALL", "PUT"],
       signal_status: ["LIVE", "EXPIRED", "TRIGGERED"],
