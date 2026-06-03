@@ -44,7 +44,7 @@ export default function OptionsChainPanel() {
       .then(({ data }) => setIsAdmin(!!data));
   }, [user]);
 
-  if (!isAdmin) return null;
+
 
   async function testConnection() {
     setTesting(true);
@@ -79,6 +79,8 @@ export default function OptionsChainPanel() {
   }
 
   useEffect(() => { if (isAdmin) loadCache(); /* eslint-disable-next-line */ }, [isAdmin]);
+
+  if (!isAdmin) return null;
 
   return (
     <section className="glass-card p-5 space-y-4">
