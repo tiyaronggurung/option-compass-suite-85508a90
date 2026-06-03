@@ -38,11 +38,12 @@ type Run = {
 };
 
 
-type ProfileKey = "conservative" | "balanced" | "active_mvp";
+type ProfileKey = "conservative" | "balanced" | "active_mvp" | "testing";
 const PROFILE_LABEL: Record<ProfileKey, string> = {
   conservative: "Conservative (≥60)",
   balanced: "Balanced (≥50)",
   active_mvp: "Active MVP (≥40)",
+  testing: "Testing (≥25)",
 };
 
 export default function SignalScannerPanel() {
