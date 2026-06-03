@@ -9,15 +9,17 @@ import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOu
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
+import type { RankBreakdown } from "@/lib/rankSignals";
 
 interface Props {
   signal: Signal | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   outcome?: SignalOutcome;
+  rankBreakdown?: RankBreakdown;
 }
 
-export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Props) {
+export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBreakdown }: Props) {
   const { isAdmin } = useIsAdmin();
   const [siblings, setSiblings] = useState<Signal[] | null>(null);
   const [current, setCurrent] = useState<Signal | null>(signal);
@@ -149,6 +151,9 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Prop
           </div>
 
           <ComponentBreakdown tm={s.technical_metrics as any} />
+
+          {rankBreakdown && <RankingBreakdown b={rankBreakdown} />}
+
 
 
 
