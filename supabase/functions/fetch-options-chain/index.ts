@@ -45,6 +45,9 @@ Deno.serve(async (req) => {
     const underlying = String(body.ticker ?? "").toUpperCase().trim();
     const expiry = String(body.expiry ?? "").trim(); // YYYY-MM-DD
     if (!underlying) return json({ error: "ticker required" }, 400);
+    if (!/^[A-Z.]{1,6}$/.test(underlying)) {
+      return json({ error: `Invalid ticker symbol "${underlying}". Use a symbol like NVDA, not a company name.` }, 400);
+    }
     if (!ALPACA_KEY || !ALPACA_SECRET) return json({ error: "Alpaca not configured" }, 500);
 
     const params = new URLSearchParams({ limit: "1000" });
