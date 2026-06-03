@@ -261,6 +261,7 @@ export type Database = {
           direction: Database["public"]["Enums"]["signal_direction"]
           dte: number | null
           expiry: string | null
+          external_id: string | null
           flow_metrics: Json
           id: string
           macro_score: number | null
@@ -268,6 +269,7 @@ export type Database = {
           price: number | null
           reasons: Json
           risk_level: Database["public"]["Enums"]["risk_level"]
+          source: string | null
           status: Database["public"]["Enums"]["signal_status"]
           strike: number | null
           technical_metrics: Json
@@ -281,6 +283,7 @@ export type Database = {
           direction: Database["public"]["Enums"]["signal_direction"]
           dte?: number | null
           expiry?: string | null
+          external_id?: string | null
           flow_metrics?: Json
           id?: string
           macro_score?: number | null
@@ -288,6 +291,7 @@ export type Database = {
           price?: number | null
           reasons?: Json
           risk_level?: Database["public"]["Enums"]["risk_level"]
+          source?: string | null
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
           technical_metrics?: Json
@@ -301,6 +305,7 @@ export type Database = {
           direction?: Database["public"]["Enums"]["signal_direction"]
           dte?: number | null
           expiry?: string | null
+          external_id?: string | null
           flow_metrics?: Json
           id?: string
           macro_score?: number | null
@@ -308,6 +313,7 @@ export type Database = {
           price?: number | null
           reasons?: Json
           risk_level?: Database["public"]["Enums"]["risk_level"]
+          source?: string | null
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
           technical_metrics?: Json
