@@ -1,0 +1,1 @@
+ALTER TABLE public.signal_scan_runs ADD COLUMN IF NOT EXISTS avg_components jsonb NOT NULL DEFAULT '{}'::jsonb;
