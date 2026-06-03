@@ -52,17 +52,19 @@ export default function Dashboard() {
   const [tagFilter, setTagFilter] = useState<TagId | null>(null);
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
   const [includeExpired, setIncludeExpired] = useState(false);
+  const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }, { data: settings }, { data: actions }] = await Promise.all([
+      const [{ data: s }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
         supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).eq("action", "dismissed"),
+        supabase.from("provider_configs").select("last_status").eq("provider", "alpaca").maybeSingle(),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
@@ -70,6 +72,7 @@ export default function Dashboard() {
       setWatch((w ?? []).map((x: any) => x.ticker));
       setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
       if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
+      setAlpacaStatus(pc?.last_status ?? null);
     })();
 
     const channel = supabase
@@ -150,9 +153,27 @@ export default function Dashboard() {
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Live signals</h1>
             <p className="text-sm text-muted-foreground">Educational paper-trading desk. Approve trades manually.</p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="pulse-dot" />
-            Market <span className="text-foreground font-medium">{marketStatus()}</span>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {alpacaStatus && (
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "inline-block h-1.5 w-1.5 rounded-full",
+                    alpacaStatus === "ok" && "bg-bull",
+                    alpacaStatus === "error" && "bg-bear",
+                    alpacaStatus === "unknown" && "bg-warn"
+                  )}
+                />
+                Alpaca{" "}
+                <span className="text-foreground font-medium">
+                  {alpacaStatus === "ok" ? "connected" : alpacaStatus === "error" ? "error" : "checking…"}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="pulse-dot" />
+              Market <span className="text-foreground font-medium">{marketStatus()}</span>
+            </div>
           </div>
         </div>
       </header>
