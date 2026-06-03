@@ -36,6 +36,7 @@ export default function OptionsChainPanel() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
 
   useEffect(() => {
