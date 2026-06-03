@@ -153,9 +153,27 @@ export default function Dashboard() {
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Live signals</h1>
             <p className="text-sm text-muted-foreground">Educational paper-trading desk. Approve trades manually.</p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="pulse-dot" />
-            Market <span className="text-foreground font-medium">{marketStatus()}</span>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {alpacaStatus && (
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "inline-block h-1.5 w-1.5 rounded-full",
+                    alpacaStatus === "ok" && "bg-bull",
+                    alpacaStatus === "error" && "bg-bear",
+                    alpacaStatus === "unknown" && "bg-warn"
+                  )}
+                />
+                Alpaca{" "}
+                <span className="text-foreground font-medium">
+                  {alpacaStatus === "ok" ? "connected" : alpacaStatus === "error" ? "error" : "checking…"}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="pulse-dot" />
+              Market <span className="text-foreground font-medium">{marketStatus()}</span>
+            </div>
           </div>
         </div>
       </header>
