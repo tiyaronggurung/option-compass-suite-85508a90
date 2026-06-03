@@ -94,6 +94,8 @@ export default function Settings() {
 
       <MarkingEngineStatus />
 
+      <SignalScannerPanel />
+
       <OptionsChainPanel />
 
       <section className="glass-card p-5 space-y-3">
