@@ -44,7 +44,7 @@ export default function OptionsChainPanel() {
       .then(({ data }) => setIsAdmin(!!data));
   }, [user]);
 
-  if (!isAdmin) return null;
+
 
   async function testConnection() {
     setTesting(true);
