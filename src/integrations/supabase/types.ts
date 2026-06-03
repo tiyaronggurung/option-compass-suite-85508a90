@@ -482,6 +482,42 @@ export type Database = {
           },
         ]
       }
+      signal_scan_runs: {
+        Row: {
+          duration_ms: number | null
+          error: string | null
+          id: string
+          ran_at: string
+          signals_created: number
+          skipped_count: number
+          status: string
+          tickers_scanned: string[]
+          trigger: string
+        }
+        Insert: {
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          ran_at?: string
+          signals_created?: number
+          skipped_count?: number
+          status: string
+          tickers_scanned?: string[]
+          trigger?: string
+        }
+        Update: {
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          ran_at?: string
+          signals_created?: number
+          skipped_count?: number
+          status?: string
+          tickers_scanned?: string[]
+          trigger?: string
+        }
+        Relationships: []
+      }
       signals: {
         Row: {
           catalyst_summary: string | null
