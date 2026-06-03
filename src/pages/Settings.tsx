@@ -78,27 +78,7 @@ export default function Settings() {
         )}
       </section>
 
-      <section className="glass-card p-5 space-y-4">
-        <h2 className="font-semibold flex items-center gap-2"><DbIcon className="h-4 w-4 text-primary" /> Data sources</h2>
-        <p className="text-xs text-muted-foreground">
-          Placeholders for the future Python trading engine. API keys are never exposed in the app — they'll be stored as
-          encrypted backend secrets and read only by the engine.
-        </p>
-        <div className="grid sm:grid-cols-2 gap-3">
-          {DATA_SOURCES.map((d) => (
-            <div key={d.name} className="rounded-md border border-border p-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">{d.name}</div>
-                <Badge variant="outline" className="border-border text-muted-foreground text-[10px]">
-                  <KeyRound className="h-3 w-3 mr-1" /> Backend-managed
-                </Badge>
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">{d.purpose}</div>
-              <Input disabled value="•••••••••••••" className="mt-2 ticker-mono cursor-not-allowed" />
-            </div>
-          ))}
-        </div>
-      </section>
+      <ProviderEnginesPanel />
 
       <section className="glass-card p-5 space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-warn" /> Compliance</h2>
