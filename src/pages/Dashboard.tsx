@@ -206,6 +206,13 @@ export default function Dashboard() {
         <Stat icon={DollarSign} label="Daily P/L (paper)" value={`$${fmtPL(dailyPL)}`} accent={dailyPL >= 0 ? "text-bull" : "text-bear"} />
       </section>
 
+      <RiskStatusCard
+        effective={effective}
+        openTradesCount={openTrades.length}
+        todayRealizedPL={todayRealizedPL}
+      />
+
+
       <DisclaimerBar />
 
       <section className="space-y-2">
