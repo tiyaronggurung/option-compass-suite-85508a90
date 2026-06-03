@@ -423,7 +423,6 @@ Deno.serve(async (req) => {
       if (ALPACA_KEY && ALPACA_SECRET) {
         try {
           // Pre-flight: if cache empty in 14-30 DTE window, best-effort refresh
-          const todayIso = new Date().toISOString().slice(0, 10);
           const winEnd = new Date(Date.now() + 32 * 86400000).toISOString().slice(0, 10);
           const winStart = new Date(Date.now() + 13 * 86400000).toISOString().slice(0, 10);
           const { count: cached } = await admin
