@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
+import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 
 type Props = {
   signal: Signal;
@@ -11,9 +12,10 @@ type Props = {
   onReject?: (s: Signal) => void;
   onDetails?: (s: Signal) => void;
   watchlist?: Set<string>;
+  outcome?: SignalOutcome;
 };
 
-export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist }: Props) {
+export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none" }: Props) {
   const isCall = signal.direction === "CALL";
   const ring =
     signal.confidence >= 80 ? "ring-bull/40" : signal.confidence >= 65 ? "ring-primary/30" : "ring-border";
@@ -47,6 +49,11 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist }
               ) : (
                 <Badge className="bg-emerald-500/15 text-emerald-400 border-0 gap-1 text-[10px]" title={signal.source ?? "Live"}>
                   <Radio className="h-3 w-3" /> Live Market Data
+                </Badge>
+              )}
+              {outcome !== "none" && (
+                <Badge className={cn("border-0 text-[10px]", OUTCOME_CLASS[outcome])} title={`Trade outcome: ${OUTCOME_LABEL[outcome]}`}>
+                  {OUTCOME_LABEL[outcome]}
                 </Badge>
               )}
             </div>

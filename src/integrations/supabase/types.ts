@@ -102,10 +102,15 @@ export type Database = {
           current_pl: number
           direction: Database["public"]["Enums"]["signal_direction"]
           entry_price: number | null
+          exit_price: number | null
+          exit_reason: Database["public"]["Enums"]["trade_close_reason"] | null
           id: string
+          mae: number | null
           max_drawdown: number
           max_gain: number
+          mfe: number | null
           opened_at: string
+          realized_pl_pct: number | null
           risk_amount: number | null
           signal_id: string | null
           status: Database["public"]["Enums"]["trade_status"]
@@ -120,10 +125,15 @@ export type Database = {
           current_pl?: number
           direction: Database["public"]["Enums"]["signal_direction"]
           entry_price?: number | null
+          exit_price?: number | null
+          exit_reason?: Database["public"]["Enums"]["trade_close_reason"] | null
           id?: string
+          mae?: number | null
           max_drawdown?: number
           max_gain?: number
+          mfe?: number | null
           opened_at?: string
+          realized_pl_pct?: number | null
           risk_amount?: number | null
           signal_id?: string | null
           status?: Database["public"]["Enums"]["trade_status"]
@@ -138,10 +148,15 @@ export type Database = {
           current_pl?: number
           direction?: Database["public"]["Enums"]["signal_direction"]
           entry_price?: number | null
+          exit_price?: number | null
+          exit_reason?: Database["public"]["Enums"]["trade_close_reason"] | null
           id?: string
+          mae?: number | null
           max_drawdown?: number
           max_gain?: number
+          mfe?: number | null
           opened_at?: string
+          realized_pl_pct?: number | null
           risk_amount?: number | null
           signal_id?: string | null
           status?: Database["public"]["Enums"]["trade_status"]
@@ -413,6 +428,48 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_reviews: {
+        Row: {
+          created_at: string
+          entry_quality: string | null
+          id: string
+          lessons: string | null
+          model: string | null
+          rr_quality: string | null
+          signal_strength: string | null
+          summary: string | null
+          timing: string | null
+          trade_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entry_quality?: string | null
+          id?: string
+          lessons?: string | null
+          model?: string | null
+          rr_quality?: string | null
+          signal_strength?: string | null
+          summary?: string | null
+          timing?: string | null
+          trade_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entry_quality?: string | null
+          id?: string
+          lessons?: string | null
+          model?: string | null
+          rr_quality?: string | null
+          signal_strength?: string | null
+          summary?: string | null
+          timing?: string | null
+          trade_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -484,6 +541,12 @@ export type Database = {
       signal_direction: "CALL" | "PUT"
       signal_status: "LIVE" | "EXPIRED" | "TRIGGERED"
       signal_view_mode: "demo" | "live" | "both"
+      trade_close_reason:
+        | "target_hit"
+        | "stop_hit"
+        | "manual_close"
+        | "expired"
+        | "invalidated"
       trade_status: "OPEN" | "WIN" | "LOSS" | "CLOSED"
     }
     CompositeTypes: {
@@ -621,6 +684,13 @@ export const Constants = {
       signal_direction: ["CALL", "PUT"],
       signal_status: ["LIVE", "EXPIRED", "TRIGGERED"],
       signal_view_mode: ["demo", "live", "both"],
+      trade_close_reason: [
+        "target_hit",
+        "stop_hit",
+        "manual_close",
+        "expired",
+        "invalidated",
+      ],
       trade_status: ["OPEN", "WIN", "LOSS", "CLOSED"],
     },
   },

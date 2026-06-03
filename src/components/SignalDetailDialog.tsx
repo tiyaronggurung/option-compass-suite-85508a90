@@ -4,14 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import type { Signal } from "@/lib/signalHelpers";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
+import { cn } from "@/lib/utils";
 
 interface Props {
   signal: Signal | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  outcome?: SignalOutcome;
 }
 
-export function SignalDetailDialog({ signal, open, onOpenChange }: Props) {
+export function SignalDetailDialog({ signal, open, onOpenChange, outcome }: Props) {
   const { isAdmin } = useIsAdmin();
   const [siblings, setSiblings] = useState<Signal[] | null>(null);
 
@@ -47,8 +50,12 @@ export function SignalDetailDialog({ signal, open, onOpenChange }: Props) {
             {signal.is_demo
               ? <Badge variant="outline" className="text-muted-foreground">Demo</Badge>
               : <Badge className="bg-emerald-500/15 text-emerald-400 border-0">Live</Badge>}
+            {outcome && outcome !== "none" && (
+              <Badge className={cn("border-0", OUTCOME_CLASS[outcome])}>{OUTCOME_LABEL[outcome]}</Badge>
+            )}
           </DialogTitle>
         </DialogHeader>
+
 
         <div className="space-y-3 text-sm">
           <Row label="Confidence" value={`${signal.confidence}/100`} />

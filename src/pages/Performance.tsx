@@ -7,8 +7,10 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DisclaimerBar } from "@/components/Disclaimer";
-import { fmtPL, type PaperTrade } from "@/lib/signalHelpers";
+import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
+import { deriveTags, ALL_TAGS, type TagId } from "@/lib/signalTags";
 import { cn } from "@/lib/utils";
 
 const BULL = "hsl(145 75% 48%)";
@@ -18,113 +20,108 @@ const MUTED = "hsl(218 12% 60%)";
 
 export default function Performance() {
   const { user } = useAuth();
-  const [trades, setTrades] = useState<PaperTrade[]>([]);
+  const [trades, setTrades] = useState<PaperTrade[] | null>(null);
+  const [signals, setSignals] = useState<Record<string, Signal>>({});
 
   useEffect(() => {
-    supabase.from("paper_trades").select("*").eq("user_id", user!.id)
-      .then(({ data }) => setTrades(data ?? []));
+    (async () => {
+      const { data: t } = await supabase
+        .from("paper_trades").select("*").eq("user_id", user!.id);
+      const ids = (t ?? []).map((x) => x.signal_id).filter(Boolean) as string[];
+      const { data: s } = ids.length
+        ? await supabase.from("signals").select("*").in("id", ids)
+        : { data: [] as Signal[] };
+      const map: Record<string, Signal> = {};
+      (s ?? []).forEach((x) => { map[x.id] = x; });
+      setSignals(map);
+      setTrades(t ?? []);
+    })();
   }, [user]);
 
-  const metrics = useMemo(() => computeMetrics(trades), [trades]);
+  const closed = useMemo(() => (trades ?? []).filter((t) => t.status !== "OPEN"), [trades]);
+  const hasReal = closed.length >= 3;
+  const metrics = useMemo(
+    () => hasReal ? computeReal(trades ?? [], signals) : demoMetrics(trades?.length ?? 0),
+    [trades, signals, hasReal],
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Performance</h1>
-          <p className="text-sm text-muted-foreground">Paper-trading metrics. Demo data shown until you've closed real paper trades.</p>
+          <p className="text-sm text-muted-foreground">
+            {hasReal
+              ? "Real closed paper trades."
+              : "Demo data shown until you've closed at least 3 paper trades."}
+          </p>
         </div>
-        <Badge className="bg-warn/15 text-warn border-0">Simulated · paper trading only</Badge>
+        <Badge className={cn("border-0", hasReal ? "bg-emerald-500/15 text-emerald-400" : "bg-warn/15 text-warn")}>
+          {hasReal ? "Real paper data" : "Simulated · paper trading only"}
+        </Badge>
       </header>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Total paper trades" value={metrics.total} icon={Activity} accent="text-primary" />
         <Stat label="Win rate" value={`${metrics.winRate.toFixed(0)}%`} icon={Target} accent="text-bull" />
-        <Stat label="Profit factor" value={metrics.profitFactor.toFixed(2)} icon={TrendingUp} accent="text-info" />
+        <Stat label="Profit factor" value={isFinite(metrics.profitFactor) ? metrics.profitFactor.toFixed(2) : "∞"} icon={TrendingUp} accent="text-info" />
         <Stat label="Avg return / trade" value={`$${fmtPL(metrics.avgReturn)}`} icon={TrendingDown} accent={metrics.avgReturn >= 0 ? "text-bull" : "text-bear"} />
         <Stat label="Max drawdown" value={`$${fmtPL(metrics.maxDD)}`} icon={TrendingDown} accent="text-bear" />
         <Stat label="High-conviction hit rate" value={`${metrics.highConvHit.toFixed(0)}%`} icon={Target} accent="text-primary" />
-        <Stat label="Rejected signals tracked" value={metrics.rejected} icon={Activity} accent="text-muted-foreground" />
         <Stat label="Open positions" value={metrics.open} icon={Activity} accent="text-info" />
+        <Stat label="Avg MFE / MAE" value={`${metrics.avgMfe.toFixed(0)} / ${metrics.avgMae.toFixed(0)}`} icon={Activity} accent="text-muted-foreground" />
       </section>
 
       <DisclaimerBar />
 
-      <section className="grid lg:grid-cols-2 gap-4">
-        <Card title="Equity curve (paper)">
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={metrics.equityCurve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={PRIMARY} stopOpacity={0.5} />
-                  <stop offset="100%" stopColor={PRIMARY} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" stroke={MUTED} fontSize={11} />
-              <YAxis stroke={MUTED} fontSize={11} />
-              <Tooltip content={<ChartTip />} />
-              <Area type="monotone" dataKey="equity" stroke={PRIMARY} strokeWidth={2} fill="url(#eq)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Card>
+      {!trades ? <Skeleton className="h-72" /> : (
+        <>
+          <section className="grid lg:grid-cols-2 gap-4">
+            <Card title="Equity curve (paper)">
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={metrics.equityCurve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={PRIMARY} stopOpacity={0.5} />
+                      <stop offset="100%" stopColor={PRIMARY} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" stroke={MUTED} fontSize={11} />
+                  <YAxis stroke={MUTED} fontSize={11} />
+                  <Tooltip content={<ChartTip />} />
+                  <Area type="monotone" dataKey="equity" stroke={PRIMARY} strokeWidth={2} fill="url(#eq)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Card>
 
-        <Card title="Daily P/L">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={metrics.dailyPL} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" stroke={MUTED} fontSize={11} />
-              <YAxis stroke={MUTED} fontSize={11} />
-              <Tooltip content={<ChartTip />} />
-              <Bar dataKey="pl" radius={[3, 3, 0, 0]}>
-                {metrics.dailyPL.map((d, i) => (
-                  <Cell key={i} fill={d.pl >= 0 ? BULL : BEAR} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+            <Card title="Daily P/L">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={metrics.dailyPL} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" stroke={MUTED} fontSize={11} />
+                  <YAxis stroke={MUTED} fontSize={11} />
+                  <Tooltip content={<ChartTip />} />
+                  <Bar dataKey="pl" radius={[3, 3, 0, 0]}>
+                    {metrics.dailyPL.map((d, i) => (
+                      <Cell key={i} fill={d.pl >= 0 ? BULL : BEAR} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </section>
 
-        <Card title="Signal quality distribution">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={metrics.quality} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="bucket" stroke={MUTED} fontSize={11} />
-              <YAxis stroke={MUTED} fontSize={11} />
-              <Tooltip content={<ChartTip />} />
-              <Bar dataKey="count" fill={PRIMARY} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-
-        <Card title="Performance by ticker">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={metrics.byTicker} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="ticker" stroke={MUTED} fontSize={11} />
-              <YAxis stroke={MUTED} fontSize={11} />
-              <Tooltip content={<ChartTip />} />
-              <Bar dataKey="pl" radius={[3, 3, 0, 0]}>
-                {metrics.byTicker.map((d, i) => (
-                  <Cell key={i} fill={d.pl >= 0 ? BULL : BEAR} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-
-        <Card title="Performance by DTE" className="lg:col-span-2">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={metrics.byDTE} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="dte" stroke={MUTED} fontSize={11} />
-              <YAxis stroke={MUTED} fontSize={11} />
-              <Tooltip content={<ChartTip />} />
-              <Bar dataKey="winRate" fill={PRIMARY} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-      </section>
+          <section className="grid lg:grid-cols-2 gap-4">
+            <BreakdownTable title="By tag" rows={metrics.byTag} />
+            <BreakdownTable title="By source" rows={metrics.bySource} />
+            <BreakdownTable title="By ticker" rows={metrics.byTicker} />
+            <BreakdownTable title="By direction" rows={metrics.byDirection} />
+            <BreakdownTable title="By risk level" rows={metrics.byRisk} />
+            <BreakdownTable title="By confidence bucket" rows={metrics.byConfidence} />
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -163,17 +160,77 @@ function ChartTip({ active, payload, label }: any) {
   );
 }
 
-function computeMetrics(trades: PaperTrade[]) {
-  // Use real trades when present, otherwise fall back to demo data.
-  const closed = trades.filter((t) => t.status !== "OPEN");
-  if (closed.length < 3) return demoMetrics(trades.length);
+type BRow = { label: string; n: number; winRate: number; avgPl: number };
 
-  const wins = closed.filter((t) => Number(t.current_pl) > 0);
-  const losses = closed.filter((t) => Number(t.current_pl) < 0);
+function BreakdownTable({ title, rows }: { title: string; rows: BRow[] }) {
+  return (
+    <div className="glass-card p-0 overflow-hidden">
+      <div className="px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
+        {title}
+      </div>
+      <table className="w-full text-xs">
+        <thead className="text-muted-foreground">
+          <tr className="border-b border-border">
+            <th className="text-left px-4 py-1.5 font-medium">Label</th>
+            <th className="text-right px-4 py-1.5 font-medium">n</th>
+            <th className="text-right px-4 py-1.5 font-medium">Win %</th>
+            <th className="text-right px-4 py-1.5 font-medium">Avg P/L</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr><td colSpan={4} className="px-4 py-3 text-center text-muted-foreground">No data</td></tr>
+          )}
+          {rows.map((r) => (
+            <tr key={r.label} className="border-b border-border/60 last:border-0">
+              <td className="px-4 py-1.5 truncate max-w-[160px]" title={r.label}>{r.label}</td>
+              <td className="px-4 py-1.5 text-right ticker-mono">{r.n}</td>
+              <td className={cn("px-4 py-1.5 text-right ticker-mono", r.winRate >= 50 ? "text-bull" : "text-bear")}>
+                {r.winRate.toFixed(0)}%
+              </td>
+              <td className={cn("px-4 py-1.5 text-right ticker-mono", r.avgPl >= 0 ? "text-bull" : "text-bear")}>
+                {r.avgPl >= 0 ? "+" : ""}{r.avgPl.toFixed(0)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function rowFor(label: string, ts: PaperTrade[]): BRow {
+  const wins = ts.filter((t) => t.status === "WIN").length;
+  const losses = ts.filter((t) => t.status === "LOSS").length;
+  const closed = wins + losses;
+  const avgPl = ts.length ? ts.reduce((a, t) => a + Number(t.current_pl ?? 0), 0) / ts.length : 0;
+  return { label, n: ts.length, winRate: closed ? (wins / closed) * 100 : 0, avgPl };
+}
+
+function bucketBy<K extends string | number>(ts: PaperTrade[], key: (t: PaperTrade) => K | undefined): BRow[] {
+  const buckets = new Map<string, PaperTrade[]>();
+  for (const t of ts) {
+    const k = key(t);
+    if (k == null) continue;
+    const ks = String(k);
+    if (!buckets.has(ks)) buckets.set(ks, []);
+    buckets.get(ks)!.push(t);
+  }
+  return Array.from(buckets.entries())
+    .map(([label, list]) => rowFor(label, list))
+    .sort((a, b) => b.n - a.n);
+}
+
+function computeReal(trades: PaperTrade[], signals: Record<string, Signal>) {
+  const closed = trades.filter((t) => t.status !== "OPEN");
+  const wins = closed.filter((t) => t.status === "WIN");
+  const losses = closed.filter((t) => t.status === "LOSS");
   const grossWin = wins.reduce((a, t) => a + Number(t.current_pl), 0);
   const grossLoss = Math.abs(losses.reduce((a, t) => a + Number(t.current_pl), 0));
 
-  const sorted = [...closed].sort((a, b) => new Date(a.opened_at).getTime() - new Date(b.opened_at).getTime());
+  const sorted = [...closed].sort(
+    (a, b) => new Date(a.closed_at ?? a.opened_at).getTime() - new Date(b.closed_at ?? b.opened_at).getTime(),
+  );
   let eq = 0; let peak = 0; let maxDD = 0;
   const equityCurve = sorted.map((t, i) => {
     eq += Number(t.current_pl);
@@ -184,29 +241,70 @@ function computeMetrics(trades: PaperTrade[]) {
 
   const dailyMap = new Map<string, number>();
   sorted.forEach((t) => {
-    const k = new Date(t.opened_at).toISOString().slice(5, 10);
+    const k = new Date(t.closed_at ?? t.opened_at).toISOString().slice(5, 10);
     dailyMap.set(k, (dailyMap.get(k) ?? 0) + Number(t.current_pl));
   });
   const dailyPL = Array.from(dailyMap.entries()).map(([label, pl]) => ({ label, pl: Number(pl.toFixed(2)) }));
 
-  const tickerMap = new Map<string, number>();
-  sorted.forEach((t) => tickerMap.set(t.ticker, (tickerMap.get(t.ticker) ?? 0) + Number(t.current_pl)));
-  const byTicker = Array.from(tickerMap.entries()).map(([ticker, pl]) => ({ ticker, pl: Number(pl.toFixed(2)) })).sort((a, b) => b.pl - a.pl);
+  const byTicker = bucketBy(closed, (t) => t.ticker);
+  const byDirection = bucketBy(closed, (t) => t.direction);
+
+  const byRisk = bucketBy(closed, (t) => {
+    const s = t.signal_id ? signals[t.signal_id] : undefined;
+    return s?.risk_level;
+  });
+  const bySource = bucketBy(closed, (t) => {
+    const s = t.signal_id ? signals[t.signal_id] : undefined;
+    return s?.source ?? "unknown";
+  });
+  const byConfidence = bucketBy(closed, (t) => {
+    const s = t.signal_id ? signals[t.signal_id] : undefined;
+    if (!s) return undefined;
+    const c = s.confidence;
+    if (c < 60) return "50–59";
+    if (c < 70) return "60–69";
+    if (c < 80) return "70–79";
+    if (c < 90) return "80–89";
+    return "90+";
+  });
+
+  // By tag — a trade can appear in multiple tag buckets.
+  const tagBuckets = new Map<TagId, PaperTrade[]>();
+  for (const t of closed) {
+    const s = t.signal_id ? signals[t.signal_id] : undefined;
+    if (!s) continue;
+    for (const tag of deriveTags(s, new Set())) {
+      if (!tagBuckets.has(tag)) tagBuckets.set(tag, []);
+      tagBuckets.get(tag)!.push(t);
+    }
+  }
+  for (const tag of ALL_TAGS) if (!tagBuckets.has(tag)) tagBuckets.set(tag, []);
+  const byTag = Array.from(tagBuckets.entries())
+    .map(([label, list]) => rowFor(label, list))
+    .filter((r) => r.n > 0)
+    .sort((a, b) => b.n - a.n);
+
+  // High-conviction hit rate (confidence >= 80)
+  const highConv = closed.filter((t) => {
+    const s = t.signal_id ? signals[t.signal_id] : undefined;
+    return s && s.confidence >= 80;
+  });
+  const highConvWins = highConv.filter((t) => t.status === "WIN").length;
+
+  const avgMfe = closed.length ? closed.reduce((a, t) => a + Number(t.mfe ?? 0), 0) / closed.length : 0;
+  const avgMae = closed.length ? closed.reduce((a, t) => a + Number(t.mae ?? 0), 0) / closed.length : 0;
 
   return {
     total: trades.length,
     open: trades.filter((t) => t.status === "OPEN").length,
-    rejected: 0,
     winRate: closed.length ? (wins.length / closed.length) * 100 : 0,
     profitFactor: grossLoss ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0,
     avgReturn: closed.length ? closed.reduce((a, t) => a + Number(t.current_pl), 0) / closed.length : 0,
     maxDD,
-    highConvHit: 0,
-    equityCurve,
-    dailyPL,
-    quality: demoMetrics(0).quality,
-    byTicker,
-    byDTE: demoMetrics(0).byDTE,
+    highConvHit: highConv.length ? (highConvWins / highConv.length) * 100 : 0,
+    avgMfe, avgMae,
+    equityCurve, dailyPL,
+    byTicker, byDirection, byRisk, bySource, byConfidence, byTag,
   };
 }
 
@@ -222,28 +320,42 @@ function demoMetrics(total: number) {
   return {
     total: total || 47,
     open: 3,
-    rejected: 18,
     winRate: 62,
     profitFactor: 1.84,
     avgReturn: 28.4,
     maxDD: -210.5,
     highConvHit: 71,
-    equityCurve,
-    dailyPL,
-    quality: [
-      { bucket: "50–59", count: 4 },
-      { bucket: "60–69", count: 9 },
-      { bucket: "70–79", count: 14 },
-      { bucket: "80–89", count: 11 },
-      { bucket: "90+",   count: 5 },
-    ],
+    avgMfe: 84, avgMae: -42,
+    equityCurve, dailyPL,
     byTicker: [
-      { ticker: "NVDA", pl: 412 }, { ticker: "META", pl: 280 }, { ticker: "AMD", pl: 165 },
-      { ticker: "SPY", pl: -90 }, { ticker: "TSLA", pl: -140 }, { ticker: "AAPL", pl: 60 },
-    ],
-    byDTE: [
-      { dte: "0DTE", winRate: 52 }, { dte: "1-2", winRate: 58 }, { dte: "3-7", winRate: 67 },
-      { dte: "8-14", winRate: 64 }, { dte: "15-30", winRate: 55 }, { dte: "30+", winRate: 49 },
-    ],
+      { label: "NVDA", n: 12, winRate: 67, avgPl: 34 },
+      { label: "META", n: 9, winRate: 55, avgPl: 21 },
+      { label: "AMD", n: 7, winRate: 57, avgPl: 18 },
+    ] as BRow[],
+    byDirection: [
+      { label: "CALL", n: 28, winRate: 61, avgPl: 32 },
+      { label: "PUT", n: 19, winRate: 58, avgPl: 22 },
+    ] as BRow[],
+    byRisk: [
+      { label: "LOW", n: 14, winRate: 71, avgPl: 24 },
+      { label: "MEDIUM", n: 22, winRate: 59, avgPl: 28 },
+      { label: "HIGH", n: 11, winRate: 45, avgPl: 18 },
+    ] as BRow[],
+    bySource: [
+      { label: "Alpaca Signal Engine v1", n: 18, winRate: 64, avgPl: 31 },
+      { label: "Demo seed", n: 29, winRate: 58, avgPl: 24 },
+    ] as BRow[],
+    byConfidence: [
+      { label: "50–59", n: 4, winRate: 25, avgPl: -12 },
+      { label: "60–69", n: 9, winRate: 44, avgPl: 8 },
+      { label: "70–79", n: 14, winRate: 57, avgPl: 22 },
+      { label: "80–89", n: 11, winRate: 73, avgPl: 41 },
+      { label: "90+",   n: 5, winRate: 80, avgPl: 58 },
+    ] as BRow[],
+    byTag: [
+      { label: "VWAP Reclaim", n: 12, winRate: 67, avgPl: 34 },
+      { label: "Volume Spike", n: 9, winRate: 56, avgPl: 21 },
+      { label: "RSI Momentum", n: 8, winRate: 50, avgPl: 12 },
+    ] as BRow[],
   };
 }

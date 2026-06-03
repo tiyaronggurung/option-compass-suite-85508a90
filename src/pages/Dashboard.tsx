@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
 import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
+import { signalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
@@ -43,6 +44,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [signals, setSignals] = useState<Signal[] | null>(null);
   const [trades, setTrades] = useState<PaperTrade[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [watch, setWatch] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [sourceMode, setSourceMode] = useState<SourceMode>("both");
@@ -53,16 +55,18 @@ export default function Dashboard() {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }, { data: settings }] = await Promise.all([
+      const [{ data: s }, { data: t }, { data: w }, { data: settings }, { data: actions }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
+        supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).eq("action", "dismissed"),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
+      setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
       if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
     })();
 
@@ -130,6 +134,7 @@ export default function Dashboard() {
     });
     // Unique violation just means already dismissed — silent.
     if (error && error.code !== "23505") toast.error(error.message);
+    setDismissedIds((prev) => new Set(prev).add(s.id));
     setSignals((prev) => prev ? prev.filter((x) => x.id !== s.id) : prev);
     toast("Signal dismissed");
   }
@@ -222,6 +227,7 @@ export default function Dashboard() {
                 onApprove={approve}
                 onReject={dismiss}
                 onDetails={(sig) => setDetailSignal(sig)}
+                outcome={signalOutcome(s, trades, dismissedIds)}
               />
             ))}
       </section>
@@ -230,6 +236,7 @@ export default function Dashboard() {
         signal={detailSignal}
         open={!!detailSignal}
         onOpenChange={(v) => !v && setDetailSignal(null)}
+        outcome={detailSignal ? signalOutcome(detailSignal, trades, dismissedIds) : undefined}
       />
     </div>
   );
