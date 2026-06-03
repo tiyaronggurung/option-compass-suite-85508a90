@@ -236,12 +236,12 @@ export default function Dashboard() {
             </Button>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <TagIcon className="h-3.5 w-3.5 text-muted-foreground mr-0.5" />
+        <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TagIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0 mr-0.5" />
           <Button
             size="sm"
             variant={tagFilter === null ? "secondary" : "ghost"}
-            className="h-7 text-[11px] px-2"
+            className="h-7 text-[11px] px-2 shrink-0"
             onClick={() => setTagFilter(null)}
           >
             Any tag
@@ -251,7 +251,7 @@ export default function Dashboard() {
               key={t}
               size="sm"
               variant={tagFilter === t ? "secondary" : "ghost"}
-              className="h-7 text-[11px] px-2"
+              className="h-7 text-[11px] px-2 shrink-0"
               onClick={() => setTagFilter(tagFilter === t ? null : t)}
             >
               {t}
