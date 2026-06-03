@@ -16,6 +16,7 @@ import MarkingEngineStatus from "@/components/MarkingEngineStatus";
 import OptionsChainPanel from "@/components/OptionsChainPanel";
 import SignalScannerPanel from "@/components/SignalScannerPanel";
 import ScannerUniversePanel from "@/components/ScannerUniversePanel";
+import ConfirmationProvidersPanel from "@/components/ConfirmationProvidersPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -102,6 +103,8 @@ export default function Settings() {
       <SignalScannerPanel />
 
       <ScannerUniversePanel />
+
+      <ConfirmationProvidersPanel />
 
       <OptionsChainPanel />
 

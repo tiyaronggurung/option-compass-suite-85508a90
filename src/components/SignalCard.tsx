@@ -6,6 +6,8 @@ import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 import { getFreshness } from "@/lib/signalFreshness";
+import { ConfirmationBadge } from "@/components/ConfirmationBadge";
+import type { ConfirmationMatrix } from "@/lib/confirmations";
 
 type Props = {
   signal: Signal;
@@ -107,6 +109,12 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
           </Badge>
         )}
       </div>
+
+      <ConfirmationBadge
+        className="mt-2"
+        matrix={(signal as any).source_confirmations as ConfirmationMatrix | null}
+        direction={signal.direction as "CALL" | "PUT"}
+      />
 
       {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
         <div className="mt-2 text-[11px] text-muted-foreground line-clamp-2">

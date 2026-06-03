@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import type { RankBreakdown } from "@/lib/rankSignals";
+import { ConfirmationMatrix } from "@/components/ConfirmationMatrix";
+import type { ConfirmationMatrix as MatrixT } from "@/lib/confirmations";
 
 interface Props {
   signal: Signal | null;
@@ -153,6 +155,14 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
           <ComponentBreakdown tm={s.technical_metrics as any} />
 
           {rankBreakdown && <RankingBreakdown b={rankBreakdown} />}
+
+          <ConfirmationMatrix
+            matrix={(s as any).source_confirmations as MatrixT | null}
+            direction={s.direction as "CALL" | "PUT"}
+            score={(s as any).confirmation_score ?? null}
+            label={(s as any).confirmation_label ?? null}
+          />
+
 
 
 
