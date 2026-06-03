@@ -11,7 +11,10 @@ import AuthPage from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Watchlist from "@/pages/Watchlist";
 import Trades from "@/pages/Trades";
-import ComingSoon from "@/pages/ComingSoon";
+import Analyst from "@/pages/Analyst";
+import Alerts from "@/pages/Alerts";
+import Performance from "@/pages/Performance";
+import SettingsPage from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,10 +33,10 @@ const App = () => (
               <Route index element={<Dashboard />} />
               <Route path="watchlist" element={<Watchlist />} />
               <Route path="trades" element={<Trades />} />
-              <Route path="analyst" element={<ComingSoon title="AI Analyst" />} />
-              <Route path="alerts" element={<ComingSoon title="Alerts" />} />
-              <Route path="performance" element={<ComingSoon title="Performance" />} />
-              <Route path="settings" element={<ComingSoon title="Settings" />} />
+              <Route path="analyst" element={<Analyst />} />
+              <Route path="alerts" element={<Alerts />} />
+              <Route path="performance" element={<Performance />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
