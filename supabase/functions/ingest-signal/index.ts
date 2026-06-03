@@ -20,6 +20,7 @@ const json = (status: number, body: unknown) =>
 const SignalSchema = z.object({
   signal_id: z.string().uuid().optional(), // external dedup id
   source: z.string().min(1).max(100).optional(),
+  is_demo: z.boolean().optional(),
   ticker: z.string().min(1).max(10),
   direction: z.enum(["CALL", "PUT"]),
   confidence: z.number().int().min(0).max(100),
