@@ -299,6 +299,9 @@ Deno.serve(async (req) => {
       const dedupeRaw = `${sym}|${draft.direction}|${bucket}`;
       const externalId = await sha1Uuid(dedupeRaw);
 
+      // TTL: stock-bar scanner has no DTE, default to 2h
+      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
       const { error } = await admin.from("signals").insert({
         ticker: draft.ticker,
         direction: draft.direction,
@@ -313,6 +316,7 @@ Deno.serve(async (req) => {
         hidden: false,
         source: "Alpaca Backend Scanner v1",
         external_id: externalId,
+        expires_at: expiresAt,
       });
       if (error) {
         if ((error as any).code === "23505") { skipped++; continue; }
