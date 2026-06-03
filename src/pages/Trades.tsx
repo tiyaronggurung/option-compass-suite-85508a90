@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, XCircle, CircleSlash } from "lucide-react";
+import { CheckCircle2, Sparkles, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -9,30 +9,46 @@ import { DisclaimerBar } from "@/components/Disclaimer";
 import { fmtPL, fmtPrice, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import type { Database } from "@/integrations/supabase/types";
+
+type CloseReason = Database["public"]["Enums"]["trade_close_reason"];
+type TradeReview = Database["public"]["Tables"]["trade_reviews"]["Row"];
+
+const REASON_OPTIONS: { value: CloseReason; label: string }[] = [
+  { value: "target_hit", label: "Target hit" },
+  { value: "stop_hit", label: "Stop hit" },
+  { value: "manual_close", label: "Manual close" },
+  { value: "expired", label: "Expired" },
+  { value: "invalidated", label: "Invalidated setup" },
+];
 
 export default function Trades() {
   const { user } = useAuth();
   const [trades, setTrades] = useState<PaperTrade[] | null>(null);
+  const [reviews, setReviews] = useState<Record<string, TradeReview>>({});
+  const [closing, setClosing] = useState<PaperTrade | null>(null);
+  const [reviewing, setReviewing] = useState<PaperTrade | null>(null);
 
   async function refresh() {
-    const { data } = await supabase
-      .from("paper_trades").select("*").eq("user_id", user!.id)
-      .order("opened_at", { ascending: false });
+    const [{ data }, { data: r }] = await Promise.all([
+      supabase.from("paper_trades").select("*").eq("user_id", user!.id)
+        .order("opened_at", { ascending: false }),
+      supabase.from("trade_reviews").select("*").eq("user_id", user!.id),
+    ]);
     setTrades(data ?? []);
+    const map: Record<string, TradeReview> = {};
+    (r ?? []).forEach((x) => { map[x.trade_id] = x; });
+    setReviews(map);
   }
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user]);
-
-  async function setStatus(t: PaperTrade, status: PaperTrade["status"]) {
-    const pl = status === "WIN" ? Number(t.risk_amount ?? 0) * 1.8
-             : status === "LOSS" ? -Number(t.risk_amount ?? 0)
-             : Number(t.current_pl ?? 0);
-    const { error } = await supabase.from("paper_trades")
-      .update({ status, current_pl: pl, closed_at: status === "OPEN" ? null : new Date().toISOString() })
-      .eq("id", t.id);
-    if (error) return toast.error(error.message);
-    toast.success(`Trade marked ${status}`);
-    refresh();
-  }
 
   const open = trades?.filter((t) => t.status === "OPEN") ?? [];
   const closed = trades?.filter((t) => t.status !== "OPEN") ?? [];
@@ -52,14 +68,26 @@ export default function Trades() {
       <Section title="Open">
         {!trades ? <Skeleton className="h-24" />
           : open.length === 0 ? <Empty text="No open paper trades. Approve a signal from the dashboard." />
-          : <TradeTable trades={open} onClose={setStatus} />}
+          : <TradeTable trades={open} onCloseClick={(t) => setClosing(t)} reviews={reviews} onReviewClick={setReviewing} />}
       </Section>
 
       <Section title="Closed">
         {!trades ? null
           : closed.length === 0 ? <Empty text="No closed trades yet." />
-          : <TradeTable trades={closed} />}
+          : <TradeTable trades={closed} reviews={reviews} onReviewClick={setReviewing} />}
       </Section>
+
+      <CloseTradeDialog
+        trade={closing}
+        onOpenChange={(v) => !v && setClosing(null)}
+        onClosed={() => { setClosing(null); refresh(); }}
+      />
+      <ReviewDialog
+        trade={reviewing}
+        cached={reviewing ? reviews[reviewing.id] : undefined}
+        onOpenChange={(v) => !v && setReviewing(null)}
+        onSaved={(r) => setReviews((m) => ({ ...m, [r.trade_id]: r }))}
+      />
     </div>
   );
 }
@@ -77,16 +105,23 @@ function Empty({ text }: { text: string }) {
   return <div className="glass-card p-8 text-center text-sm text-muted-foreground">{text}</div>;
 }
 
-function TradeTable({ trades, onClose }: { trades: PaperTrade[]; onClose?: (t: PaperTrade, s: PaperTrade["status"]) => void }) {
+function TradeTable({
+  trades, onCloseClick, reviews, onReviewClick,
+}: {
+  trades: PaperTrade[];
+  onCloseClick?: (t: PaperTrade) => void;
+  reviews: Record<string, TradeReview>;
+  onReviewClick: (t: PaperTrade) => void;
+}) {
   return (
     <div className="glass-card overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="text-xs text-muted-foreground">
           <tr className="border-b border-border">
             <Th>Ticker</Th><Th>Dir</Th><Th>Contract</Th><Th className="text-right">Entry</Th>
-            <Th className="text-right">Stop</Th><Th className="text-right">Target</Th><Th className="text-right">Risk</Th>
-            <Th className="text-right">P/L</Th><Th>Status</Th><Th>Opened</Th>
-            {onClose && <Th className="text-right">Actions</Th>}
+            <Th className="text-right">Exit</Th><Th className="text-right">P/L</Th><Th className="text-right">P/L %</Th>
+            <Th>Reason</Th><Th>Status</Th><Th>Opened</Th>
+            <Th className="text-right">Actions</Th>
           </tr>
         </thead>
         <tbody>
@@ -100,27 +135,28 @@ function TradeTable({ trades, onClose }: { trades: PaperTrade[]; onClose?: (t: P
               </Td>
               <Td className="ticker-mono text-muted-foreground">{t.contract_idea ?? "—"}</Td>
               <Td className="text-right ticker-mono">${fmtPrice(Number(t.entry_price))}</Td>
-              <Td className="text-right ticker-mono text-muted-foreground">${fmtPrice(Number(t.stop_idea))}</Td>
-              <Td className="text-right ticker-mono text-muted-foreground">${fmtPrice(Number(t.target_idea))}</Td>
-              <Td className="text-right ticker-mono">${fmtPrice(Number(t.risk_amount))}</Td>
+              <Td className="text-right ticker-mono text-muted-foreground">
+                {t.exit_price != null ? `$${fmtPrice(Number(t.exit_price))}` : "—"}
+              </Td>
               <Td className={cn("text-right ticker-mono", Number(t.current_pl) >= 0 ? "text-bull" : "text-bear")}>
                 ${fmtPL(Number(t.current_pl))}
               </Td>
+              <Td className={cn("text-right ticker-mono", Number(t.realized_pl_pct ?? 0) >= 0 ? "text-bull" : "text-bear")}>
+                {t.realized_pl_pct != null ? `${Number(t.realized_pl_pct).toFixed(1)}%` : "—"}
+              </Td>
+              <Td className="text-muted-foreground text-xs">{t.exit_reason ? reasonLabel(t.exit_reason) : "—"}</Td>
               <Td><StatusBadge status={t.status} /></Td>
               <Td className="text-muted-foreground whitespace-nowrap">{timeAgo(t.opened_at)}</Td>
-              {onClose && (
-                <Td className="text-right whitespace-nowrap space-x-1">
-                  <Button size="sm" variant="ghost" className="text-bull" onClick={() => onClose(t, "WIN")}>
-                    <CheckCircle2 className="h-4 w-4" />
+              <Td className="text-right whitespace-nowrap space-x-1">
+                {onCloseClick ? (
+                  <Button size="sm" variant="ghost" onClick={() => onCloseClick(t)}>Close…</Button>
+                ) : (
+                  <Button size="sm" variant="ghost" onClick={() => onReviewClick(t)}>
+                    <Sparkles className="h-4 w-4 mr-1" />
+                    {reviews[t.id] ? "Review" : "Review trade"}
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-bear" onClick={() => onClose(t, "LOSS")}>
-                    <XCircle className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => onClose(t, "CLOSED")}>
-                    <CircleSlash className="h-4 w-4" />
-                  </Button>
-                </Td>
-              )}
+                )}
+              </Td>
             </tr>
           ))}
         </tbody>
@@ -140,4 +176,220 @@ function StatusBadge({ status }: { status: PaperTrade["status"] }) {
     CLOSED: "bg-muted text-muted-foreground",
   };
   return <Badge className={cn("border-0", m[status])}>{status}</Badge>;
+}
+
+function reasonLabel(r: CloseReason): string {
+  return REASON_OPTIONS.find((x) => x.value === r)?.label ?? r;
+}
+
+function CloseTradeDialog({
+  trade, onOpenChange, onClosed,
+}: {
+  trade: PaperTrade | null;
+  onOpenChange: (v: boolean) => void;
+  onClosed: () => void;
+}) {
+  const [exitPrice, setExitPrice] = useState("");
+  const [reason, setReason] = useState<CloseReason>("manual_close");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (trade) {
+      setExitPrice(trade.entry_price != null ? String(trade.entry_price) : "");
+      setReason("manual_close");
+    }
+  }, [trade]);
+
+  if (!trade) return null;
+
+  const entry = Number(trade.entry_price ?? 0);
+  const exit = Number(exitPrice);
+  const dir = trade.direction === "CALL" ? 1 : -1;
+  const moveAbs = entry > 0 && !Number.isNaN(exit) ? (exit - entry) * dir : 0;
+  const movePct = entry > 0 && !Number.isNaN(exit) ? (moveAbs / entry) * 100 : 0;
+  const risk = Number(trade.risk_amount ?? 0);
+  // Approximate realized P/L $ using risk_amount as position size proxy.
+  const realizedPl = risk > 0 ? (moveAbs / entry) * risk * 2 : moveAbs;
+  const status: PaperTrade["status"] =
+    reason === "target_hit" ? "WIN"
+    : reason === "stop_hit" ? "LOSS"
+    : moveAbs > 0 ? "WIN" : moveAbs < 0 ? "LOSS" : "CLOSED";
+
+  async function submit() {
+    if (!exitPrice || Number.isNaN(exit)) {
+      toast.error("Enter a valid exit price");
+      return;
+    }
+    setSubmitting(true);
+    // Defer real intra-trade MFE/MAE to Phase 4F — use close-time realized move.
+    const mfe = moveAbs > 0 ? moveAbs : 0;
+    const mae = moveAbs < 0 ? moveAbs : 0;
+    const { error } = await supabase.from("paper_trades").update({
+      status,
+      exit_price: exit,
+      exit_reason: reason,
+      current_pl: Number(realizedPl.toFixed(2)),
+      realized_pl_pct: Number(movePct.toFixed(2)),
+      mfe: Number(mfe.toFixed(2)),
+      mae: Number(mae.toFixed(2)),
+      max_gain: Math.abs(mfe),
+      max_drawdown: Math.abs(mae),
+      closed_at: new Date().toISOString(),
+    }).eq("id", trade!.id);
+    setSubmitting(false);
+    if (error) return toast.error(error.message);
+    toast.success(`Trade closed: ${status}`);
+    onClosed();
+  }
+
+  return (
+    <Dialog open={!!trade} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Close paper trade</DialogTitle>
+          <DialogDescription>
+            {trade.ticker} {trade.direction} · entry ${fmtPrice(entry)}. Educational only.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="exit-price">Exit price</Label>
+            <Input
+              id="exit-price"
+              type="number"
+              step="0.01"
+              value={exitPrice}
+              onChange={(e) => setExitPrice(e.target.value)}
+              className="ticker-mono"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Close reason</Label>
+            <Select value={reason} onValueChange={(v) => setReason(v as CloseReason)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {REASON_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="rounded-md border border-border bg-card-elevated/40 p-3 text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Move</span>
+              <span className={cn("ticker-mono", moveAbs >= 0 ? "text-bull" : "text-bear")}>
+                {moveAbs >= 0 ? "+" : ""}{moveAbs.toFixed(2)} ({movePct.toFixed(2)}%)
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Realized P/L (approx)</span>
+              <span className={cn("ticker-mono", realizedPl >= 0 ? "text-bull" : "text-bear")}>
+                ${fmtPL(realizedPl)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Outcome</span>
+              <span className="ticker-mono">{status}</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground pt-1">
+              MFE/MAE recorded at close. Live intra-trade tracking arrives in Phase 4F.
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={submit} disabled={submitting}>
+            {submitting ? "Closing…" : "Close trade"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReviewDialog({
+  trade, cached, onOpenChange, onSaved,
+}: {
+  trade: PaperTrade | null;
+  cached?: TradeReview;
+  onOpenChange: (v: boolean) => void;
+  onSaved: (r: TradeReview) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [review, setReview] = useState<TradeReview | null>(null);
+
+  useEffect(() => {
+    setReview(cached ?? null);
+  }, [cached, trade]);
+
+  async function run(force = false) {
+    if (!trade) return;
+    setLoading(true);
+    const { data, error } = await supabase.functions.invoke("review-trade", {
+      body: { trade_id: trade.id, force },
+    });
+    setLoading(false);
+    if (error) return toast.error(error.message);
+    if (data?.review) {
+      setReview(data.review as TradeReview);
+      onSaved(data.review as TradeReview);
+    }
+  }
+
+  useEffect(() => {
+    if (trade && !cached) run(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trade]);
+
+  if (!trade) return null;
+
+  return (
+    <Dialog open={!!trade} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI post-trade review · {trade.ticker} {trade.direction}
+          </DialogTitle>
+          <DialogDescription>Educational analysis. Not financial advice.</DialogDescription>
+        </DialogHeader>
+
+        {loading && !review ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
+        ) : review ? (
+          <div className="space-y-3 text-sm">
+            <ReviewRow label="Summary" value={review.summary} />
+            <ReviewRow label="Entry quality" value={review.entry_quality} />
+            <ReviewRow label="Risk/reward" value={review.rr_quality} />
+            <ReviewRow label="Timing" value={review.timing} />
+            <ReviewRow label="Signal strength" value={review.signal_strength} />
+            <ReviewRow label="Lessons" value={review.lessons} accent />
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">No review yet.</div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => run(true)} disabled={loading}>
+            {loading ? "Regenerating…" : "Regenerate"}
+          </Button>
+          <Button onClick={() => onOpenChange(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReviewRow({ label, value, accent }: { label: string; value: string | null; accent?: boolean }) {
+  if (!value) return null;
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</div>
+      <div className={cn("leading-snug", accent && "text-primary")}>{value}</div>
+    </div>
+  );
 }
