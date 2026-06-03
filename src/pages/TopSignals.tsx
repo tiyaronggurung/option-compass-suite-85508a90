@@ -102,7 +102,7 @@ export default function TopSignals() {
       openTradesCount: openTrades.length,
       todayRealizedPL,
     });
-    if (!res.ok) return toast.error(res.reason);
+    if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Paper trade opened on ${s.ticker}`);
     const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user.id);
     setTrades(data ?? []);
