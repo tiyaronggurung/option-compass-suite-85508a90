@@ -162,7 +162,7 @@ function TradeTable({
 }) {
   return (
     <div className="glass-card overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="min-w-max w-full text-sm whitespace-nowrap">
         <thead className="text-xs text-muted-foreground">
           <tr className="border-b border-border">
             <Th>Ticker</Th><Th>Dir</Th><Th>Contract</Th><Th className="text-right">Entry</Th>
