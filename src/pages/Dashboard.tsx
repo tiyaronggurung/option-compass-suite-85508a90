@@ -46,6 +46,9 @@ export default function Dashboard() {
   const [watch, setWatch] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [sourceMode, setSourceMode] = useState<SourceMode>("both");
+  const [tagFilter, setTagFilter] = useState<TagId | null>(null);
+  const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
+  const watchSet = useMemo(() => new Set(watch), [watch]);
 
   useEffect(() => {
     let cancel = false;
