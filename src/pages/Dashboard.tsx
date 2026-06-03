@@ -129,10 +129,11 @@ export default function Dashboard() {
       todayRealizedPL,
       intendedRisk,
     });
-    if (guard.ok === false) {
-      toast.error(guard.reason);
+    if (!guard.ok) {
+      toast.error((guard as { reason: string }).reason);
       return;
     }
+
 
     const { error } = await supabase.from("paper_trades").insert({
       user_id: user!.id,
