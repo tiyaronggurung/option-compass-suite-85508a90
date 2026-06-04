@@ -135,20 +135,24 @@ Deno.serve(async (req) => {
     probe(ticker, "apikey", true),
   ]);
 
-  // Recommendation
+  const probes = { authManual, apikeyManual, authFollow, apikeyFollow };
+  const followingWorks = authFollow.classification === "csv_ok"
+    ? "auth"
+    : apikeyFollow.classification === "csv_ok"
+    ? "apikey"
+    : null;
+
   let recommendation = "";
-  if (authResult.classification === "csv_ok") {
-    recommendation = `Auth param "auth" works. Current scoring code is correct.`;
-  } else if (apikeyResult.classification === "csv_ok") {
-    recommendation = `Auth param "apikey" works. Update scoring.ts to use apikey=<KEY> instead of auth=<KEY>.`;
-  } else if (authResult.classification === "login_page" || apikeyResult.classification === "login_page") {
-    recommendation = `Token is being rejected — Finviz returned the login page for both param names. Verify the FINVIZ_API_KEY value (it must be the Elite "Export auth token" from finviz.com/account, not the login password).`;
-  } else if (authResult.classification === "html_response" || apikeyResult.classification === "html_response") {
-    recommendation = `Finviz returned HTML, suggesting the quote_export.ashx endpoint is not available on the current plan. Confirm Finviz Elite subscription is active and includes data exports.`;
-  } else if (authResult.classification === "unauthorized" || apikeyResult.classification === "unauthorized") {
-    recommendation = `HTTP 401/403 from Finviz — token invalid or endpoint not entitled.`;
+  if (followingWorks) {
+    recommendation = `Following the redirect with "${followingWorks}" returns valid CSV. Current scoring code (which follows redirects by default) should work. Investigate why fields parse as zero.`;
+  } else if (authManual.http_status === 301 || apikeyManual.http_status === 301) {
+    recommendation = `Finviz returns 301 redirect on quote_export.ashx and following the redirect does NOT yield CSV. Inspect probes.authManual.redirect_location — typically this means the endpoint moved to a new host/path, or the redirect goes to a login/landing page indicating the token/plan is not entitled.`;
+  } else if (authFollow.classification === "login_page" || apikeyFollow.classification === "login_page") {
+    recommendation = `Token is being rejected — Finviz redirected to login. Verify FINVIZ_API_KEY is the Elite "Export auth token" from finviz.com/account (not the password).`;
+  } else if (authFollow.classification === "html_response") {
+    recommendation = `Finviz returned HTML, suggesting quote_export.ashx is not on the current plan, or endpoint path has changed.`;
   } else {
-    recommendation = `Neither auth nor apikey returned valid CSV. See classifications below.`;
+    recommendation = `Inconclusive — see probes below.`;
   }
 
   return new Response(JSON.stringify({
@@ -157,7 +161,7 @@ Deno.serve(async (req) => {
     key_configured: true,
     key_length: FINVIZ_KEY.length,
     recommendation,
-    probes: { auth: authResult, apikey: apikeyResult },
+    probes,
   }, null, 2), {
     status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
