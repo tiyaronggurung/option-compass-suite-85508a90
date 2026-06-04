@@ -1,100 +1,124 @@
-# Institutional Signal Engine v2
+# Phase 1 + Phase 2 — Data Foundation Build
 
-Big build. Confirming scope before any code changes (per your standing rule).
+No scoring math changes. No weight changes. No tier/scanner/Tradier/UW/paper/live/guest touches. Everything below is **collect + store + display + explain** plus passive outcome tracking.
 
-## Hard safety rules (no exceptions)
-- Do NOT remove, modify, or break the `unusual_whales` provider row, enum value, panel entry, or shared-helper stub. It stays exactly as-is for future use.
-- Do NOT touch: ingest webhook, contract picker, paper approval, AI analyst, risk manager, public guest flows, live orders. Paper-only.
-- Alpaca remains primary market-data source. Existing scanner keeps working throughout — new engine layers on top.
+---
 
-## 1. New providers (placeholders + real wiring path)
-DB migration adds these `provider_id` enum values + `provider_configs` rows (all start `enabled=false`, `mode=simulated`, `last_status=unknown`):
-- `finviz` — screener / technical / sector / news
-- `tradier` — already exists in `provider_kind` for chains; add `provider_configs` row for confirmation matrix
-- `finnhub` — news + fundamentals + analyst actions
-- `apify` — X/Twitter sentiment
+## Phase 1 — Insider Intelligence
 
-`unusual_whales` row untouched.
+### 1.1 Schema (one migration)
 
-Secrets prompted via `add_secret` only after you say go: `FINVIZ_API_KEY`, `TRADIER_API_KEY`, `FINNHUB_API_KEY`, `APIFY_API_TOKEN`.
-If a key is missing, that source returns neutral 50, never blocks the signal.
+**Table: `insider_transactions`**
+- `ticker` text, `insider_name` text, `role` text (CEO/CFO/Director/Officer/10%/Other)
+- `transaction_type` text (P-Purchase / S-Sale / A-Grant / M-Option Exercise / G-Gift / Other)
+- `filing_date` date, `transaction_date` date
+- `shares` numeric, `price` numeric, `total_value` numeric
+- `direction` text ('buy' | 'sell')
+- `source` text ('finviz' | 'sec_form4' | 'manual' | future…)
+- `external_ref` text (dedupe key: source + filing hash)
+- standard id/created_at/updated_at
+- Unique index on `(ticker, insider_name, transaction_date, transaction_type, shares, source)` for idempotent upserts
+- RLS: select for authenticated; insert/update via service role only (edge functions)
+- GRANTs: select to authenticated, all to service_role
 
-## 2. Scoring engine (rewrite `scan-signals` scorer)
-New shared helper `supabase/functions/_shared/scoring.ts` with 5 components:
+**Table: `insider_strength_scores`** (metadata cache — NOT wired into confidence)
+- `ticker` text PK
+- `score` int 0–100, `label` text (`strong_buy` | `buy` | `neutral` | `sell` | `strong_sell`)
+- `signals` jsonb (array of `{ kind, weight, detail }`: CEO_buy, CFO_buy, director_buy, cluster_30d, large_dollar, multiple_insiders, option_exercise_weak, grant_weak, small_buy_weak)
+- `window_days` int default 90
+- `as_of` timestamptz
+- RLS: select for authenticated; service-role writes
+- This is a derived view used purely for display + explanation.
 
-| Component       | Weight | Primary source                    |
-|-----------------|--------|-----------------------------------|
-| Options Flow    | 30%    | Tradier (UW kept dormant)         |
-| Technical       | 25%    | Alpaca + Alpha Vantage + Finviz   |
-| News            | 20%    | Finnhub + Finviz news             |
-| Sentiment       | 15%    | Apify X/Twitter                   |
-| Volatility      | 10%    | Tradier IV/Greeks                 |
+### 1.2 Ingestion edge function: `insider-sync`
 
-Final = weighted sum, clamped 0–100. Each component 0–100; missing source → neutral 50 + reason "not configured".
-Per-component breakdown stored in `signals.technical_metrics.scoring_v2 = { options_flow, technical, news, sentiment, volatility, sources_used[], final }`.
+- Admin-gated POST (also cron-callable with `SIGNAL_INGEST_SECRET`)
+- For each watchlist/universe ticker:
+  - **Finviz** (`insidertrading.ashx?t=TICKER&v=2`) — already in `_shared/finviz-extras.ts` insider fetch; extend to capture full row schema and write to `insider_transactions`
+  - **SEC Form 4 architecture stub** — typed adapter interface `InsiderAdapter` with `name`, `fetch(ticker)`, `parse(raw)`; ship `finvizAdapter` working + `secForm4Adapter` returning `{ available: false, reason: "not yet implemented" }`. This is the future-ready hook the user asked for.
+- Compute `insider_strength_scores` per ticker from last 90 days:
+  - +25 CEO buy, +20 CFO buy, +12 Director buy, +10 multiple insiders (≥3 buyers), +15 cluster (≥3 buys / 30d), +10 large dollar (>$500k), −10 option exercise dominant, −5 grants dominant, −5 only-small purchases
+  - Clamp 0–100, map to label
+- Idempotent upserts via `external_ref`
 
-## 3. Tiers
-New columns: `signals.tier text`, `signals.score_components jsonb`.
-- ≥90 → `elite`
-- 80–89 → `strong`
-- 70–79 → `watchlist`
-- <70 → `rejected` (`hidden=true`, kept for analytics, never on dashboard)
+### 1.3 Display + Explain (read-only UI)
 
-## 4. Market regime detector
-New edge function `detect-market-regime` (cron every 15min during market hours) using Alpaca SPY/QQQ/VIX bars.
-Writes `market_regime` table (single row, `id='global'`): `regime` (`bull|bear|sideways|high_vol`), `spy_trend`, `qqq_trend`, `vix_level`, `updated_at`.
-Applied as multiplier in scoring, **capped at ±5 points**:
-- Bull: CALL ×1.05, PUT ×0.95
-- Bear: PUT ×1.05, CALL ×0.95
-- High Vol: raise display threshold to 75 for watchlist tier
-- Sideways: neutral
+- **New tab** in `SignalDetailDialog`: "Insider Activity" block
+  - Strength score pill (color-coded), label, last 30/90 day buy vs sell counts
+  - Top 5 recent transactions table (date, name, role, type, shares, $value)
+  - Signals breakdown: each contributing factor shown with sign + label (e.g. "CEO buy +25", "Cluster (3 in 30d) +15")
+  - Explicit footer note: "Metadata only — does not affect confidence score"
+- **New admin page**: `/app/diagnostics/insiders` — last sync, row counts per source, last error per ticker
 
-## 5. Explanation engine
-`signals.reasons[]` populated from actual triggers (Tradier confirms flow, Finviz confirms breakout, RelVol 3.2×, etc). Never empty.
-Rendered in `SignalCard` + `SignalDetailDialog`. Source attribution shown per reason.
+---
 
-## 6. Dashboard reorganization (`Dashboard.tsx`)
-Top-down sections: Market Overview strip (SPY/QQQ/VIX + regime badge) → Elite → Strong → Watchlist. Existing filters preserved.
+## Phase 2 — Historical Performance Tracking
 
-## 7. Alerts
-Bump alert dispatch floor: only send for `confidence >= 80`. User can still raise their personal threshold.
+### 2.1 Schema (same migration)
 
-## 8. Confirmation panel update
-`ConfirmationProvidersPanel`: keep Unusual Whales card (label it "reserved — future use"), add Finviz, Tradier, Finnhub, Apify cards. X/Twitter card now backed by Apify. Reddit/Polymarket/Kalshi/Alpha Vantage/News stay as placeholders.
+**Table: `signal_outcomes`**
+- `signal_id` uuid PK references `signals(id)`
+- `ticker` text, `direction` text, `confidence` int, `tier` text
+- `score_components` jsonb (snapshot at creation — copy of `signals.score_components`)
+- `entry_price` numeric, `entry_at` timestamptz
+- `price_1d`, `price_3d`, `price_5d`, `price_10d`, `price_30d` numeric (nullable)
+- `return_1d`, `return_3d`, `return_5d`, `return_10d`, `return_30d` numeric (nullable, % signed by direction so CALL up = positive, PUT down = positive)
+- `win_1d`, `win_3d`, `win_5d`, `win_10d`, `win_30d` boolean (nullable; null = pending)
+- `status` text (`pending` | `partial` | `final` | `errored`)
+- `last_updated_at` timestamptz
+- RLS: select to authenticated, writes service-role only
 
-## 9. Self-learning v1 (lightweight, no auto-rebalance)
-Extend `SignalLearningPanel` to compute per-component win rate from closed paper trades. Show drift suggestions only — weights stay hardcoded until you approve a change.
+**Materialized stats are computed on-read** (no extra table needed for v1).
 
-## Files
+### 2.2 Ingestion hook
 
-**New**
-- `supabase/functions/_shared/scoring.ts`
-- `supabase/functions/_shared/regime.ts`
-- `supabase/functions/detect-market-regime/index.ts`
-- `supabase/functions/finviz-health/index.ts`
-- `supabase/functions/tradier-health/index.ts` (if missing)
-- `supabase/functions/finnhub-health/index.ts`
-- `supabase/functions/apify-sentiment-health/index.ts`
-- `src/components/MarketOverviewStrip.tsx`
-- `src/components/TierSection.tsx`
-- `src/lib/signalTiers.ts`
-- migration: add enum values, provider_configs rows, `market_regime` table, signal columns
+- **At signal creation**: trigger function copies `signals` row → `signal_outcomes` with `entry_price = signals.price`, `entry_at = signals.created_at`, status `pending`. This is a `AFTER INSERT` trigger on `signals` — does NOT modify scanner logic or signals table itself.
+- **Edge function `outcome-tracker`** (cron, every 30 min during market hours, also admin-trigger):
+  - Pulls all `pending`/`partial` outcomes
+  - For each: compute hours since `entry_at`; for any milestone window now ≥ that age, fetch close price from Alpaca bars (already integrated), compute return, set win bool by direction
+  - Marks `final` once `price_30d` populated
+  - Uses Alpaca only (already wired) — no new provider dependency
 
-**Modified**
-- `supabase/functions/scan-signals/index.ts` (call new scorer, write tier + components)
-- `src/components/SignalCard.tsx` (tier badge, reasons)
-- `src/components/SignalDetailDialog.tsx` (component breakdown table)
-- `src/components/ConfirmationProvidersPanel.tsx` (add 4 new cards, keep UW)
-- `src/pages/Dashboard.tsx` (tier sections, market overview)
-- `src/components/SignalLearningPanel.tsx` (per-component win rate)
+### 2.3 Performance dashboard (admin)
 
-**Untouched** (verified)
-- `ingest-signal`, `pick-contract`, `analyze-signal`, `review-trade`, `update-paper-marks`, `approveSignal.ts`, `riskGuard.ts`, all guest/public flows, Unusual Whales references.
+- **New page**: `/app/diagnostics/performance`
+  - Overall: win rate + avg return per window (1/3/5/10/30 day)
+  - **Confidence buckets**: 60–69, 70–79, 80–89, 90+ → win rate + avg return per window (the "67%/81%" view the user wants)
+  - **Best/worst component drivers**: bucket by `score_components.components.options_flow.score` quartile etc. → win rate per quartile
+  - Direction split (CALL vs PUT)
+  - Tier split (elite vs strong vs watchlist)
+  - Sample-size column always shown; gray-out cells with n<10
+- Read-only. Pure analytics. No write paths.
 
-## Open decisions before I start
-1. **Backwards compat**: leave old signals' `confidence` alone, new engine applies to newly scanned signals only? (recommended yes)
-2. **Rejected signals**: store full row with `hidden=true tier=rejected`? (recommended yes — needed for win-rate analytics)
-3. **Secrets**: prompt for all 4 keys now (Finviz/Tradier/Finnhub/Apify), or scaffold stubs first and prompt later when you're ready to wire each? (recommended: scaffold stubs first, prompt per-source when you say so)
-4. **Regime multiplier ±5 cap**: OK as proposed?
+---
 
-Reply "go with defaults" or specify changes, and I'll build it.
+## What this build deliberately does NOT do
+
+- Does not touch `_shared/scoring.ts` math, weights, regime adjust, or tier function
+- Does not change `signals` insert path beyond an additive `AFTER INSERT` trigger that writes to a separate table
+- Does not change scanner gate, hidden flag, or any reserved Tradier/UW/paper/live/guest code
+- Insider strength is **never** read by `scoreInstitutional()` in this phase
+
+---
+
+## Order of execution
+
+1. Create migration (both tables + trigger + GRANTs + RLS) → wait for approval
+2. Build `insider-sync` edge function + extend `finviz-extras` adapter shape
+3. Build `outcome-tracker` edge function
+4. Wire `SignalDetailDialog` "Insider Activity" block
+5. Build `/app/diagnostics/insiders` and `/app/diagnostics/performance` pages
+6. Backfill: run `insider-sync` once across watchlist; run `outcome-tracker` once to populate windows for existing signals
+7. Smoke-test with `score-debug` to confirm no scoring regression
+
+---
+
+## Confirm or adjust
+
+Reply **go** to execute as-is, or tell me what to change. Common knobs you might want to tune:
+
+- Insider score weights (CEO +25 etc.) — I picked sane defaults; tell me if you want different
+- Outcome windows (1/3/5/10/30 day) — confirm or change
+- Confidence buckets (60s/70s/80s/90+) — confirm or change
+- Cron frequency for `outcome-tracker` — 30 min default
+- Diagnostics pages admin-only? (defaulting yes, matching `/app/diagnostics`)
