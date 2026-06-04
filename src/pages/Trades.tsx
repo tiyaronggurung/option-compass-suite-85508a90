@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, Sparkles, Target as TargetIcon, OctagonAlert } from "lucide-react";
+import { RefreshCw, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -19,6 +19,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import type { Database } from "@/integrations/supabase/types";
+import { OptionTradeCard } from "@/components/OptionTradeCard";
 
 type CloseReason = Database["public"]["Enums"]["trade_close_reason"];
 type TradeReview = Database["public"]["Tables"]["trade_reviews"]["Row"];
