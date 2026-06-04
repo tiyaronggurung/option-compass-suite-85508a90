@@ -892,6 +892,10 @@ export type Database = {
           lifecycle_state: string
           lifecycle_updated_at: string
           macro_score: number | null
+          max_confidence_seen: number | null
+          max_tier_seen: string | null
+          min_confidence_seen: number | null
+          min_tier_seen: string | null
           premium: number | null
           price: number | null
           reasons: Json
@@ -929,6 +933,10 @@ export type Database = {
           lifecycle_state?: string
           lifecycle_updated_at?: string
           macro_score?: number | null
+          max_confidence_seen?: number | null
+          max_tier_seen?: string | null
+          min_confidence_seen?: number | null
+          min_tier_seen?: string | null
           premium?: number | null
           price?: number | null
           reasons?: Json
@@ -966,6 +974,10 @@ export type Database = {
           lifecycle_state?: string
           lifecycle_updated_at?: string
           macro_score?: number | null
+          max_confidence_seen?: number | null
+          max_tier_seen?: string | null
+          min_confidence_seen?: number | null
+          min_tier_seen?: string | null
           premium?: number | null
           price?: number | null
           reasons?: Json
