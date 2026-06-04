@@ -171,6 +171,7 @@ async function scoreOptionsFlowFinviz(
   ticker: string,
   direction: "CALL" | "PUT",
   fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
+  insider?: InsiderSummary | null,
 ): Promise<ComponentScore> {
   if (fv.state !== "ok" || !fv.row) {
     return {
@@ -201,18 +202,35 @@ async function scoreOptionsFlowFinviz(
   const analystAligned = direction === "CALL" ? analystDir : (100 - analystDir);
 
   const raw = volSurge * 0.40 + analystAligned * 0.30 + moveScore * 0.20 + shortBoost;
-  const score = clamp100(raw);
+  let score = clamp100(raw);
+
+  // Sub-signal: insider trading nudge (capped ±6, sub-signal inside options_flow)
+  let insiderNudge = 0;
+  let insiderNote = "";
+  if (insider && insider.rows > 0) {
+    // ratio 0.5 = neutral; >0.5 = more buys, <0.5 = more sells
+    const skew = insider.buy_sell_ratio - 0.5;     // -0.5..+0.5
+    const aligned = direction === "CALL" ? skew : -skew;
+    insiderNudge = Math.max(-6, Math.min(6, aligned * 12));
+    score = clamp100(score + insiderNudge);
+    insiderNote = ` · Insider ${insider.buys}B/${insider.sells}S`;
+  }
+
   return {
     score,
     configured: true,
-    source: "finviz",
-    reason: `RelVol ${relVol.toFixed(1)}x · Recom ${recom.toFixed(1)} · ShortFloat ${shortFloat.toFixed(1)}% · Week ${perfWeek.toFixed(1)}%`,
+    source: insider && insider.rows > 0 ? "finviz+insider" : "finviz",
+    reason: `RelVol ${relVol.toFixed(1)}x · Recom ${recom.toFixed(1)} · ShortFloat ${shortFloat.toFixed(1)}% · Week ${perfWeek.toFixed(1)}%${insiderNote}`,
     details: {
       rel_volume: relVol,
       analyst_recom: recom,
       short_float_pct: shortFloat,
       perf_week_pct: perfWeek,
-      note: "Aggregate-level proxy (Finviz). Per-contract flow requires Tradier/UW.",
+      insider_buys: insider?.buys ?? null,
+      insider_sells: insider?.sells ?? null,
+      insider_net_value_usd: insider?.net_value_usd ?? null,
+      insider_nudge: insiderNudge,
+      note: "Aggregate-level proxy (Finviz) + insider sub-signal. Per-contract flow requires Tradier/UW.",
     },
   };
 }
