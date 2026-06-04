@@ -185,56 +185,72 @@ function CloseTradeDialog({
   onOpenChange: (v: boolean) => void;
   onClosed: () => void;
 }) {
-  const [exitPrice, setExitPrice] = useState("");
+  const t = trade as any;
+  const contracts = Math.max(1, Number(t?.contracts ?? 1));
+  const multiplier = Number(t?.multiplier ?? 100);
+  const entryPremium = Number(t?.entry_premium ?? trade?.entry_price ?? 0);
+  const currentPremium = t?.current_premium != null ? Number(t.current_premium) : null;
+
+  const [exitPremiumStr, setExitPremiumStr] = useState("");
   const [reason, setReason] = useState<CloseReason>("manual_close");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (trade) {
-      setExitPrice(trade.entry_price != null ? String(trade.entry_price) : "");
+      // Default exit premium to the latest mark, falling back to entry premium.
+      const seed = currentPremium ?? entryPremium;
+      setExitPremiumStr(seed ? String(seed) : "");
       setReason("manual_close");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade]);
 
   if (!trade) return null;
 
-  const entry = Number(trade.entry_price ?? 0);
-  const exit = Number(exitPrice);
-  const dir = trade.direction === "CALL" ? 1 : -1;
-  const moveAbs = entry > 0 && !Number.isNaN(exit) ? (exit - entry) * dir : 0;
-  const movePct = entry > 0 && !Number.isNaN(exit) ? (moveAbs / entry) * 100 : 0;
-  const risk = Number(trade.risk_amount ?? 0);
-  // Approximate realized P/L $ using risk_amount as position size proxy.
-  const realizedPl = risk > 0 ? (moveAbs / entry) * risk * 2 : moveAbs;
+  const exitPremium = Number(exitPremiumStr);
+  const validExit = exitPremiumStr !== "" && !Number.isNaN(exitPremium) && exitPremium >= 0;
+  const totalCost = entryPremium * multiplier * contracts;
+  const exitValue = validExit ? exitPremium * multiplier * contracts : 0;
+  const realizedPl = validExit ? (exitPremium - entryPremium) * multiplier * contracts : 0;
+  const realizedPlPct = validExit && totalCost > 0 ? (realizedPl / totalCost) * 100 : 0;
   const status: PaperTrade["status"] =
     reason === "target_hit" ? "WIN"
     : reason === "stop_hit" ? "LOSS"
-    : moveAbs > 0 ? "WIN" : moveAbs < 0 ? "LOSS" : "CLOSED";
+    : realizedPl > 0 ? "WIN" : realizedPl < 0 ? "LOSS" : "CLOSED";
 
   async function submit() {
-    if (!exitPrice || Number.isNaN(exit)) {
-      toast.error("Enter a valid exit price");
+    if (!validExit) {
+      toast.error("Enter a valid exit premium");
       return;
     }
     setSubmitting(true);
-    // Defer real intra-trade MFE/MAE to Phase 4F — use close-time realized move.
-    const mfe = moveAbs > 0 ? moveAbs : 0;
-    const mae = moveAbs < 0 ? moveAbs : 0;
+    const mfe = realizedPl > 0 ? realizedPl : 0;
+    const mae = realizedPl < 0 ? realizedPl : 0;
     const { error } = await supabase.from("paper_trades").update({
       status,
-      exit_price: exit,
-      exit_reason: reason,
+      // New option close fields
+      exit_premium: Number(exitPremium.toFixed(4)),
+      realized_pl: Number(realizedPl.toFixed(2)),
+      realized_pl_dollars: Number(realizedPl.toFixed(2)),
+      // Mirror to legacy columns so existing UI/queries stay accurate
+      exit_price: Number(exitPremium.toFixed(4)),
       current_pl: Number(realizedPl.toFixed(2)),
-      realized_pl_pct: Number(movePct.toFixed(2)),
+      current_pl_pct: Number(realizedPlPct.toFixed(2)),
+      current_premium: Number(exitPremium.toFixed(4)),
+      current_value: Number(exitValue.toFixed(2)),
+      unrealized_pl: Number(realizedPl.toFixed(2)),
+      unrealized_pl_pct: Number(realizedPlPct.toFixed(2)),
+      realized_pl_pct: Number(realizedPlPct.toFixed(2)),
+      exit_reason: reason,
       mfe: Number(mfe.toFixed(2)),
       mae: Number(mae.toFixed(2)),
       max_gain: Math.abs(mfe),
       max_drawdown: Math.abs(mae),
       closed_at: new Date().toISOString(),
-    }).eq("id", trade!.id);
+    } as any).eq("id", trade!.id);
     setSubmitting(false);
     if (error) return toast.error(error.message);
-    toast.success(`Trade closed: ${status}`);
+    toast.success(`Trade closed: ${status} · ${realizedPl >= 0 ? "+" : ""}$${fmtPL(realizedPl)}`);
     onClosed();
   }
 
@@ -242,22 +258,28 @@ function CloseTradeDialog({
     <Dialog open={!!trade} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Close paper trade</DialogTitle>
+          <DialogTitle>Close paper option trade</DialogTitle>
           <DialogDescription>
-            {trade.ticker} {trade.direction} · entry ${fmtPrice(entry)}. Educational only.
+            {trade.ticker} {trade.direction} · entry premium ${fmtPrice(entryPremium)} · {contracts} contract{contracts === 1 ? "" : "s"}.
+            Educational only — no real money executed.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="exit-price">Exit price</Label>
+            <Label htmlFor="exit-premium">Exit option premium ($ per share)</Label>
             <Input
-              id="exit-price"
+              id="exit-premium"
               type="number"
               step="0.01"
-              value={exitPrice}
-              onChange={(e) => setExitPrice(e.target.value)}
+              min="0"
+              value={exitPremiumStr}
+              onChange={(e) => setExitPremiumStr(e.target.value)}
               className="ticker-mono"
+              placeholder="e.g. 5.10"
             />
+            <p className="text-[10px] text-muted-foreground">
+              Realized P/L = (exit − entry) × 100 × contracts
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Close reason</Label>
@@ -272,29 +294,28 @@ function CloseTradeDialog({
           </div>
           <div className="rounded-md border border-border bg-card-elevated/40 p-3 text-xs space-y-1">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Move</span>
-              <span className={cn("ticker-mono", moveAbs >= 0 ? "text-bull" : "text-bear")}>
-                {moveAbs >= 0 ? "+" : ""}{moveAbs.toFixed(2)} ({movePct.toFixed(2)}%)
-              </span>
+              <span className="text-muted-foreground">Total cost</span>
+              <span className="ticker-mono">${fmtPL(totalCost)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Realized P/L (approx)</span>
+              <span className="text-muted-foreground">Exit value</span>
+              <span className="ticker-mono">${fmtPL(exitValue)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Realized P/L</span>
               <span className={cn("ticker-mono", realizedPl >= 0 ? "text-bull" : "text-bear")}>
-                ${fmtPL(realizedPl)}
+                {realizedPl >= 0 ? "+" : ""}${fmtPL(realizedPl)} ({realizedPlPct >= 0 ? "+" : ""}{realizedPlPct.toFixed(2)}%)
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Outcome</span>
               <span className="ticker-mono">{status}</span>
             </div>
-            <div className="text-[10px] text-muted-foreground pt-1">
-              MFE/MAE recorded at close. Live intra-trade tracking arrives in Phase 4F.
-            </div>
           </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={submitting}>
+          <Button onClick={submit} disabled={submitting || !validExit}>
             {submitting ? "Closing…" : "Close trade"}
           </Button>
         </DialogFooter>
