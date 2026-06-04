@@ -148,6 +148,11 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
         </>
       )}
 
+      {/* Why this contract — Contract Selection Engine rationale */}
+      {t.contract_snapshot_id && <RationalePanel snapshotId={t.contract_snapshot_id as string} />}
+
+
+
       {/* Footer meta */}
       <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
         <span>
