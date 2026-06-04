@@ -6,6 +6,7 @@ import { pickBestContract } from "../_shared/pickContract.ts";
 import { getEarningsCatalyst, type CatalystResult } from "../_shared/earningsCatalyst.ts";
 import { buildConfirmations } from "../_shared/confirmations.ts";
 import { scoreInstitutional, tierFor as tierForScore } from "../_shared/scoring.ts";
+import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED, type UWFlowScore } from "../_shared/unusual-whales.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -213,11 +214,105 @@ function scoreVolume(bars: Bar[], trendSign: number): ComponentResult {
   };
 }
 
-function scoreOptions(): ComponentResult {
-  return { score: 0, reason: "options flow: n/a", metrics: {} };
+// ---------- Options Flow (UW) — wired into pre-score gate ----------
+// Async per-ticker fetch. Degrades to neutral (0) on any error/missing key,
+// so it never blocks scoring. Pure additive wiring; weight unchanged at 0.05.
+async function scoreOptionsLive(
+  ticker: string,
+  direction: "CALL" | "PUT",
+): Promise<ComponentResult> {
+  if (!UW_CONFIGURED) {
+    return { score: 0, reason: "options flow: UW key missing", metrics: {} };
+  }
+  try {
+    const uw: UWFlowScore = await scoreOptionsFlowUnusualWhales(ticker, direction);
+    // UW returns 0..100 (50 = neutral, already direction-aware: high = aligned with direction).
+    // Map to -1..+1 for the pre-score bucket.
+    const score = clamp((uw.score - 50) / 50);
+    if (uw.state !== "active") {
+      return { score: 0, reason: `options flow: ${uw.state}`, metrics: { uw_score: uw.score } };
+    }
+    return {
+      score,
+      reason: uw.human_reason || `UW flow ${uw.score}`,
+      metrics: {
+        uw_score: uw.score,
+        net_premium_bias: uw.net_premium_bias,
+        call_put_bias: uw.call_put_bias,
+        sweeps: uw.sweep_count,
+        blocks: uw.block_count,
+        bullish_premium: uw.bullish_premium,
+        bearish_premium: uw.bearish_premium,
+      },
+    };
+  } catch (_e) {
+    return { score: 0, reason: "options flow: error", metrics: {} };
+  }
 }
-function scoreMacro(): ComponentResult {
-  return { score: 0, reason: "macro regime: n/a", metrics: {} };
+
+// ---------- Macro Regime — wired into pre-score gate ----------
+// Fetched ONCE per scan run, then evaluated per-direction.
+type MacroContext = {
+  regime: string;
+  spy_trend: number;
+  qqq_trend: number;
+  vix_level: number;
+  fetched: boolean;
+};
+
+async function fetchMacroContext(): Promise<MacroContext> {
+  try {
+    const { data } = await admin
+      .from("market_regime")
+      .select("regime, spy_trend, qqq_trend, vix_level")
+      .eq("id", "global")
+      .maybeSingle();
+    if (!data) {
+      return { regime: "sideways", spy_trend: 0, qqq_trend: 0, vix_level: 0, fetched: false };
+    }
+    return {
+      regime: String(data.regime ?? "sideways"),
+      spy_trend: Number(data.spy_trend ?? 0),
+      qqq_trend: Number(data.qqq_trend ?? 0),
+      vix_level: Number(data.vix_level ?? 0),
+      fetched: true,
+    };
+  } catch {
+    return { regime: "sideways", spy_trend: 0, qqq_trend: 0, vix_level: 0, fetched: false };
+  }
+}
+
+function scoreMacroLive(
+  macro: MacroContext,
+  direction: "CALL" | "PUT",
+): ComponentResult {
+  if (!macro.fetched) {
+    return { score: 0, reason: "macro regime: n/a", metrics: {} };
+  }
+  // Blend SPY + QQQ trend (percent). ±5% trend → ±1.0 raw.
+  const trendAvg = (macro.spy_trend + macro.qqq_trend) / 2;
+  let bias = clamp(trendAvg / 5);
+
+  // Regime modifiers
+  const reg = macro.regime.toLowerCase();
+  if (reg.includes("bullish")) bias = clamp(bias + 0.2);
+  else if (reg.includes("bearish")) bias = clamp(bias - 0.2);
+  if (reg.includes("high_vol")) bias *= 0.5;       // damp in high-vol regimes
+  if (reg.includes("sideways")) bias *= 0.6;        // damp in sideways
+
+  // Direction alignment: CALL benefits from bullish bias, PUT from bearish.
+  const score = clamp(direction === "CALL" ? bias : -bias);
+
+  return {
+    score,
+    reason: `Macro ${macro.regime} · SPY ${macro.spy_trend.toFixed(2)}% · QQQ ${macro.qqq_trend.toFixed(2)}% · VIX ${macro.vix_level.toFixed(1)}`,
+    metrics: {
+      regime_bias: +bias.toFixed(3),
+      spy_trend: macro.spy_trend,
+      qqq_trend: macro.qqq_trend,
+      vix_level: macro.vix_level,
+    },
+  };
 }
 
 // ---------- Blend ----------
@@ -232,17 +327,31 @@ type Draft = {
   components: AllComponents;
 };
 
-function evaluate(symbol: string, bars: Bar[]): Draft | null {
+async function evaluate(symbol: string, bars: Bar[], macroCtx: MacroContext): Promise<Draft | null> {
   if (bars.length < 35) return null;
   const closes = bars.map((b) => b.c);
   const last = bars[bars.length - 1];
 
+  // Phase 1: technical buckets (sync, no external IO)
   const trend = scoreTrend(closes);
   const momentum = scoreMomentum(closes);
   const levels = scoreLevels(bars);
   const volume = scoreVolume(bars, trend.score);
-  const options = scoreOptions();
-  const macro = scoreMacro();
+
+  // Provisional direction from technical-only blend (sum of weights = 0.90).
+  // We need a direction up-front because options flow is direction-aware.
+  const techBlended =
+    trend.score * WEIGHTS.trend +
+    momentum.score * WEIGHTS.momentum +
+    levels.score * WEIGHTS.levels +
+    volume.score * WEIGHTS.volume;
+  const provisionalDirection: "CALL" | "PUT" = techBlended >= 0 ? "CALL" : "PUT";
+
+  // Phase 2: direction-aware async buckets (options flow + macro).
+  const [options, macro] = await Promise.all([
+    scoreOptionsLive(symbol, provisionalDirection),
+    Promise.resolve(scoreMacroLive(macroCtx, provisionalDirection)),
+  ]);
 
   const components: AllComponents = { trend, momentum, levels, volume, options, macro };
 
@@ -263,7 +372,7 @@ function evaluate(symbol: string, bars: Bar[]): Draft | null {
   // Reasons: pick components whose signed score agrees with direction and is meaningful
   const sign = blended > 0 ? 1 : -1;
   const reasons: string[] = [];
-  for (const k of ["trend", "momentum", "levels", "volume"] as ComponentName[]) {
+  for (const k of ["trend", "momentum", "levels", "volume", "options", "macro"] as ComponentName[]) {
     const c = components[k];
     if (c.score * sign >= 0.15) reasons.push(c.reason);
   }
@@ -284,8 +393,8 @@ function evaluate(symbol: string, bars: Bar[]): Draft | null {
         momentum: { score: +momentum.score.toFixed(3), reason: momentum.reason, ...momentum.metrics },
         levels: { score: +levels.score.toFixed(3), reason: levels.reason, ...levels.metrics },
         volume: { score: +volume.score.toFixed(3), reason: volume.reason, ...volume.metrics },
-        options: { score: 0, reason: options.reason },
-        macro: { score: 0, reason: macro.reason },
+        options: { score: +options.score.toFixed(3), reason: options.reason, ...options.metrics },
+        macro: { score: +macro.score.toFixed(3), reason: macro.reason, ...macro.metrics },
       },
       // Flat fields kept for back-compat with any UI that read them directly
       rsi: momentum.metrics.rsi,
@@ -556,11 +665,14 @@ Deno.serve(async (req) => {
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
 
+  // Macro context fetched ONCE per scan run (global, not per-ticker).
+  const macroCtx = await fetchMacroContext();
+
   // Per-ticker processor — identical scoring/picker/insert logic, extracted for parallel execution.
   async function processTicker(sym: string): Promise<void> {
     try {
       const bars = await fetchBars(sym);
-      const draft = evaluate(sym, bars);
+      const draft = await evaluate(sym, bars, macroCtx);
       if (!draft) { skipped++; return; }
 
       candidates++;
