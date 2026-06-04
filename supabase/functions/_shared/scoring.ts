@@ -734,11 +734,18 @@ export async function scoreInstitutional(
       detail: `insider:${extras.insider.state} · news:${extras.news.state} · sectors:${extras.sectors.state}`,
       note: "Sub-signals only — weights remain 30/25/20/15/10. Each endpoint degrades independently.",
     },
-    {
-      provider: "finnhub",
-      role: "news + sentiment",
-      state: FINNHUB_KEY ? "active" : "missing_key",
-    },
+    (() => {
+      const nd = (news.details ?? {}) as Record<string, unknown>;
+      const sentEp = String(nd.news_sentiment_endpoint ?? "");
+      const fallback = String(nd.fallback_active ?? "");
+      let state: ProviderStatus["state"] = FINNHUB_KEY ? "active" : "missing_key";
+      let detail: string | undefined;
+      if (FINNHUB_KEY && sentEp.startsWith("http_4")) {
+        state = "degraded";
+        detail = fallback || `news-sentiment ${sentEp} (paid endpoint) · using company-news + Finviz fallback`;
+      }
+      return { provider: "finnhub", role: "news + sentiment", state, detail };
+    })(),
     {
       provider: "apify",
       role: "x/twitter sentiment",
