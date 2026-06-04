@@ -536,6 +536,7 @@ function SocialIntelTransparency({ details, source }: { details: any; source?: s
       )}
     </div>
   );
+}
 
 type Headline = { headline: string; source: "finnhub" | "finviz"; url?: string };
 
