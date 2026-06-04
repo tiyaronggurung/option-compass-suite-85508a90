@@ -378,6 +378,7 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
                 </div>
               )}
               {row.key === "options_flow" && configured && <OptionsFlowTransparency details={c.details} source={c.source} />}
+              {row.key === "sentiment" && configured && <SocialIntelTransparency details={c.details} source={c.source} />}
             </div>
           );
         })}
