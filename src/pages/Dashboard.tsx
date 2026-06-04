@@ -111,11 +111,11 @@ export default function Dashboard() {
     return signals.filter((s) => {
       if (dismissedIds.has(s.id)) return false;
       if (!s.is_demo && (s.confidence ?? 0) < 50) return false;
-      if (!includeExpired && isExpired(s)) return false;
       const lc = getLifecycleState(s);
       // Default view hides expired/invalidated unless filter selected explicitly.
       if (lifecycleFilter === "all") {
         if (lc === "expired" || lc === "invalidated") return false;
+        if (!includeExpired && isExpired(s)) return false;
       } else if (lc !== lifecycleFilter) {
         return false;
       }
