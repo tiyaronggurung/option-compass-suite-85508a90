@@ -50,6 +50,11 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
               <Badge variant="outline" className={cn("border-0 text-[10px] font-medium px-1.5 py-0", isCall ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
                 {signal.direction}
               </Badge>
+              {tier !== "rejected" && (
+                <Badge className={cn("border-0 text-[10px] px-1.5 py-0 gap-1", tierMeta.className)}>
+                  <span>{tierMeta.emoji}</span> {tierMeta.label}
+                </Badge>
+              )}
               {signal.dte === 0 && (
                 <Badge className="bg-warn/15 text-warn border-0 text-[10px] px-1.5 py-0">0DTE</Badge>
               )}
