@@ -72,7 +72,7 @@ export default function Dashboard() {
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
-        supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).eq("action", "dismissed"),
+        supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).in("action", ["dismissed", "approved"]),
         supabase.from("provider_configs").select("last_status").eq("provider", "alpaca").maybeSingle(),
         supabase.from("risk_settings").select("*").eq("user_id", user!.id).maybeSingle(),
       ]);
@@ -107,6 +107,8 @@ export default function Dashboard() {
   const filtered = useMemo(() => {
     if (!signals) return [];
     return signals.filter((s) => {
+      if (dismissedIds.has(s.id)) return false;
+      if (!s.is_demo && (s.confidence ?? 0) < 50) return false;
       if (!includeExpired && isExpired(s)) return false;
       if (sourceMode === "live" && s.is_demo) return false;
       if (sourceMode === "demo" && !s.is_demo) return false;
@@ -122,7 +124,7 @@ export default function Dashboard() {
       }
       return true;
     });
-  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired]);
+  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired, dismissedIds]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
@@ -143,6 +145,13 @@ export default function Dashboard() {
     });
     if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Paper trade opened on ${s.ticker}`);
+    // Mark as actioned so it disappears from this user's dashboard and doesn't reappear on reload.
+    await supabase.from("signal_actions").insert({
+      user_id: user!.id,
+      signal_id: s.id,
+      action: "approved",
+    });
+    setDismissedIds((prev) => new Set(prev).add(s.id));
     const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
     setTrades(data ?? []);
   }
