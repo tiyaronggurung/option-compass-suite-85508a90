@@ -19,6 +19,7 @@ import SettingsPage from "@/pages/Settings";
 import Diagnostics from "@/pages/Diagnostics";
 import InsiderDiagnostics from "@/pages/InsiderDiagnostics";
 import PerformanceDiagnostics from "@/pages/PerformanceDiagnostics";
+import OutcomeAnalytics from "@/pages/OutcomeAnalytics";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
