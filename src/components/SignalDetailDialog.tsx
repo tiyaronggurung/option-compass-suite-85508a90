@@ -377,6 +377,7 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
                   ↳ {(c.details as any).trendline.human_reason}
                 </div>
               )}
+              {row.key === "options_flow" && configured && <OptionsFlowTransparency details={c.details} source={c.source} />}
             </div>
           );
         })}
