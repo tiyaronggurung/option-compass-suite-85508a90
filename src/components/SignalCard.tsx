@@ -33,6 +33,9 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
     : freshness === "aging" ? "bg-warn/15 text-warn"
     : "bg-muted text-muted-foreground";
   const freshLabel = freshness === "fresh" ? "Fresh" : freshness === "aging" ? "Aging" : "Expired";
+  const lifecycleState = getLifecycleState(signal);
+  const lifecycleMeta = LIFECYCLE_META[lifecycleState];
+  const showLifecycleBadge = lifecycleState !== "active";
 
   return (
     <div className={cn("glass-card p-3 sm:p-4 ring-1 transition hover:ring-primary/40", ring)}>
