@@ -672,6 +672,12 @@ Deno.serve(async (req) => {
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
 
+  // Lifecycle: capture fresh per-(ticker,direction) scoring this scan, used
+  // after the per-ticker loop to re-evaluate state of existing non-terminal signals.
+  type ScoringSnapshot = { confidence: number; flow: FlowSnapshot; technical: TechnicalSnapshot };
+  const scoringByKey = new Map<string, ScoringSnapshot>();
+  const keyOf = (t: string, d: string) => `${t.toUpperCase()}|${d}`;
+
   // Macro context fetched ONCE per scan run (global, not per-ticker).
   const macroCtx = await fetchMacroContext();
 
