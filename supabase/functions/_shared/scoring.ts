@@ -334,7 +334,9 @@ export type FinvizSnap = {
 async function finvizSnapshotChecked(ticker: string): Promise<FinvizSnap> {
   if (!FINVIZ_KEY) return { row: null, state: "missing_key", reason: FINVIZ_REASONS.missing_key };
   let res: Response;
-  const url = `https://elite.finviz.com/quote_export.ashx?t=${ticker}&auth=${FINVIZ_KEY}`;
+  // Screener export endpoint returns snapshot fields (Ticker, Price, SMA50, SMA200, etc.).
+  // Previous URL (quote_export.ashx) was returning historical OHLCV bars on this plan.
+  const url = `https://elite.finviz.com/export.ashx?v=152&t=${ticker}&auth=${FINVIZ_KEY}`;
   try {
     res = await fetch(url); // default redirect: follow
   } catch (e) {
