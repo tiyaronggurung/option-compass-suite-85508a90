@@ -17,6 +17,7 @@ type Props = {
   onDetails?: (s: Signal) => void;
   watchlist?: Set<string>;
   outcome?: SignalOutcome;
+  subLabel?: string;
 };
 
 export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none" }: Props) {
