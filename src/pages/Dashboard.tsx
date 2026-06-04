@@ -117,8 +117,37 @@ export default function Dashboard() {
         toast.success(`New ${ns.direction} signal on ${ns.ticker}`);
       })
       .subscribe();
-    return () => { cancel = true; supabase.removeChannel(channel); };
+
+    const alertsChannel = supabase
+      .channel(`trade-alerts-${user!.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "trade_alerts", filter: `user_id=eq.${user!.id}` },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const oldId = (payload.old as any)?.id;
+            if (oldId) setAlerts((prev) => prev.filter((a) => a.id !== oldId));
+            return;
+          }
+          const row = payload.new as TradeAlert;
+          setAlerts((prev) => {
+            const idx = prev.findIndex((a) => a.id === row.id);
+            if (idx === -1) return [row, ...prev].slice(0, 50);
+            const prevStatus = prev[idx].alert_status;
+            const next = [...prev];
+            next[idx] = row;
+            if (prevStatus !== row.alert_status) {
+              toast.info(`${row.ticker} ${row.option_side?.toUpperCase()} → ${row.alert_status}`);
+            }
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => { cancel = true; supabase.removeChannel(channel); supabase.removeChannel(alertsChannel); };
   }, [user]);
+
 
   const filtered = useMemo(() => {
     if (!signals) return [];
