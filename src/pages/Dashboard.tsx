@@ -19,6 +19,7 @@ import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
 import MarketOverviewStrip from "@/components/MarketOverviewStrip";
 import ProviderStatusBanner from "@/components/ProviderStatusBanner";
+import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
@@ -63,7 +64,19 @@ export default function Dashboard() {
   const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
   const [risk, setRisk] = useState<RiskSettingsLike>(null);
   const [showDeveloping, setShowDeveloping] = useState(true);
+  const [alerts, setAlerts] = useState<TradeAlert[]>([]);
   const watchSet = useMemo(() => new Set(watch), [watch]);
+
+  const reloadAlerts = async () => {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from("trade_alerts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setAlerts((data ?? []) as TradeAlert[]);
+  };
 
   useEffect(() => {
     let cancel = false;
@@ -87,6 +100,7 @@ export default function Dashboard() {
       if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
       setAlpacaStatus(pc?.last_status ?? null);
       setRisk(rs as RiskSettingsLike);
+      reloadAlerts();
     })();
 
     const channel = supabase
@@ -163,6 +177,7 @@ export default function Dashboard() {
     setDismissedIds((prev) => new Set(prev).add(s.id));
     const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
     setTrades(data ?? []);
+    reloadAlerts();
   }
 
 
@@ -229,6 +244,22 @@ export default function Dashboard() {
         openTradesCount={openTrades.length}
         todayRealizedPL={todayRealizedPL}
       />
+
+      {alerts.filter(a => !["expired","cancelled"].includes(a.alert_status)).length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold tracking-tight uppercase text-muted-foreground">
+              Active Trade Plans
+            </h2>
+            <span className="text-[11px] text-muted-foreground">{alerts.filter(a => !["expired","cancelled"].includes(a.alert_status)).length} active</span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {alerts
+              .filter(a => !["expired","cancelled"].includes(a.alert_status))
+              .map(a => <TradeAlertCard key={a.id} alert={a} onChanged={reloadAlerts} />)}
+          </div>
+        </section>
+      )}
 
 
       <DisclaimerBar />

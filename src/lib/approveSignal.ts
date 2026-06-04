@@ -94,7 +94,7 @@ export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<Ap
   const finalSymbol = bestContract?.contract_symbol ?? s.contract_symbol ?? null;
   const totalCost = finalPremium * multiplier * contracts;
 
-  const { error } = await supabase.from("paper_trades").insert({
+  const { data: inserted, error } = await supabase.from("paper_trades").insert({
     user_id: input.userId,
     signal_id: s.id,
     ticker: s.ticker,
@@ -117,7 +117,64 @@ export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<Ap
     entry_premium: finalPremium,
     total_cost: totalCost,
     contract_snapshot_id: snapshotId,
-  } as any);
+  } as any).select("id").single();
   if (error) return { ok: false, reason: error.message };
+
+  // ── V1.2 Trade Alert Engine ─────────────────────────────────────
+  // Build a full plan (trigger, entry zone, stop, T1/T2/T3, invalidation)
+  // and persist it in trade_alerts. Status starts in 'entered' because the
+  // user just approved + opened the paper trade; the evaluator will only
+  // track exit conditions (targets/stop/expire). When the user later wants
+  // pre-trade "Watching" alerts, the same planner is reused.
+  try {
+    const { buildAlertPlan } = await import("@/lib/tradeAlertPlan");
+    const plan = buildAlertPlan(s as any, {
+      contract_symbol: finalSymbol,
+      strike: finalStrike,
+      expiry: finalExpiry,
+      premium: finalPremium,
+      bid: bestContract?.bid ?? null,
+      ask: bestContract?.ask ?? null,
+      mid: bestContract?.mid ?? bestContract?.premium ?? finalPremium,
+      delta: bestContract?.delta ?? null,
+      iv: bestContract?.iv ?? null,
+      spread_pct: bestContract?.spread_pct ?? null,
+      rationale: bestContract?.rationale ?? null,
+    });
+
+    await (supabase as any).from("trade_alerts").insert({
+      user_id: input.userId,
+      signal_id: s.id,
+      contract_snapshot_id: snapshotId,
+      paper_trade_id: inserted?.id ?? null,
+      ticker: s.ticker,
+      option_side: plan.option_side,
+      strike: finalStrike,
+      expiry: finalExpiry,
+      contract_symbol: finalSymbol,
+      underlying_trigger_price: plan.underlying_trigger_price,
+      trigger_direction: plan.trigger_direction,
+      entry_contract_price_min: plan.entry_contract_price_min,
+      entry_contract_price_max: plan.entry_contract_price_max,
+      stop_loss_contract_price: plan.stop_loss_contract_price,
+      target_1_contract_price: plan.target_1_contract_price,
+      target_2_contract_price: plan.target_2_contract_price,
+      target_3_contract_price: plan.target_3_contract_price,
+      invalidation_underlying_price: plan.invalidation_underlying_price,
+      // User just approved + opened — alert starts as 'entered'.
+      alert_status: "entered",
+      triggered_at: new Date().toISOString(),
+      entered_at: new Date().toISOString(),
+      expires_at: plan.expires_at,
+      confidence_score: confidenceSnapshot,
+      trade_rationale: plan.trade_rationale,
+      plan_metadata: plan.plan_metadata,
+    });
+  } catch (e) {
+    // Plan generation is best-effort; never block paper-trade approval.
+    console.warn("[approveSignal] trade_alert plan failed:", e);
+  }
+
   return { ok: true };
 }
+
