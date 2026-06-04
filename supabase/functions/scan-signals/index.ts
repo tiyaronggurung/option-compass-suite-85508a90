@@ -712,6 +712,15 @@ Deno.serve(async (req) => {
         institutionalConfidence = institutional.final;
         institutionalTier = tierForScore(institutionalConfidence);
         institutionalReasons.push(...institutional.reasons);
+        // Lifecycle: record fresh scoring snapshot for this (ticker, direction).
+        scoringByKey.set(keyOf(draft.ticker, draft.direction), {
+          confidence: institutionalConfidence,
+          flow: (institutional.components.options_flow?.details ?? {}) as FlowSnapshot,
+          technical: {
+            score: institutional.components.technical?.score ?? null,
+            ...(institutional.components.technical?.details ?? {}),
+          } as TechnicalSnapshot,
+        });
       } catch (e) {
         errors.push(`${sym} institutional: ${(e as Error).message}`);
         // Hard fail → skip this candidate; do not fall back to old pre-score.
