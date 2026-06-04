@@ -2,11 +2,16 @@
 // Renders a single option trade with entry/current/market value, P/L $ and %,
 // Greeks line, and clear "Paper · Simulation Only" safety badges.
 //
-// Pure presentation — no data fetching, no mutations.
+// When a contract_snapshot_id is present, a collapsible "Why this contract"
+// section lazily fetches and renders the Contract Selection Engine rationale.
+//
+// Pure presentation — no mutations.
 
-import { Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import { fmtPrice, fmtPL, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
 
