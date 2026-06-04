@@ -100,6 +100,7 @@ export default function Dashboard() {
       if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
       setAlpacaStatus(pc?.last_status ?? null);
       setRisk(rs as RiskSettingsLike);
+      reloadAlerts();
     })();
 
     const channel = supabase
@@ -176,6 +177,7 @@ export default function Dashboard() {
     setDismissedIds((prev) => new Set(prev).add(s.id));
     const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
     setTrades(data ?? []);
+    reloadAlerts();
   }
 
 
