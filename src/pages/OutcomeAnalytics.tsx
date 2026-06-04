@@ -264,12 +264,14 @@ export default function OutcomeAnalytics() {
 
   async function refresh() {
     setRows(null);
-    const [{ data: outcomeData }, { data: tradeData }] = await Promise.all([
+    const [{ data: outcomeData }, { data: tradeData }, { data: sigData }] = await Promise.all([
       supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
       supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval").limit(5000),
+      supabase.from("signals").select("id, lifecycle_state").limit(5000),
     ]);
     setRows((outcomeData ?? []) as unknown as Outcome[]);
     setPaperTrades((tradeData ?? []) as unknown as PaperTradeLite[]);
+    setSignalLifecycle((sigData ?? []) as unknown as SignalLifecycleLite[]);
   }
   useEffect(() => { if (isAdmin) refresh(); }, [isAdmin]);
 
