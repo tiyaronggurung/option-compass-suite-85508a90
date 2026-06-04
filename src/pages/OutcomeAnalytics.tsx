@@ -575,6 +575,42 @@ export default function OutcomeAnalytics() {
             ),
           )}
           <Card className="p-4">
+            <h2 className="text-sm font-semibold">Lifecycle Win-Rate Comparison</h2>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              5D win rate and average return grouped by each signal's current lifecycle state.
+              Tests whether Weakening signals still have predictive value.
+            </p>
+            {lifecycleRows.length === 0 ? (
+              <div className="text-xs text-muted-foreground mt-2">No completed outcomes with lifecycle data yet.</div>
+            ) : (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2">Lifecycle</th>
+                      <th className="text-right py-1.5 px-2">n (5D)</th>
+                      <th className="text-right py-1.5 px-2">Win rate (5D)</th>
+                      <th className="text-right py-1.5 px-2">Avg return (5D)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lifecycleRows.map((d) => {
+                      const low = d.n > 0 && d.n < MIN_N;
+                      return (
+                        <tr key={d.key} className={cn("border-b border-border/50", low && "text-muted-foreground/60")}>
+                          <td className="py-1.5 px-2">{d.label}{low && <span className="ml-2 text-[10px] uppercase tracking-wide">low sample</span>}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.winRate.toFixed(0)}%</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.avgReturn >= 0 ? "+" : ""}{d.avgReturn.toFixed(2)}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+          <Card className="p-4">
             <h2 className="text-sm font-semibold">Paper Trade Class Comparison</h2>
             <p className="text-[11px] text-muted-foreground mb-2">
               Approved paper trades bucketed by the confidence band at approval time.
