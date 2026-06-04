@@ -331,7 +331,7 @@ export type FinvizSnap = {
   detail?: string;
 };
 
-async function finvizSnapshotChecked(ticker: string): Promise<FinvizSnap> {
+export async function finvizSnapshotChecked(ticker: string): Promise<FinvizSnap> {
   if (!FINVIZ_KEY) return { row: null, state: "missing_key", reason: FINVIZ_REASONS.missing_key };
   let res: Response;
   // Screener export endpoint returns snapshot fields. v=152 + explicit c= column list
