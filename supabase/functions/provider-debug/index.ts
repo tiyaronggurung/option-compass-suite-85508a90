@@ -121,6 +121,13 @@ Deno.serve(async (req) => {
         "APCA-API-SECRET-KEY": ALPACA_SECRET,
       });
     },
+    unusual_whales: async () => {
+      if (!UW_KEY) return { skipped: true, reason: "UNUSUAL_WHALES_API_KEY not configured" };
+      return probeUrl(`https://api.unusualwhales.com/api/stock/${ticker}/flow-alerts?limit=5`, {
+        Authorization: `Bearer ${UW_KEY}`,
+        Accept: "application/json",
+      });
+    },
   };
 
   const keys = provider === "all" ? Object.keys(probes) : [provider];
