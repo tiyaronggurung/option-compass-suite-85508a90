@@ -22,7 +22,14 @@ export type ComponentScore = {
 export type ProviderStatus = {
   provider: string;
   role: string;            // what this provider currently powers
-  state: "active" | "reserved" | "missing_key";
+  state:
+    | "active"
+    | "reserved"
+    | "missing_key"
+    | "auth_failed"
+    | "not_entitled"
+    | "degraded";
+  detail?: string;
   note?: string;
 };
 
