@@ -665,11 +665,14 @@ Deno.serve(async (req) => {
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
 
+  // Macro context fetched ONCE per scan run (global, not per-ticker).
+  const macroCtx = await fetchMacroContext();
+
   // Per-ticker processor — identical scoring/picker/insert logic, extracted for parallel execution.
   async function processTicker(sym: string): Promise<void> {
     try {
       const bars = await fetchBars(sym);
-      const draft = evaluate(sym, bars);
+      const draft = await evaluate(sym, bars, macroCtx);
       if (!draft) { skipped++; return; }
 
       candidates++;
