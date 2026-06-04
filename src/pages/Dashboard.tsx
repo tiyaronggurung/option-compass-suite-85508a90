@@ -107,6 +107,8 @@ export default function Dashboard() {
   const filtered = useMemo(() => {
     if (!signals) return [];
     return signals.filter((s) => {
+      if (dismissedIds.has(s.id)) return false;
+      if (!s.is_demo && (s.confidence ?? 0) < 50) return false;
       if (!includeExpired && isExpired(s)) return false;
       if (sourceMode === "live" && s.is_demo) return false;
       if (sourceMode === "demo" && !s.is_demo) return false;
@@ -122,7 +124,7 @@ export default function Dashboard() {
       }
       return true;
     });
-  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired]);
+  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired, dismissedIds]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
