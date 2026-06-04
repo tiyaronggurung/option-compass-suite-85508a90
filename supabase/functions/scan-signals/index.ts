@@ -682,18 +682,41 @@ Deno.serve(async (req) => {
         errors.push(`${sym} confirmations: ${(e as Error).message}`);
       }
 
+      // Institutional 5-component scoring (Tradier/Finviz/Finnhub/Apify + regime).
+      // Missing keys → component returns neutral 50 and does not block.
+      // Final confidence stored is the institutional score; tier derives from it.
+      let institutional: Awaited<ReturnType<typeof scoreInstitutional>> | null = null;
+      let finalScore = finalConfidence;
+      let tier = tierForScore(finalScore);
+      const institutionalReasons: string[] = [];
+      try {
+        institutional = await scoreInstitutional(admin, {
+          ticker: draft.ticker,
+          direction: draft.direction,
+          baseTrendScore: draft.components.trend.score,
+        });
+        finalScore = institutional.final;
+        tier = tierForScore(finalScore);
+        institutionalReasons.push(...institutional.reasons);
+      } catch (e) {
+        errors.push(`${sym} institutional: ${(e as Error).message}`);
+      }
+
+      const allReasons = Array.from(new Set([...reasonsWithContract, ...institutionalReasons]));
+      const hideForRejected = tier === "rejected";
+
       const { error } = await admin.from("signals").insert({
         ticker: draft.ticker,
         direction: draft.direction,
         price: draft.price,
-        confidence: finalConfidence,
+        confidence: finalScore,
         risk_level: finalRisk,
-        reasons: reasonsWithContract,
+        reasons: allReasons,
         technical_metrics: techMetrics,
         flow_metrics: {},
         status: "LIVE",
         is_demo: false,
-        hidden: false,
+        hidden: hideForRejected,
         source: "Alpaca Backend Scanner v2",
         external_id: externalId,
         expires_at: expiresAt,
@@ -701,6 +724,15 @@ Deno.serve(async (req) => {
         source_confirmations: confirmations?.matrix ?? {},
         confirmation_score: confirmations?.score ?? null,
         confirmation_label: confirmations?.label ?? null,
+        tier,
+        score_components: institutional ? {
+          final: institutional.final,
+          base: institutional.base,
+          regime: institutional.regime,
+          regime_adjust: institutional.regime_adjust,
+          components: institutional.components,
+          sources_used: institutional.sources_used,
+        } : {},
         ...contractFields,
       });
       if (error) {
