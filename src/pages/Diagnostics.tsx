@@ -201,6 +201,98 @@ export default function Diagnostics() {
           );
         })}
       </div>
+
+      <TrustedSourceCoverage />
     </div>
+  );
+}
+
+const TRUSTED_TIERS: { tier: number; weight: number; label: string; handles: { handle: string; label: string }[] }[] = [
+  {
+    tier: 1, weight: 100, label: "Official institutions",
+    handles: [
+      { handle: "FederalReserve", label: "Federal Reserve" },
+      { handle: "SECgov", label: "U.S. SEC" },
+      { handle: "ReutersBiz", label: "Reuters Business" },
+    ],
+  },
+  {
+    tier: 2, weight: 90, label: "Macro / breaking news",
+    handles: [
+      { handle: "WalterBloomberg", label: "Walter Bloomberg" },
+      { handle: "DeltaOne", label: "DeltaOne" },
+      { handle: "FirstSquawk", label: "First Squawk" },
+      { handle: "FinancialJuice", label: "Financial Juice" },
+    ],
+  },
+  {
+    tier: 3, weight: 80, label: "Options-flow intelligence",
+    handles: [
+      { handle: "unusual_whales", label: "Unusual Whales" },
+      { handle: "FlowAlgo", label: "FlowAlgo" },
+      { handle: "SpotGamma", label: "SpotGamma" },
+      { handle: "CheddarFlow", label: "Cheddar Flow" },
+    ],
+  },
+  {
+    tier: 4, weight: 70, label: "Companies & leadership",
+    handles: [
+      { handle: "nvidia", label: "NVIDIA" },
+      { handle: "LisaSu", label: "Lisa Su (AMD)" },
+      { handle: "PalantirTech", label: "Palantir" },
+      { handle: "OpenAI", label: "OpenAI" },
+      { handle: "elonmusk", label: "Elon Musk" },
+    ],
+  },
+  {
+    tier: 5, weight: 60, label: "Market news / earnings",
+    handles: [
+      { handle: "Benzinga", label: "Benzinga" },
+      { handle: "StockMKTNewz", label: "Stock Market News" },
+      { handle: "EarningsWhispers", label: "Earnings Whispers" },
+    ],
+  },
+];
+
+function TrustedSourceCoverage() {
+  const total = TRUSTED_TIERS.reduce((n, t) => n + t.handles.length, 0);
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <div className="font-medium">Trusted Source Coverage</div>
+          <div className="text-xs text-muted-foreground">
+            Curated institutional accounts monitored by the Social Intelligence engine. Per-signal hits appear inside the SignalDetailDialog.
+          </div>
+        </div>
+        <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border bg-muted text-muted-foreground border-border">
+          {total} monitored
+        </span>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {TRUSTED_TIERS.map((t) => (
+          <div key={t.tier} className="rounded border border-border/60 bg-muted/10 p-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium">Tier {t.tier} — {t.label}</span>
+              <span className="ticker-mono text-muted-foreground">weight {t.weight}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {t.handles.map((h) => (
+                <a
+                  key={h.handle}
+                  href={`https://x.com/${h.handle}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-muted/30 hover:bg-muted/60 text-foreground/80"
+                  title={h.label}
+                >
+                  @{h.handle}
+                </a>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
