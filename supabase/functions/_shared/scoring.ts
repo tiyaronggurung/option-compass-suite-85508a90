@@ -587,15 +587,15 @@ export async function scoreInstitutional(
   };
 }
 
-// Variant of scoreTechnical that accepts a pre-fetched Finviz snapshot
+// Variant of scoreTechnical that accepts the checked Finviz snapshot
 // to avoid double-fetching when called from scoreInstitutional.
 async function scoreTechnicalWithSnap(
   ticker: string,
   baseTrendScore: number,
-  snap: Record<string, string> | null,
+  fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
 ): Promise<ComponentScore> {
   const localScore = clamp100((baseTrendScore + 1) * 50);
-  if (!FINVIZ_KEY) {
+  if (fv.state === "missing_key") {
     return {
       score: localScore,
       configured: false,
@@ -603,9 +603,17 @@ async function scoreTechnicalWithSnap(
       reason: `Alpaca trend ${baseTrendScore >= 0 ? "+" : ""}${baseTrendScore.toFixed(2)} · Finviz not configured`,
     };
   }
-  if (!snap) {
-    return { score: localScore, configured: true, source: "alpaca+finviz", reason: "Finviz unreachable" };
+  if (fv.state !== "ok" || !fv.row) {
+    // Finviz returned HTML / upsell / login / empty — fall back to Alpaca-only.
+    return {
+      score: localScore,
+      configured: true,
+      source: "alpaca",
+      reason: `Alpaca-only (${fv.reason}${fv.detail ? `: ${fv.detail}` : ""})`,
+      details: { finviz_state: fv.state, fallback: "alpaca_only" },
+    };
   }
+  const snap = fv.row;
   const perfWeek = parsePct(snap["Perf Week"]) ?? 0;
   const sma50 = parsePct(snap["SMA50"]) ?? 0;
   const sma200 = parsePct(snap["SMA200"]) ?? 0;
