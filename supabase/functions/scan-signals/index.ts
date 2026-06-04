@@ -7,6 +7,13 @@ import { getEarningsCatalyst, type CatalystResult } from "../_shared/earningsCat
 import { buildConfirmations } from "../_shared/confirmations.ts";
 import { scoreInstitutional, tierFor as tierForScore } from "../_shared/scoring.ts";
 import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED, type UWFlowScore } from "../_shared/unusual-whales.ts";
+import {
+  evaluateLifecycle,
+  appendHistory,
+  type LifecycleSignal,
+  type FlowSnapshot,
+  type TechnicalSnapshot,
+} from "../_shared/lifecycle.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
