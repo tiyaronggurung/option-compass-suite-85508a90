@@ -3,6 +3,13 @@
 // The final blended score is weighted, clamped 0..100, then optionally adjusted
 // by the market regime (capped at ±5 points). No live orders, paper-only.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import {
+  fetchFinvizExtrasForTicker,
+  type FinvizExtras,
+  type InsiderSummary,
+  type FinvizNewsSummary,
+  type SectorPerf,
+} from "./finviz-extras.ts";
 
 export type ComponentKey =
   | "options_flow"
@@ -164,6 +171,7 @@ async function scoreOptionsFlowFinviz(
   ticker: string,
   direction: "CALL" | "PUT",
   fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
+  insider?: InsiderSummary | null,
 ): Promise<ComponentScore> {
   if (fv.state !== "ok" || !fv.row) {
     return {
@@ -194,18 +202,35 @@ async function scoreOptionsFlowFinviz(
   const analystAligned = direction === "CALL" ? analystDir : (100 - analystDir);
 
   const raw = volSurge * 0.40 + analystAligned * 0.30 + moveScore * 0.20 + shortBoost;
-  const score = clamp100(raw);
+  let score = clamp100(raw);
+
+  // Sub-signal: insider trading nudge (capped ±6, sub-signal inside options_flow)
+  let insiderNudge = 0;
+  let insiderNote = "";
+  if (insider && insider.rows > 0) {
+    // ratio 0.5 = neutral; >0.5 = more buys, <0.5 = more sells
+    const skew = insider.buy_sell_ratio - 0.5;     // -0.5..+0.5
+    const aligned = direction === "CALL" ? skew : -skew;
+    insiderNudge = Math.max(-6, Math.min(6, aligned * 12));
+    score = clamp100(score + insiderNudge);
+    insiderNote = ` · Insider ${insider.buys}B/${insider.sells}S`;
+  }
+
   return {
     score,
     configured: true,
-    source: "finviz",
-    reason: `RelVol ${relVol.toFixed(1)}x · Recom ${recom.toFixed(1)} · ShortFloat ${shortFloat.toFixed(1)}% · Week ${perfWeek.toFixed(1)}%`,
+    source: insider && insider.rows > 0 ? "finviz+insider" : "finviz",
+    reason: `RelVol ${relVol.toFixed(1)}x · Recom ${recom.toFixed(1)} · ShortFloat ${shortFloat.toFixed(1)}% · Week ${perfWeek.toFixed(1)}%${insiderNote}`,
     details: {
       rel_volume: relVol,
       analyst_recom: recom,
       short_float_pct: shortFloat,
       perf_week_pct: perfWeek,
-      note: "Aggregate-level proxy (Finviz). Per-contract flow requires Tradier/UW.",
+      insider_buys: insider?.buys ?? null,
+      insider_sells: insider?.sells ?? null,
+      insider_net_value_usd: insider?.net_value_usd ?? null,
+      insider_nudge: insiderNudge,
+      note: "Aggregate-level proxy (Finviz) + insider sub-signal. Per-contract flow requires Tradier/UW.",
     },
   };
 }
@@ -396,8 +421,26 @@ async function scoreTechnical(
 }
 
 // ---------- Finnhub (news + analyst) ----------
-async function scoreNews(ticker: string, direction: "CALL" | "PUT"): Promise<ComponentScore> {
-  if (!FINNHUB_KEY) return neutral("finnhub", "Finnhub key not configured");
+async function scoreNews(
+  ticker: string,
+  direction: "CALL" | "PUT",
+  finvizNews?: FinvizNewsSummary | null,
+): Promise<ComponentScore> {
+  if (!FINNHUB_KEY) {
+    // Even without Finnhub, fall back to finviz news volume if available.
+    if (finvizNews && finvizNews.count_7d > 0) {
+      const volumeBoost = Math.min(20, finvizNews.count_7d);
+      const score = clamp100(50 + volumeBoost);
+      return {
+        score,
+        configured: true,
+        source: "finviz_news",
+        reason: `Finnhub missing · Finviz ${finvizNews.count_24h}/24h · ${finvizNews.count_7d}/7d`,
+        details: { finviz_news_24h: finvizNews.count_24h, finviz_news_7d: finvizNews.count_7d },
+      };
+    }
+    return neutral("finnhub", "Finnhub key not configured");
+  }
   try {
     const to = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
@@ -409,17 +452,38 @@ async function scoreNews(ticker: string, direction: "CALL" | "PUT"): Promise<Com
     const news = newsRes.ok ? await newsRes.json() : [];
     const bullish = Number(sent?.sentiment?.bullishPercent ?? 0);
     const bearish = Number(sent?.sentiment?.bearishPercent ?? 0);
-    const articles = Array.isArray(news) ? news.length : 0;
-    const directional = direction === "CALL" ? bullish - bearish : bearish - bullish; // -1..1
+    const finnhubArticles = Array.isArray(news) ? news.length : 0;
+
+    // Sub-signal: merge Finviz headlines (dedupe by lowercased first 40 chars vs Finnhub).
+    let extraCount = 0;
+    if (finvizNews && finvizNews.headlines.length > 0) {
+      const seen = new Set<string>(
+        (Array.isArray(news) ? news : [])
+          .map((n: any) => String(n?.headline ?? "").toLowerCase().slice(0, 40))
+          .filter(Boolean),
+      );
+      for (const h of finvizNews.headlines) {
+        const k = h.toLowerCase().slice(0, 40);
+        if (k && !seen.has(k)) { seen.add(k); extraCount++; }
+      }
+    }
+    const articles = finnhubArticles + extraCount;
+    const directional = direction === "CALL" ? bullish - bearish : bearish - bullish;
     const sentimentScore = clamp100(50 + directional * 50);
     const volumeBoost = Math.min(20, articles); // up to +20 for active coverage
     const score = clamp100(sentimentScore * 0.8 + (50 + volumeBoost) * 0.2);
     return {
       score,
       configured: true,
-      source: "finnhub",
-      reason: `${articles} articles · sentiment ${(bullish * 100).toFixed(0)}% bull / ${(bearish * 100).toFixed(0)}% bear`,
-      details: { bullish, bearish, article_count: articles },
+      source: extraCount > 0 ? "finnhub+finviz_news" : "finnhub",
+      reason: `${articles} articles${extraCount > 0 ? ` (+${extraCount} Finviz)` : ""} · sentiment ${(bullish * 100).toFixed(0)}% bull / ${(bearish * 100).toFixed(0)}% bear`,
+      details: {
+        bullish, bearish,
+        article_count: articles,
+        finnhub_articles: finnhubArticles,
+        finviz_extra_articles: extraCount,
+        finviz_news_24h: finvizNews?.count_24h ?? null,
+      },
     };
   } catch (e) {
     return { score: 50, configured: true, source: "finnhub", reason: `error: ${(e as Error).message.slice(0, 80)}` };
@@ -491,12 +555,23 @@ export async function scoreInstitutional(
 
   // Shared Finviz snapshot — single fetch powers technical + options flow + volatility.
   // finvizSnapshotChecked returns a typed state so we never parse HTML/upsell pages as CSV.
-  const fv = await finvizSnapshotChecked(ticker);
+  // Finviz "extras" (insider/news/sector) are fetched in parallel; each degrades independently.
+  const [fv, extras] = await Promise.all([
+    finvizSnapshotChecked(ticker),
+    fetchFinvizExtrasForTicker(ticker),
+  ]);
+
+  // Resolve sector context (best-effort: matches Finviz Sector field from the snapshot row)
+  const sectorName = (fv.row?.["Sector"] ?? "").trim().toLowerCase();
+  const sectorPerf: SectorPerf | null =
+    extras.sectors.state === "ok" && extras.sectors.data && sectorName
+      ? (extras.sectors.data[sectorName] ?? null)
+      : null;
 
   const [optionsFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
-    scoreOptionsFlowFinviz(ticker, direction, fv),
-    scoreTechnicalWithSnap(ticker, baseTrendScore, fv),
-    scoreNews(ticker, direction),
+    scoreOptionsFlowFinviz(ticker, direction, fv, extras.insider.data),
+    scoreTechnicalWithSnap(ticker, baseTrendScore, fv, sectorPerf, direction),
+    scoreNews(ticker, direction, extras.news.data),
     scoreSentiment(ticker, direction),
     scoreVolatilityFinviz(ticker, fv),
     getRegime(admin),
@@ -552,6 +627,17 @@ export async function scoreInstitutional(
         : "Finviz request did not return valid CSV — all 3 components fell back to neutral 50.",
     },
     {
+      provider: "finviz_extras",
+      role: "insider (options_flow sub) + news (news sub) + sectors (technical sub)",
+      state: (extras.insider.state === "ok" || extras.news.state === "ok" || extras.sectors.state === "ok")
+        ? "active"
+        : (extras.insider.state === "missing_key" ? "missing_key" :
+           extras.insider.state === "auth_failed" ? "auth_failed" :
+           extras.insider.state === "not_entitled" ? "not_entitled" : "degraded"),
+      detail: `insider:${extras.insider.state} · news:${extras.news.state} · sectors:${extras.sectors.state}`,
+      note: "Sub-signals only — weights remain 30/25/20/15/10. Each endpoint degrades independently.",
+    },
+    {
       provider: "finnhub",
       role: "news + sentiment",
       state: FINNHUB_KEY ? "active" : "missing_key",
@@ -593,6 +679,8 @@ async function scoreTechnicalWithSnap(
   ticker: string,
   baseTrendScore: number,
   fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
+  sectorPerf?: SectorPerf | null,
+  direction?: "CALL" | "PUT",
 ): Promise<ComponentScore> {
   const localScore = clamp100((baseTrendScore + 1) * 50);
   if (fv.state === "missing_key") {
@@ -604,7 +692,6 @@ async function scoreTechnicalWithSnap(
     };
   }
   if (fv.state !== "ok" || !fv.row) {
-    // Finviz returned HTML / upsell / login / empty — fall back to Alpaca-only.
     return {
       score: localScore,
       configured: true,
@@ -621,13 +708,29 @@ async function scoreTechnicalWithSnap(
   const finvizTrend = clamp100(50 + sma50 * 2 + sma200 + perfWeek * 1.5);
   const finvizVol = clamp100(50 + (relVol - 1) * 25);
   const finvizScore = clamp100(finvizTrend * 0.7 + finvizVol * 0.3);
-  const blended = clamp100(localScore * 0.5 + finvizScore * 0.5);
+  let blended = clamp100(localScore * 0.5 + finvizScore * 0.5);
+
+  // Sub-signal: sector strength nudge (capped ±3)
+  let sectorNudge = 0;
+  let sectorNote = "";
+  if (sectorPerf && direction) {
+    const aligned = direction === "CALL" ? sectorPerf.perf_week_pct : -sectorPerf.perf_week_pct;
+    sectorNudge = Math.max(-3, Math.min(3, aligned * 0.6));
+    blended = clamp100(blended + sectorNudge);
+    sectorNote = ` · ${sectorPerf.sector} ${sectorPerf.perf_week_pct >= 0 ? "+" : ""}${sectorPerf.perf_week_pct.toFixed(1)}%/wk`;
+  }
+
   return {
     score: blended,
     configured: true,
-    source: "alpaca+finviz",
-    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x`,
-    details: { perf_week: perfWeek, sma50, sma200, rel_volume: relVol },
+    source: sectorPerf ? "alpaca+finviz+sector" : "alpaca+finviz",
+    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}`,
+    details: {
+      perf_week: perfWeek, sma50, sma200, rel_volume: relVol,
+      sector: sectorPerf?.sector ?? null,
+      sector_perf_week_pct: sectorPerf?.perf_week_pct ?? null,
+      sector_nudge: sectorNudge,
+    },
   };
 }
 
