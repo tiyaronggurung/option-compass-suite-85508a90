@@ -996,9 +996,10 @@ Deno.serve(async (req) => {
     ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2))
     : null;
 
-  const avgComponents: Record<string, number | null> & { candidate_count: number } = {
+  const avgComponents: Record<string, unknown> & { candidate_count: number } = {
     trend: null, momentum: null, levels: null, volume: null, options: null, macro: null,
     candidate_count: candidates,
+    lifecycle: lifecycleTransitions,
   };
   if (candidates > 0) {
     for (const k of Object.keys(compSums) as ComponentName[]) {
