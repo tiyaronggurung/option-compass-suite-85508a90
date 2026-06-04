@@ -1,117 +1,156 @@
-# Signal Lifecycle Engine — Implementation Plan
+# Contract Selection Engine — Plan (paper-only)
 
-Replaces the current freshness-by-age heuristic with a thesis-aware lifecycle. Signals are never deleted; they transition through states and remain queryable for outcome tracking, paper history, and analytics.
+## Goal
 
-## Lifecycle states
+Turn a signal (`NVDA CALL`) into a concrete, defensible paper contract:
 
-`fresh` · `active` · `weakening` · `expired` · `invalidated`
+> NVDA 225C · 28 DTE · Δ 0.58 · spread 4.1% · OI 8,420 · vol 1,210 · score 82 · rationale: "Near-money, balanced delta, tight spread, healthy liquidity"
 
-State is recomputed on every scan (and on-demand for individual signals) by a pure evaluator that reads the latest scoring snapshot and compares it to the snapshot stored at signal birth.
+Paper-only. No live orders. No scoring/threshold/scanner/lifecycle/hidden/guest/signal-generation changes.
 
-## 1. Schema changes (single migration)
+## Provider priority (gracefully degrades)
 
-Additive columns on `public.signals`:
+1. **Unusual Whales** — chain, greeks, OI, volume, IV (primary)
+2. **Alpaca Options** — snapshot/quote fallback when UW chain is empty/unavailable
+3. **Unavailable** — do NOT invent data. Block approval with reason `contract_chain_unavailable`. Never fake premium/strike/delta/expiry.
 
-- `lifecycle_state text not null default 'fresh'`
-- `lifecycle_reason text` — short machine code (e.g. `confidence_drop_15`, `flow_flip`, `time_exceeded`, `breakout_lost`)
-- `lifecycle_updated_at timestamptz not null default now()`
-- `confidence_at_birth integer` — backfilled to `confidence` for existing rows
-- `flow_at_birth jsonb default '{}'::jsonb` — snapshot of UW bias/premium/sweeps
-- `technical_at_birth jsonb default '{}'::jsonb` — breakout/breakdown level + side
-- `lifecycle_history jsonb not null default '[]'::jsonb` — append-only `{state, reason, at, confidence}` entries (capped at last 20 client-side)
+Stamp `contract_source` on every snapshot: `unusual_whales` | `alpaca` | `unavailable`.
 
-Index: `create index signals_lifecycle_state_idx on public.signals(lifecycle_state);`
+## Schema changes
 
-Backfill in same migration:
-- `confidence_at_birth = confidence`
-- `flow_at_birth = score_components->'options_flow'` (if present)
-- `technical_at_birth = score_components->'technical'` (if present)
-- Initial `lifecycle_state`:
-  - age < 2h → `fresh`
-  - age within tier soft limit → `active`
-  - age > tier soft limit → `expired`
+Single new table (cleaner than bloating `signals` or `paper_trades`):
 
-No changes to `tier`, `confidence`, `hidden`, `status`, scoring weights, scanner gate, or RLS. Existing GRANTs already cover the new columns.
-
-## 2. Lifecycle evaluator
-
-New file: `supabase/functions/_shared/lifecycle.ts`
-
-Pure function:
+```text
+contract_selection_snapshots
+  id uuid pk
+  signal_id uuid (nullable, indexed)
+  paper_trade_id uuid (nullable, indexed)
+  user_id uuid (nullable — null for system pre-selections)
+  underlying text
+  option_type text  -- CALL | PUT
+  contract_symbol text
+  strike numeric
+  expiry date
+  dte int
+  delta numeric
+  gamma numeric
+  theta numeric
+  vega numeric
+  iv numeric
+  iv_rank numeric (nullable)
+  bid numeric
+  ask numeric
+  mid numeric
+  spread_pct numeric
+  volume bigint
+  open_interest bigint
+  premium numeric        -- entry premium snapshot
+  contract_score int     -- 0..100
+  liquidity_score int    -- 0..100
+  rationale text         -- short human sentence
+  rationale_factors jsonb -- {dte_fit, delta_fit, spread, liquidity, oi, vol, iv, affordability}
+  contract_source text   -- unusual_whales | alpaca | unavailable
+  candidates_considered int
+  risk_profile text      -- developing|near_watchlist|watchlist|strong|elite
+  selected_at timestamptz default now()
+  created_at timestamptz default now()
 ```
-evaluateLifecycle({
-  signal,           // current row incl. *_at_birth snapshots
-  currentScoring,   // fresh score_components from this scan
-  nowMs
-}) => { state, reason, transitioned }
+
+Plus on `paper_trades`: add `contract_snapshot_id uuid` (nullable, FK soft). Optional on `signals`: `suggested_contract_snapshot_id uuid` (nullable) — only written by the selector, never by scanner.
+
+RLS: SELECT auth (snapshots are non-sensitive analytics). INSERT/UPDATE service_role + owner via edge function. GRANTs for `authenticated` (SELECT) and `service_role` (ALL).
+
+## Default contract preferences by confidence band — Hybrid philosophy
+
+Lower confidence → safer (higher delta, more intrinsic, tighter liquidity). Higher confidence → allow more leverage.
+
+| Band | Conf | DTE | Delta | Max spread % | Min OI | Min Vol |
+|---|---|---|---|---|---|---|
+| Developing | 50–64 | 30–45 | 0.65–0.75 | 5% | 500 | 100 |
+| Near Watchlist | 65–69 | 28–45 | 0.55–0.70 | 6% | 400 | 100 |
+| Watchlist | 70–79 | 21–40 | 0.50–0.65 | 7% | 300 | 75 |
+| Strong | 80–89 | 14–35 | 0.45–0.60 | 8% | 250 | 50 |
+| Elite | 90+ | 14–30 | 0.40–0.55 | 10% | 200 | 50 |
+
+Universal v1 guards: contracts=1, no 0–6 DTE unless user manually overrides later, skip if `bid<=0` or `ask<=0`, skip if `premium*100 > 5000` (affordability cap for paper sanity), prefer monthly expiries when within DTE window.
+
+## Scoring formula (0–100)
+
+```text
+score =
+  0.25 * dte_fit          // triangular: 1.0 at center of band, 0 at edges
++ 0.25 * delta_fit        // triangular over band
++ 0.20 * liquidity        // log-scaled OI + volume vs band mins
++ 0.15 * spread_quality   // 1.0 if spread_pct <= half max, linear to 0 at max
++ 0.10 * affordability    // 1.0 if premium*100 <= 1000, linear to 0 at 5000
++ 0.05 * iv_sanity        // penalize IV in top decile vs underlying history when available
 ```
 
-Tier → soft max age (hours): developing 6 · near_watchlist 12 · watchlist 24 · strong 36 · elite 48. Tier derived from `confidence_at_birth` to keep the budget stable.
+Tiebreak: higher OI, then tighter spread, then closer-to-target delta.
 
-Evaluation order (first match wins, strongest signal first):
+Reject candidate if: spread_pct > band max, OI < band min, volume < band min, expiry within 6 DTE, bid<=0, ask<=0.
 
-1. **Invalidated**
-   - `confidence_drop >= 15`
-   - UW flow flip: bullish↔bearish bias reversal OR net premium sign flip
-   - Technical break: CALL breakout level lost, or PUT breakdown level reclaimed (from `technical_at_birth`)
-2. **Weakening**
-   - `confidence_drop` between 5 and 14
-   - UW: sweep activity disappeared OR premium magnitude halved
-   - Sentiment/trusted-source score collapsed below neutral
-3. **Expired** — `age > tierMaxHours` AND no upgrade signal (confidence not rising, flow not strengthening). Time alone does NOT expire if confirmations remain strong (confidence stable ±4 and flow intact) → stays `active`.
-4. **Fresh** — `age < 2h` and no weakening/invalidation
-5. **Active** — default
+Engine returns top-1 plus up to 4 alternates for UI.
 
-Terminal rule: once `invalidated` or `expired`, no transitions back. `weakening → active` allowed if confirmations recover.
+## Approval flow
 
-## 3. Scan-time integration
+1. User clicks Approve on a signal.
+2. `approveSignal.ts` checks: does signal have `suggested_contract_snapshot_id`?
+   - Yes → reuse snapshot (re-validate freshness; if >5 min old re-fetch quote).
+   - No → call new edge function `select-contract`.
+3. `select-contract`:
+   - Try UW chain for underlying → score candidates → pick best.
+   - If UW empty → try Alpaca options chain.
+   - If both empty → return `{ ok:false, reason:'contract_chain_unavailable' }`.
+4. On success: insert `contract_selection_snapshots` row, then create `paper_trades` row with `contract_snapshot_id`, `entry_premium`, `strike`, `expiry`, `option_type`, `contracts=1`, `multiplier=100`, `total_cost`, `paper_test_class`, `confidence_at_approval`.
+5. On failure: surface a non-blocking toast + dialog: "No tradable contract found for NVDA right now (chain unavailable). Paper trade not created." No fake fallback.
 
-Touch only `supabase/functions/scan-signals/index.ts`:
+## UI changes (paper-only, additive)
 
-- After the existing institutional scoring pass, fetch all non-terminal signals for the universe being scanned (state in `fresh|active|weakening`).
-- For each, run `evaluateLifecycle` against the freshly computed `score_components` for that ticker/direction (already in memory for the scan).
-- Batch-update changed rows with `{lifecycle_state, lifecycle_reason, lifecycle_updated_at, lifecycle_history = lifecycle_history || new_entry}`.
-- Append per-scan counters to `signal_scan_runs.avg_components.lifecycle` (transitions by state) for observability. No new table required.
+- **SignalDetailDialog**: new `ContractRecommendationPanel` showing top pick + 2 alternates: strike, DTE, Δ, spread %, OI, vol, score, one-line rationale. "Use this contract" button. Three safety badges: Paper Option Trade · Simulation Only · No real money executed.
+- **OptionTradeCard**: when `contract_snapshot_id` present, render small "Why this contract" expandable with factor bars (dte fit, delta fit, liquidity, spread).
+- **Trades page**: existing card unchanged behaviorally; just gains rationale section.
 
-Cost: 1 extra select + 1 batched update per scan. No extra provider calls — uses scoring already computed.
+No changes to: scanner UI, lifecycle UI, hidden signals, guest /join /status /booking flows.
 
-Off-scan: a lightweight evaluator pass also runs from `update-paper-marks` (already cron'd) so lifecycle keeps moving between scans without new infra.
+## Validation plan
 
-## 4. UI
+Run `select-contract` for: NVDA CALL, AMD CALL, TSLA PUT, SPY CALL, QQQ PUT (all paper-only, hidden+demo seeded if needed). Report a table:
 
-Files touched:
+```text
+ticker  dir  strike  DTE  Δ      spread%  OI      vol    score  source  reason
+NVDA    C    225     28   0.58   3.9%     8420    1210   82     uw      "Balanced near-money, tight spread"
+AMD     C    ...
+TSLA    P    ...
+SPY     C    ...
+QQQ     P    ...
+```
 
-- `src/lib/signalLifecycle.ts` (new) — types, labels, colors, badge meta. Mirrors `signalTiers.ts` style.
-- `src/components/SignalCard.tsx` — render lifecycle badge next to freshness badge. Freshness badge stays (different concept: age-only). Lifecycle badge takes precedence visually when state ≠ `active`.
-- `src/components/SignalDetailDialog.tsx` — new "Lifecycle" section showing current state, reason, age vs tier budget, and `lifecycle_history` timeline.
-- `src/pages/Dashboard.tsx` — add lifecycle filter chips (All · Fresh · Active · Weakening · Expired · Invalidated). Default view hides `expired` + `invalidated` from main grids; Developing Signals section unchanged otherwise.
-- `src/pages/OutcomeAnalytics.tsx` — new "Lifecycle Win-Rate Comparison" card: n, win rate, avg return for each state, joined from `signal_outcomes` on `signal_id`.
+Then approve one (NVDA dev-band, hidden/demo), confirm `contract_selection_snapshots` row + `paper_trades.contract_snapshot_id` linkage, run `update-paper-marks`, close, verify realized P/L + analytics card still excludes demo.
 
-No changes to: SignalCard approve button copy, paper approval flow, public guest flows, scanner gate, hidden logic, scoring components.
+## Protected / untouched
 
-## 5. Behavior for existing signals
+- Live trading, real orders
+- Scoring weights, thresholds, scanner logic, signal generation, lifecycle, hidden logic
+- Guest flows (join, status, booking)
+- `update-paper-marks` math (only reads new snapshot, doesn't change P/L logic)
 
-- Migration backfills `*_at_birth` and an initial `lifecycle_state` from age + tier.
-- First scan after deploy re-evaluates and may move rows to `weakening`/`invalidated` if current scoring already shows decay vs birth snapshot.
-- No existing signal is hidden, deleted, or has its `confidence`/`tier` changed.
+## Files to be created / edited (preview only — no edits yet)
 
-## 6. Out of scope (explicitly untouched)
+- NEW migration: `contract_selection_snapshots` + `paper_trades.contract_snapshot_id`
+- NEW `supabase/functions/select-contract/index.ts`
+- NEW `src/lib/contractSelection/scoring.ts` (pure scoring helpers, used by edge + UI preview)
+- NEW `src/lib/contractSelection/bands.ts` (the hybrid table above)
+- NEW `src/components/ContractRecommendationPanel.tsx`
+- EDIT `src/lib/approveSignal.ts` — wire selector + snapshot linkage
+- EDIT `src/components/OptionTradeCard.tsx` — render rationale section
+- EDIT `src/components/SignalDetailDialog.tsx` — mount panel
 
-scoring weights · tier thresholds · scanner gate · `hidden` logic · paper/live trade rules · UW/Twitter/insider/SEC Form 4/Tradier scoring · public guest flows (`join`, `status`, `booking`).
+## Decisions needed from you before code
 
-## Files
+1. Approve the **Hybrid** band table as-is, or send edits.
+2. Approve **contracts=1** default and **$5,000 max premium** affordability cap for paper v1.
+3. Approve a **new `contract_selection_snapshots` table** (vs cramming into `paper_trades`).
+4. Approve the **block-on-unavailable** behavior (no synthetic fallback).
 
-**New**
-- `supabase/functions/_shared/lifecycle.ts`
-- `src/lib/signalLifecycle.ts`
-- one migration file (schema + backfill)
-
-**Modified**
-- `supabase/functions/scan-signals/index.ts` (lifecycle pass)
-- `supabase/functions/update-paper-marks/index.ts` (between-scan refresh)
-- `src/components/SignalCard.tsx`
-- `src/components/SignalDetailDialog.tsx`
-- `src/pages/Dashboard.tsx`
-- `src/pages/OutcomeAnalytics.tsx`
-
-Reply **go** to proceed, or tell me what to change.
+On your "go" I will implement exactly this — nothing more, nothing less.
