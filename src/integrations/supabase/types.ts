@@ -131,6 +131,108 @@ export type Database = {
         }
         Relationships: []
       }
+      insider_strength_scores: {
+        Row: {
+          as_of: string
+          buy_count_30d: number
+          buy_count_90d: number
+          label: string
+          score: number
+          sell_count_30d: number
+          sell_count_90d: number
+          signals: Json
+          ticker: string
+          total_buy_value_90d: number
+          updated_at: string
+          window_days: number
+        }
+        Insert: {
+          as_of?: string
+          buy_count_30d?: number
+          buy_count_90d?: number
+          label?: string
+          score?: number
+          sell_count_30d?: number
+          sell_count_90d?: number
+          signals?: Json
+          ticker: string
+          total_buy_value_90d?: number
+          updated_at?: string
+          window_days?: number
+        }
+        Update: {
+          as_of?: string
+          buy_count_30d?: number
+          buy_count_90d?: number
+          label?: string
+          score?: number
+          sell_count_30d?: number
+          sell_count_90d?: number
+          signals?: Json
+          ticker?: string
+          total_buy_value_90d?: number
+          updated_at?: string
+          window_days?: number
+        }
+        Relationships: []
+      }
+      insider_transactions: {
+        Row: {
+          created_at: string
+          direction: string
+          external_ref: string | null
+          filing_date: string | null
+          id: string
+          insider_name: string
+          price: number | null
+          raw: Json
+          role: string | null
+          shares: number | null
+          source: string
+          ticker: string
+          total_value: number | null
+          transaction_date: string
+          transaction_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          direction: string
+          external_ref?: string | null
+          filing_date?: string | null
+          id?: string
+          insider_name: string
+          price?: number | null
+          raw?: Json
+          role?: string | null
+          shares?: number | null
+          source?: string
+          ticker: string
+          total_value?: number | null
+          transaction_date: string
+          transaction_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          direction?: string
+          external_ref?: string | null
+          filing_date?: string | null
+          id?: string
+          insider_name?: string
+          price?: number | null
+          raw?: Json
+          role?: string | null
+          shares?: number | null
+          source?: string
+          ticker?: string
+          total_value?: number | null
+          transaction_date?: string
+          transaction_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mark_engine_config: {
         Row: {
           enabled: boolean
@@ -583,6 +685,104 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "signal_analyses_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: true
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signal_outcomes: {
+        Row: {
+          confidence: number
+          created_at: string
+          direction: string
+          entry_at: string
+          entry_price: number | null
+          last_error: string | null
+          last_updated_at: string
+          price_10d: number | null
+          price_1d: number | null
+          price_30d: number | null
+          price_3d: number | null
+          price_5d: number | null
+          return_10d: number | null
+          return_1d: number | null
+          return_30d: number | null
+          return_3d: number | null
+          return_5d: number | null
+          score_components: Json
+          signal_id: string
+          status: string
+          ticker: string
+          tier: string | null
+          win_10d: boolean | null
+          win_1d: boolean | null
+          win_30d: boolean | null
+          win_3d: boolean | null
+          win_5d: boolean | null
+        }
+        Insert: {
+          confidence: number
+          created_at?: string
+          direction: string
+          entry_at: string
+          entry_price?: number | null
+          last_error?: string | null
+          last_updated_at?: string
+          price_10d?: number | null
+          price_1d?: number | null
+          price_30d?: number | null
+          price_3d?: number | null
+          price_5d?: number | null
+          return_10d?: number | null
+          return_1d?: number | null
+          return_30d?: number | null
+          return_3d?: number | null
+          return_5d?: number | null
+          score_components?: Json
+          signal_id: string
+          status?: string
+          ticker: string
+          tier?: string | null
+          win_10d?: boolean | null
+          win_1d?: boolean | null
+          win_30d?: boolean | null
+          win_3d?: boolean | null
+          win_5d?: boolean | null
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          direction?: string
+          entry_at?: string
+          entry_price?: number | null
+          last_error?: string | null
+          last_updated_at?: string
+          price_10d?: number | null
+          price_1d?: number | null
+          price_30d?: number | null
+          price_3d?: number | null
+          price_5d?: number | null
+          return_10d?: number | null
+          return_1d?: number | null
+          return_30d?: number | null
+          return_3d?: number | null
+          return_5d?: number | null
+          score_components?: Json
+          signal_id?: string
+          status?: string
+          ticker?: string
+          tier?: string | null
+          win_10d?: boolean | null
+          win_1d?: boolean | null
+          win_30d?: boolean | null
+          win_3d?: boolean | null
+          win_5d?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_outcomes_signal_id_fkey"
             columns: ["signal_id"]
             isOneToOne: true
             referencedRelation: "signals"
