@@ -269,6 +269,29 @@ export default function Dashboard() {
             </Button>
           ))}
         </div>
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground mr-1">Lifecycle</span>
+          <Button
+            size="sm"
+            variant={lifecycleFilter === "all" ? "secondary" : "ghost"}
+            className="h-7 text-[11px] px-2"
+            onClick={() => setLifecycleFilter("all")}
+          >
+            All active
+          </Button>
+          {LIFECYCLE_ORDER.map((ls) => (
+            <Button
+              key={ls}
+              size="sm"
+              variant={lifecycleFilter === ls ? "secondary" : "ghost"}
+              className="h-7 text-[11px] px-2 gap-1"
+              onClick={() => setLifecycleFilter(lifecycleFilter === ls ? "all" : ls)}
+              title={LIFECYCLE_META[ls].description}
+            >
+              <span>{LIFECYCLE_META[ls].emoji}</span> {LIFECYCLE_META[ls].label}
+            </Button>
+          ))}
+        </div>
         <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TagIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0 mr-0.5" />
           <Button
