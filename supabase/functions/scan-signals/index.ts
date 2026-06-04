@@ -930,6 +930,11 @@ Deno.serve(async (req) => {
           at: new Date().toISOString(),
           confidence: finalScore,
         }],
+        // Confidence drift watermarks (analytics only).
+        max_confidence_seen: finalScore,
+        min_confidence_seen: finalScore,
+        max_tier_seen: tier,
+        min_tier_seen: tier,
         ...contractFields,
       });
       if (error) {
@@ -944,6 +949,7 @@ Deno.serve(async (req) => {
       skipped++;
     }
   }
+
 
   // Parallel batches of 20
   const BATCH_SIZE = 20;
