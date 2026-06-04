@@ -476,12 +476,23 @@ async function scoreNews(
     if (finvizNews && finvizNews.count_7d > 0) {
       const volumeBoost = Math.min(20, finvizNews.count_7d);
       const score = clamp100(50 + volumeBoost);
+      const headlines = (finvizNews.headlines ?? []).slice(0, 5).map((h) => ({
+        headline: h.slice(0, 200), source: "finviz" as const,
+      }));
       return {
         score,
         configured: true,
         source: "finviz_news",
         reason: `Finnhub missing · Finviz ${finvizNews.count_24h}/24h · ${finvizNews.count_7d}/7d`,
-        details: { finviz_news_24h: finvizNews.count_24h, finviz_news_7d: finvizNews.count_7d },
+        details: {
+          finviz_news_24h: finvizNews.count_24h,
+          finviz_news_7d: finvizNews.count_7d,
+          article_count: finvizNews.count_7d,
+          reason_code: finvizNews.count_7d >= 20 ? "volume_cap_hit_20_articles" : "volume_only_below_cap",
+          top_headlines: headlines,
+          finnhub_sentiment_403: false,
+          finviz_fallback_active: true,
+        },
       };
     }
     return neutral("finnhub", "Finnhub key not configured");
