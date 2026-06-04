@@ -972,7 +972,7 @@ Deno.serve(async (req) => {
   try {
     const { data: livingSignals } = await admin
       .from("signals")
-      .select("id, ticker, direction, confidence, confidence_at_birth, created_at, lifecycle_state, lifecycle_history, flow_at_birth, technical_at_birth")
+      .select("id, ticker, direction, confidence, confidence_at_birth, created_at, lifecycle_state, lifecycle_history, flow_at_birth, technical_at_birth, max_confidence_seen, min_confidence_seen, max_tier_seen, min_tier_seen, tier")
       .in("lifecycle_state", ["fresh", "active", "weakening"])
       .eq("is_demo", false)
       .limit(2000);
@@ -981,34 +981,58 @@ Deno.serve(async (req) => {
     const nowMs = Date.now();
     for (const row of (livingSignals ?? []) as any[]) {
       const snap = scoringByKey.get(keyOf(row.ticker, row.direction));
+      const liveConf = snap?.confidence ?? row.confidence;
+      const liveTier = snap?.confidence != null ? tierForScore(snap.confidence) : row.tier;
+
+      // Watermark update (analytics only; runs every scan regardless of lifecycle transition).
+      const newMaxConf = Math.max(row.max_confidence_seen ?? liveConf, liveConf);
+      const newMinConf = Math.min(row.min_confidence_seen ?? liveConf, liveConf);
+      const newMaxTier = higherTier(row.max_tier_seen, liveTier);
+      const newMinTier = lowerTier(row.min_tier_seen, liveTier);
+      const watermarkPatch: Record<string, unknown> = {};
+      if (newMaxConf !== row.max_confidence_seen) watermarkPatch.max_confidence_seen = newMaxConf;
+      if (newMinConf !== row.min_confidence_seen) watermarkPatch.min_confidence_seen = newMinConf;
+      if (newMaxTier !== row.max_tier_seen) watermarkPatch.max_tier_seen = newMaxTier;
+      if (newMinTier !== row.min_tier_seen) watermarkPatch.min_tier_seen = newMinTier;
+
       const decision = evaluateLifecycle(row as LifecycleSignal, {
-        currentConfidence: snap?.confidence ?? row.confidence,
+        currentConfidence: liveConf,
         currentFlow: snap?.flow ?? null,
         currentTechnical: snap?.technical ?? null,
         nowMs,
       });
-      if (!decision.transitioned) continue;
-      lifecycleTransitions[decision.state] = (lifecycleTransitions[decision.state] ?? 0) + 1;
-      const history = appendHistory(row.lifecycle_history, {
-        state: decision.state,
-        reason: decision.reason,
-        at: nowIso,
-        confidence: snap?.confidence ?? row.confidence,
-      });
-      const { error: lcErr } = await admin
-        .from("signals")
-        .update({
-          lifecycle_state: decision.state,
-          lifecycle_reason: decision.reason,
-          lifecycle_updated_at: nowIso,
-          lifecycle_history: history,
-        })
-        .eq("id", row.id);
-      if (lcErr) errors.push(`lifecycle ${row.ticker}: ${lcErr.message}`);
+
+      if (decision.transitioned) {
+        lifecycleTransitions[decision.state] = (lifecycleTransitions[decision.state] ?? 0) + 1;
+        const history = appendHistory(row.lifecycle_history, {
+          state: decision.state,
+          reason: decision.reason,
+          at: nowIso,
+          confidence: liveConf,
+        });
+        const { error: lcErr } = await admin
+          .from("signals")
+          .update({
+            lifecycle_state: decision.state,
+            lifecycle_reason: decision.reason,
+            lifecycle_updated_at: nowIso,
+            lifecycle_history: history,
+            ...watermarkPatch,
+          })
+          .eq("id", row.id);
+        if (lcErr) errors.push(`lifecycle ${row.ticker}: ${lcErr.message}`);
+      } else if (Object.keys(watermarkPatch).length > 0) {
+        const { error: wmErr } = await admin
+          .from("signals")
+          .update(watermarkPatch)
+          .eq("id", row.id);
+        if (wmErr) errors.push(`watermark ${row.ticker}: ${wmErr.message}`);
+      }
     }
   } catch (e) {
     errors.push(`lifecycle pass: ${(e as Error).message}`);
   }
+
 
   const topSkipped = settings.debug_mode
     ? skippedList.sort((a, b) => b.score - a.score).slice(0, 3)
