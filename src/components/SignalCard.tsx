@@ -8,6 +8,7 @@ import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOu
 import { getFreshness } from "@/lib/signalFreshness";
 import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
+import { getTier, TIER_META } from "@/lib/signalTiers";
 
 type Props = {
   signal: Signal;
@@ -20,8 +21,9 @@ type Props = {
 
 export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none" }: Props) {
   const isCall = signal.direction === "CALL";
-  const ring =
-    signal.confidence >= 80 ? "ring-bull/40" : signal.confidence >= 65 ? "ring-primary/30" : "ring-border";
+  const tier = getTier(signal);
+  const tierMeta = TIER_META[tier];
+  const ring = tierMeta.ringClass;
   const tags: TagId[] = deriveTags(signal, watchlist ?? new Set());
   const freshness = getFreshness(signal);
   const freshClass =
@@ -48,6 +50,11 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
               <Badge variant="outline" className={cn("border-0 text-[10px] font-medium px-1.5 py-0", isCall ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
                 {signal.direction}
               </Badge>
+              {tier !== "rejected" && (
+                <Badge className={cn("border-0 text-[10px] px-1.5 py-0 gap-1", tierMeta.className)}>
+                  <span>{tierMeta.emoji}</span> {tierMeta.label}
+                </Badge>
+              )}
               {signal.dte === 0 && (
                 <Badge className="bg-warn/15 text-warn border-0 text-[10px] px-1.5 py-0">0DTE</Badge>
               )}

@@ -152,6 +152,8 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
             )}
           </div>
 
+          <InstitutionalBreakdown sc={(s as any).score_components} tier={(s as any).tier} />
+
           <ComponentBreakdown tm={s.technical_metrics as any} />
 
           {rankBreakdown && <RankingBreakdown b={rankBreakdown} />}
@@ -305,6 +307,76 @@ function RankingBreakdown({ b }: { b: RankBreakdown }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const INSTITUTIONAL_COMPONENTS: Array<{ key: string; label: string; weight: number }> = [
+  { key: "options_flow", label: "Options Flow", weight: 30 },
+  { key: "technical",    label: "Technical",    weight: 25 },
+  { key: "news",         label: "News",         weight: 20 },
+  { key: "sentiment",    label: "Sentiment",    weight: 15 },
+  { key: "volatility",   label: "Volatility",   weight: 10 },
+];
+
+function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null }) {
+  if (!sc || typeof sc !== "object" || !sc.components) return null;
+  const final = Number(sc.final ?? 0);
+  const base = Number(sc.base ?? final);
+  const adj = Number(sc.regime_adjust ?? 0);
+  const regime = sc.regime as string | null;
+  const sourcesUsed: string[] = Array.isArray(sc.sources_used) ? sc.sources_used : [];
+  return (
+    <div className="pt-2 border-t border-border">
+      <div className="text-xs text-muted-foreground mb-1.5 flex items-center justify-between">
+        <span>Institutional score (v2)</span>
+        <span className="ticker-mono text-foreground">
+          {tier ? <span className="text-muted-foreground mr-1">{tier}</span> : null}
+          {final}/100
+        </span>
+      </div>
+      {(regime || adj !== 0) && (
+        <div className="text-[11px] text-muted-foreground mb-1.5">
+          base {base} {adj !== 0 ? `· regime ${regime} (${adj >= 0 ? "+" : ""}${adj})` : ""}
+        </div>
+      )}
+      <div className="space-y-1.5">
+        {INSTITUTIONAL_COMPONENTS.map((row) => {
+          const c = sc.components?.[row.key];
+          if (!c) return null;
+          const score = Number(c.score ?? 50);
+          const configured = !!c.configured;
+          return (
+            <div key={row.key} className="text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground w-24 shrink-0">
+                  {row.label} <span className="opacity-60">({row.weight}%)</span>
+                </span>
+                <span className="flex-1 truncate text-foreground/70">
+                  {configured ? c.reason : "not configured"}
+                </span>
+                <span className={cn(
+                  "ticker-mono w-12 text-right",
+                  !configured ? "text-muted-foreground" : score >= 70 ? "text-bull" : score <= 40 ? "text-bear" : "text-foreground/80",
+                )}>
+                  {Math.round(score)}
+                </span>
+              </div>
+              <div className="mt-0.5 h-1 rounded bg-muted/40 overflow-hidden">
+                <div
+                  className={cn("h-full", !configured ? "bg-muted-foreground/40" : score >= 70 ? "bg-bull/60" : score <= 40 ? "bg-bear/60" : "bg-primary/60")}
+                  style={{ width: `${score}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {sourcesUsed.length > 0 && (
+        <div className="text-[10px] text-muted-foreground mt-2">
+          Sources: {sourcesUsed.join(" · ")}
+        </div>
+      )}
     </div>
   );
 }
