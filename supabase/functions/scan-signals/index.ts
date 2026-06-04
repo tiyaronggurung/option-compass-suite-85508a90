@@ -681,19 +681,63 @@ Deno.serve(async (req) => {
         compSums[k] += draft.components[k].score;
       }
 
-      if (settings.threshold >= 50 &&
-          draft.confidence >= settings.threshold - 10 &&
-          draft.confidence < settings.threshold) {
-        wouldHave++;
-      }
+      const oldPreScore = draft.confidence; // diagnostic only — no longer the gate
 
-      if (draft.confidence < settings.threshold) {
+      // A2: Institutional scoring is now the publish gate.
+      // Full 5-component engine (UW flow + Finviz + macro regime + sentiment + insiders).
+      // Missing keys → component returns neutral 50 and does not block.
+      let institutional: Awaited<ReturnType<typeof scoreInstitutional>> | null = null;
+      let institutionalConfidence = 0;
+      let institutionalTier: string = "rejected";
+      const institutionalReasons: string[] = [];
+      try {
+        institutional = await scoreInstitutional(admin, {
+          ticker: draft.ticker,
+          direction: draft.direction,
+          baseTrendScore: draft.components.trend.score,
+        });
+        institutionalConfidence = institutional.final;
+        institutionalTier = tierForScore(institutionalConfidence);
+        institutionalReasons.push(...institutional.reasons);
+      } catch (e) {
+        errors.push(`${sym} institutional: ${(e as Error).message}`);
+        // Hard fail → skip this candidate; do not fall back to old pre-score.
         skipped++;
         skippedList.push({
           ticker: draft.ticker,
           direction: draft.direction,
-          score: draft.confidence,
-          reasons: draft.reasons,
+          score: oldPreScore,
+          reasons: [
+            `old_pre_score=${oldPreScore}`,
+            `institutional=error`,
+            `skip_reason=institutional_failed`,
+            ...draft.reasons,
+          ],
+        });
+        return;
+      }
+
+      // "Would have" diagnostic: institutional just under threshold
+      if (settings.threshold >= 50 &&
+          institutionalConfidence >= settings.threshold - 10 &&
+          institutionalConfidence < settings.threshold) {
+        wouldHave++;
+      }
+
+      // Publish gate uses institutional confidence (was old pre-score)
+      if (institutionalConfidence < settings.threshold) {
+        skipped++;
+        skippedList.push({
+          ticker: draft.ticker,
+          direction: draft.direction,
+          score: institutionalConfidence,
+          reasons: [
+            `old_pre_score=${oldPreScore}`,
+            `institutional_confidence=${institutionalConfidence}`,
+            `institutional_tier=${institutionalTier}`,
+            `skip_reason=below_institutional_threshold`,
+            ...institutionalReasons.slice(0, 4),
+          ],
         });
         return;
       }
@@ -794,25 +838,10 @@ Deno.serve(async (req) => {
         errors.push(`${sym} confirmations: ${(e as Error).message}`);
       }
 
-      // Institutional 5-component scoring (Tradier/Finviz/Finnhub/Apify + regime).
-      // Missing keys → component returns neutral 50 and does not block.
-      // Final confidence stored is the institutional score; tier derives from it.
-      let institutional: Awaited<ReturnType<typeof scoreInstitutional>> | null = null;
-      let finalScore = finalConfidence;
-      let tier = tierForScore(finalScore);
-      const institutionalReasons: string[] = [];
-      try {
-        institutional = await scoreInstitutional(admin, {
-          ticker: draft.ticker,
-          direction: draft.direction,
-          baseTrendScore: draft.components.trend.score,
-        });
-        finalScore = institutional.final;
-        tier = tierForScore(finalScore);
-        institutionalReasons.push(...institutional.reasons);
-      } catch (e) {
-        errors.push(`${sym} institutional: ${(e as Error).message}`);
-      }
+      // Institutional was already computed BEFORE the gate (A2).
+      // Reuse those values here for the insert — do not score twice.
+      const finalScore = institutionalConfidence;
+      const tier = institutionalTier;
 
       const allReasons = Array.from(new Set([...reasonsWithContract, ...institutionalReasons]));
       const hideForRejected = tier === "rejected";
