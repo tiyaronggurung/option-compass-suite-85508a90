@@ -185,6 +185,8 @@ export default function Dashboard() {
         </div>
       </header>
 
+      <MarketOverviewStrip />
+
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat icon={Radio} label="Live signals" value={String(totalLive)} accent="text-primary" />
         <Stat icon={Flame} label="High conviction" value={String(highConv)} accent="text-bull" />
