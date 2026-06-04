@@ -63,6 +63,179 @@ const FINVIZ_KEY  = Deno.env.get("FINVIZ_API_KEY") ?? "";
 const TRADIER_KEY = Deno.env.get("TRADIER_API_KEY") ?? "";
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") ?? "";
 const APIFY_TOKEN = Deno.env.get("APIFY_API_TOKEN") ?? "";
+const ALPACA_KEY_ID = Deno.env.get("ALPACA_API_KEY_ID") ?? "";
+const ALPACA_SECRET = Deno.env.get("ALPACA_API_SECRET_KEY") ?? "";
+
+// ---------- Trendline analysis (sub-signal inside Technical) ----------
+type DailyBar = { t: string; o: number; h: number; l: number; c: number; v: number };
+
+async function fetchDailyBars(ticker: string, days = 60): Promise<DailyBar[] | null> {
+  if (!ALPACA_KEY_ID || !ALPACA_SECRET) return null;
+  try {
+    const end = new Date();
+    const start = new Date(end.getTime() - (days + 20) * 24 * 60 * 60 * 1000);
+    const params = new URLSearchParams({
+      timeframe: "1Day",
+      start: start.toISOString(),
+      end: end.toISOString(),
+      limit: "200",
+      adjustment: "raw",
+      feed: "iex",
+    });
+    const res = await fetch(`https://data.alpaca.markets/v2/stocks/${ticker}/bars?${params}`, {
+      headers: { "APCA-API-KEY-ID": ALPACA_KEY_ID, "APCA-API-SECRET-KEY": ALPACA_SECRET },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const bars = (data?.bars ?? []) as DailyBar[];
+    return bars.length ? bars : null;
+  } catch { return null; }
+}
+
+function linreg(ys: number[]): { slope: number; intercept: number } {
+  const n = ys.length;
+  if (n < 2) return { slope: 0, intercept: ys[0] ?? 0 };
+  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+  for (let i = 0; i < n; i++) { sumX += i; sumY += ys[i]; sumXY += i * ys[i]; sumXX += i * i; }
+  const denom = n * sumXX - sumX * sumX;
+  const slope = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom;
+  return { slope, intercept: (sumY - slope * sumX) / n };
+}
+
+type TrendlineWindow = {
+  window: number;
+  support_line_now: number;
+  resistance_line_now: number;
+  support_dir: "rising" | "falling" | "flat";
+  resistance_dir: "rising" | "falling" | "flat";
+};
+
+function analyzeWindow(bars: DailyBar[], window: number): TrendlineWindow | null {
+  if (bars.length < window) return null;
+  const slice = bars.slice(-window);
+  const sup = linreg(slice.map(b => b.l));
+  const res = linreg(slice.map(b => b.h));
+  const n = window - 1;
+  const avgPrice = slice.reduce((s, b) => s + b.c, 0) / slice.length || 1;
+  const flat = avgPrice * 0.0005;
+  const dirOf = (slope: number): "rising" | "falling" | "flat" =>
+    slope > flat ? "rising" : slope < -flat ? "falling" : "flat";
+  return {
+    window,
+    support_line_now: sup.intercept + sup.slope * n,
+    resistance_line_now: res.intercept + res.slope * n,
+    support_dir: dirOf(sup.slope),
+    resistance_dir: dirOf(res.slope),
+  };
+}
+
+export type TrendlineResult = {
+  trendline_signal:
+    | "bullish_breakout" | "bullish_bounce"
+    | "bearish_breakdown" | "bearish_rejection"
+    | "none" | "insufficient_data";
+  trendline_direction: "bullish" | "bearish" | "neutral";
+  support_line: number | null;
+  resistance_line: number | null;
+  breakout_confirmed: boolean;
+  volume_confirmed: boolean;
+  reason_code: string;
+  human_reason: string;
+  adjustment: number;
+  window_used: number | null;
+};
+
+function detectTrendlines(bars: DailyBar[] | null, direction: "CALL" | "PUT"): TrendlineResult {
+  if (!bars || bars.length < 20) {
+    return {
+      trendline_signal: "insufficient_data",
+      trendline_direction: "neutral",
+      support_line: null, resistance_line: null,
+      breakout_confirmed: false, volume_confirmed: false,
+      reason_code: "trendline_insufficient_candles",
+      human_reason: "", adjustment: 0, window_used: null,
+    };
+  }
+  const w20 = analyzeWindow(bars, 20);
+  const w50 = analyzeWindow(bars, 50);
+  const last = bars[bars.length - 1];
+  const prev = bars[bars.length - 2];
+  const close = last.c;
+  const prevClose = prev?.c ?? close;
+  const vols = bars.slice(-20).map(b => b.v);
+  const avgVol = vols.reduce((s, v) => s + v, 0) / vols.length || 1;
+  const relVol = last.v / avgVol;
+  const volumeConfirmed = relVol >= 1.5;
+  const tol = close * 0.005;
+
+  const evaluate = (w: TrendlineWindow): TrendlineResult | null => {
+    const sup = w.support_line_now;
+    const resv = w.resistance_line_now;
+    const volBonus = volumeConfirmed ? 2 : 0;
+    if (prevClose <= resv + tol && close > resv && w.resistance_dir !== "rising") {
+      return {
+        trendline_signal: "bullish_breakout", trendline_direction: "bullish",
+        support_line: +sup.toFixed(2), resistance_line: +resv.toFixed(2),
+        breakout_confirmed: true, volume_confirmed: volumeConfirmed,
+        reason_code: "bullish_breakout_above_resistance",
+        human_reason: `Bullish breakout above ${w.resistance_dir} resistance (${w.window}d)${volumeConfirmed ? " with volume confirmation" : ""}.`,
+        adjustment: 5 + volBonus, window_used: w.window,
+      };
+    }
+    if (prevClose >= sup - tol && close < sup && w.support_dir !== "falling") {
+      return {
+        trendline_signal: "bearish_breakdown", trendline_direction: "bearish",
+        support_line: +sup.toFixed(2), resistance_line: +resv.toFixed(2),
+        breakout_confirmed: true, volume_confirmed: volumeConfirmed,
+        reason_code: "bearish_breakdown_below_support",
+        human_reason: `Bearish breakdown below ${w.support_dir} support (${w.window}d)${volumeConfirmed ? " with volume confirmation" : ""}.`,
+        adjustment: -5 - volBonus, window_used: w.window,
+      };
+    }
+    if (w.support_dir === "rising" && Math.abs(close - sup) <= tol * 2 && close >= prevClose) {
+      return {
+        trendline_signal: "bullish_bounce", trendline_direction: "bullish",
+        support_line: +sup.toFixed(2), resistance_line: +resv.toFixed(2),
+        breakout_confirmed: false, volume_confirmed: volumeConfirmed,
+        reason_code: "bullish_bounce_from_rising_support",
+        human_reason: `Bullish bounce from rising support (${w.window}d)${volumeConfirmed ? " with volume confirmation" : ""}.`,
+        adjustment: 3 + volBonus, window_used: w.window,
+      };
+    }
+    if (w.resistance_dir === "falling" && Math.abs(close - resv) <= tol * 2 && close <= prevClose) {
+      return {
+        trendline_signal: "bearish_rejection", trendline_direction: "bearish",
+        support_line: +sup.toFixed(2), resistance_line: +resv.toFixed(2),
+        breakout_confirmed: false, volume_confirmed: volumeConfirmed,
+        reason_code: "bearish_rejection_at_falling_resistance",
+        human_reason: `Bearish rejection at falling resistance (${w.window}d)${volumeConfirmed ? " with volume confirmation" : ""}.`,
+        adjustment: -3 - volBonus, window_used: w.window,
+      };
+    }
+    return null;
+  };
+
+  const hit = (w20 && evaluate(w20)) || (w50 && evaluate(w50));
+  if (hit) {
+    // Direction flip: bullish helps CALL / hurts PUT; bearish helps PUT / hurts CALL.
+    const aligned =
+      (hit.trendline_direction === "bullish" && direction === "CALL") ||
+      (hit.trendline_direction === "bearish" && direction === "PUT");
+    const mag = Math.abs(hit.adjustment);
+    return { ...hit, adjustment: aligned ? mag : -mag };
+  }
+  const w = w20 ?? w50!;
+  return {
+    trendline_signal: "none", trendline_direction: "neutral",
+    support_line: +w.support_line_now.toFixed(2),
+    resistance_line: +w.resistance_line_now.toFixed(2),
+    breakout_confirmed: false, volume_confirmed: volumeConfirmed,
+    reason_code: "no_trendline_event",
+    human_reason: "", adjustment: 0, window_used: w.window,
+  };
+}
+
+
 
 function clamp100(v: number) { return Math.max(0, Math.min(100, v)); }
 function neutral(source: string, reason = "not configured"): ComponentScore {
