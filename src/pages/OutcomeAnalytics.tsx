@@ -309,7 +309,7 @@ export default function OutcomeAnalytics() {
     setRows(null);
     const [{ data: outcomeData }, { data: tradeData }, { data: sigData }] = await Promise.all([
       supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
-      supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval").limit(5000),
+      supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval, status, is_option, unrealized_pl, unrealized_pl_pct, realized_pl, total_cost").limit(5000),
       supabase.from("signals").select("id, lifecycle_state, confidence, confidence_at_birth, max_confidence_seen, min_confidence_seen, tier, max_tier_seen, min_tier_seen").limit(5000),
 
     ]);
