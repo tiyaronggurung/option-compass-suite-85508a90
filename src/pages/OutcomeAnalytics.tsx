@@ -222,6 +222,12 @@ type PaperTradeLite = {
   signal_id: string | null;
   paper_test_class: string | null;
   confidence_at_approval: number | null;
+  status: string | null;
+  is_option: boolean | null;
+  unrealized_pl: number | null;
+  unrealized_pl_pct: number | null;
+  realized_pl: number | null;
+  total_cost: number | null;
 };
 
 type SignalLifecycleLite = {
@@ -303,7 +309,7 @@ export default function OutcomeAnalytics() {
     setRows(null);
     const [{ data: outcomeData }, { data: tradeData }, { data: sigData }] = await Promise.all([
       supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
-      supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval").limit(5000),
+      supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval, status, is_option, unrealized_pl, unrealized_pl_pct, realized_pl, total_cost").limit(5000),
       supabase.from("signals").select("id, lifecycle_state, confidence, confidence_at_birth, max_confidence_seen, min_confidence_seen, tier, max_tier_seen, min_tier_seen").limit(5000),
 
     ]);
@@ -608,6 +614,46 @@ export default function OutcomeAnalytics() {
     return { promotions, demotions };
   }, [signalLifecycle]);
 
+  // ---------- Paper Option P/L by Class (option paper trades only) ----------
+  const optionPnlByClass = useMemo(() => {
+    const agg: Record<string, { n: number; open: number; closed: number; unrealSum: number; unrealN: number; realSum: number; realN: number; wins: number; costSum: number }> = {};
+    for (const t of paperTrades) {
+      if (t.is_option === false) continue;
+      const cls = (t.paper_test_class || "").trim();
+      if (!cls) continue;
+      if (!agg[cls]) agg[cls] = { n: 0, open: 0, closed: 0, unrealSum: 0, unrealN: 0, realSum: 0, realN: 0, wins: 0, costSum: 0 };
+      const a = agg[cls];
+      a.n += 1;
+      a.costSum += Number(t.total_cost ?? 0);
+      if (t.status === "OPEN") {
+        a.open += 1;
+        if (t.unrealized_pl_pct != null) { a.unrealSum += Number(t.unrealized_pl_pct); a.unrealN += 1; }
+      } else {
+        a.closed += 1;
+        if (t.realized_pl != null) {
+          const r = Number(t.realized_pl);
+          a.realSum += r;
+          a.realN += 1;
+          if (r > 0) a.wins += 1;
+        }
+      }
+    }
+    return PAPER_CLASS_ORDER.filter((k) => agg[k]).map((k) => {
+      const a = agg[k];
+      return {
+        key: k,
+        label: PAPER_CLASS_LABEL[k] ?? k,
+        n: a.n,
+        open: a.open,
+        closed: a.closed,
+        avgUnrealPct: a.unrealN > 0 ? a.unrealSum / a.unrealN : null,
+        totalRealized: a.realN > 0 ? a.realSum : null,
+        winRate: a.realN > 0 ? (a.wins / a.realN) * 100 : null,
+        totalCost: a.costSum,
+      };
+    });
+  }, [paperTrades]);
+
 
 
 
@@ -825,6 +871,51 @@ export default function OutcomeAnalytics() {
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold">Paper Option P/L by Class</h2>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              Robinhood-style option P/L grouped by paper test class (confidence band at approval).
+              Open trades contribute unrealized %; closed trades contribute realized $ and win rate. Paper only — no real money.
+            </p>
+            {optionPnlByClass.length === 0 ? (
+              <div className="text-xs text-muted-foreground mt-2">No paper option trades yet.</div>
+            ) : (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2">Class</th>
+                      <th className="text-right py-1.5 px-2">Trades</th>
+                      <th className="text-right py-1.5 px-2">Open / Closed</th>
+                      <th className="text-right py-1.5 px-2">Avg unrealized %</th>
+                      <th className="text-right py-1.5 px-2">Realized P/L $</th>
+                      <th className="text-right py-1.5 px-2">Win rate (closed)</th>
+                      <th className="text-right py-1.5 px-2">Total cost $</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {optionPnlByClass.map((d) => (
+                      <tr key={d.key} className="border-b border-border/50">
+                        <td className="py-1.5 px-2">{d.label}</td>
+                        <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                        <td className="py-1.5 px-2 text-right ticker-mono">{d.open} / {d.closed}</td>
+                        <td className={cn("py-1.5 px-2 text-right ticker-mono", d.avgUnrealPct == null ? "text-muted-foreground/40" : d.avgUnrealPct >= 0 ? "text-bull" : "text-bear")}>
+                          {d.avgUnrealPct == null ? "—" : `${d.avgUnrealPct >= 0 ? "+" : ""}${d.avgUnrealPct.toFixed(2)}%`}
+                        </td>
+                        <td className={cn("py-1.5 px-2 text-right ticker-mono", d.totalRealized == null ? "text-muted-foreground/40" : d.totalRealized >= 0 ? "text-bull" : "text-bear")}>
+                          {d.totalRealized == null ? "—" : `${d.totalRealized >= 0 ? "+" : ""}$${d.totalRealized.toFixed(2)}`}
+                        </td>
+                        <td className={cn("py-1.5 px-2 text-right ticker-mono", d.winRate == null && "text-muted-foreground/40")}>
+                          {d.winRate == null ? "—" : `${d.winRate.toFixed(0)}%`}
+                        </td>
+                        <td className="py-1.5 px-2 text-right ticker-mono text-muted-foreground">${d.totalCost.toFixed(0)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

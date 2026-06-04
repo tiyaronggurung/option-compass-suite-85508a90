@@ -382,16 +382,32 @@ export type Database = {
       }
       paper_trades: {
         Row: {
+          ask: number | null
+          bid: number | null
           closed_at: string | null
           confidence_at_approval: number | null
           contract_idea: string | null
+          contracts: number
           current_pl: number
           current_pl_pct: number | null
+          current_premium: number | null
+          current_value: number | null
+          day_open_date: string | null
+          day_open_premium: number | null
+          day_pl: number | null
+          day_pl_pct: number | null
+          delta: number | null
           direction: Database["public"]["Enums"]["signal_direction"]
+          entry_premium: number | null
           entry_price: number | null
+          exit_premium: number | null
           exit_price: number | null
           exit_reason: Database["public"]["Enums"]["trade_close_reason"] | null
+          expiry: string | null
+          gamma: number | null
           id: string
+          is_option: boolean
+          iv: number | null
           last_mark_at: string | null
           last_mark_price: number | null
           mae: number | null
@@ -399,28 +415,59 @@ export type Database = {
           max_drawdown: number
           max_gain: number
           mfe: number | null
+          mid: number | null
+          multiplier: number
+          open_interest: number | null
           opened_at: string
+          option_type: string | null
+          option_volume: number | null
           paper_test_class: string | null
+          quote_source: string | null
+          quote_updated_at: string | null
+          realized_pl: number | null
+          realized_pl_dollars: number | null
           realized_pl_pct: number | null
           risk_amount: number | null
           signal_id: string | null
           status: Database["public"]["Enums"]["trade_status"]
           stop_idea: number | null
+          strike: number | null
           target_idea: number | null
+          theta: number | null
           ticker: string
+          total_cost: number | null
+          unrealized_pl: number | null
+          unrealized_pl_pct: number | null
           user_id: string
+          vega: number | null
         }
         Insert: {
+          ask?: number | null
+          bid?: number | null
           closed_at?: string | null
           confidence_at_approval?: number | null
           contract_idea?: string | null
+          contracts?: number
           current_pl?: number
           current_pl_pct?: number | null
+          current_premium?: number | null
+          current_value?: number | null
+          day_open_date?: string | null
+          day_open_premium?: number | null
+          day_pl?: number | null
+          day_pl_pct?: number | null
+          delta?: number | null
           direction: Database["public"]["Enums"]["signal_direction"]
+          entry_premium?: number | null
           entry_price?: number | null
+          exit_premium?: number | null
           exit_price?: number | null
           exit_reason?: Database["public"]["Enums"]["trade_close_reason"] | null
+          expiry?: string | null
+          gamma?: number | null
           id?: string
+          is_option?: boolean
+          iv?: number | null
           last_mark_at?: string | null
           last_mark_price?: number | null
           mae?: number | null
@@ -428,28 +475,59 @@ export type Database = {
           max_drawdown?: number
           max_gain?: number
           mfe?: number | null
+          mid?: number | null
+          multiplier?: number
+          open_interest?: number | null
           opened_at?: string
+          option_type?: string | null
+          option_volume?: number | null
           paper_test_class?: string | null
+          quote_source?: string | null
+          quote_updated_at?: string | null
+          realized_pl?: number | null
+          realized_pl_dollars?: number | null
           realized_pl_pct?: number | null
           risk_amount?: number | null
           signal_id?: string | null
           status?: Database["public"]["Enums"]["trade_status"]
           stop_idea?: number | null
+          strike?: number | null
           target_idea?: number | null
+          theta?: number | null
           ticker: string
+          total_cost?: number | null
+          unrealized_pl?: number | null
+          unrealized_pl_pct?: number | null
           user_id: string
+          vega?: number | null
         }
         Update: {
+          ask?: number | null
+          bid?: number | null
           closed_at?: string | null
           confidence_at_approval?: number | null
           contract_idea?: string | null
+          contracts?: number
           current_pl?: number
           current_pl_pct?: number | null
+          current_premium?: number | null
+          current_value?: number | null
+          day_open_date?: string | null
+          day_open_premium?: number | null
+          day_pl?: number | null
+          day_pl_pct?: number | null
+          delta?: number | null
           direction?: Database["public"]["Enums"]["signal_direction"]
+          entry_premium?: number | null
           entry_price?: number | null
+          exit_premium?: number | null
           exit_price?: number | null
           exit_reason?: Database["public"]["Enums"]["trade_close_reason"] | null
+          expiry?: string | null
+          gamma?: number | null
           id?: string
+          is_option?: boolean
+          iv?: number | null
           last_mark_at?: string | null
           last_mark_price?: number | null
           mae?: number | null
@@ -457,16 +535,31 @@ export type Database = {
           max_drawdown?: number
           max_gain?: number
           mfe?: number | null
+          mid?: number | null
+          multiplier?: number
+          open_interest?: number | null
           opened_at?: string
+          option_type?: string | null
+          option_volume?: number | null
           paper_test_class?: string | null
+          quote_source?: string | null
+          quote_updated_at?: string | null
+          realized_pl?: number | null
+          realized_pl_dollars?: number | null
           realized_pl_pct?: number | null
           risk_amount?: number | null
           signal_id?: string | null
           status?: Database["public"]["Enums"]["trade_status"]
           stop_idea?: number | null
+          strike?: number | null
           target_idea?: number | null
+          theta?: number | null
           ticker?: string
+          total_cost?: number | null
+          unrealized_pl?: number | null
+          unrealized_pl_pct?: number | null
           user_id?: string
+          vega?: number | null
         }
         Relationships: [
           {
