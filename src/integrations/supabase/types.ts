@@ -1252,6 +1252,126 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_alerts: {
+        Row: {
+          alert_status: string
+          cancelled_at: string | null
+          confidence_score: number | null
+          contract_snapshot_id: string | null
+          contract_symbol: string | null
+          created_at: string
+          entered_at: string | null
+          entry_contract_price_max: number | null
+          entry_contract_price_min: number | null
+          expires_at: string | null
+          expiry: string | null
+          hit_t1_at: string | null
+          hit_t2_at: string | null
+          hit_t3_at: string | null
+          id: string
+          invalidation_underlying_price: number | null
+          last_contract_mid: number | null
+          last_evaluated_at: string | null
+          last_notified_status: string | null
+          last_underlying_price: number | null
+          option_side: string
+          paper_trade_id: string | null
+          plan_metadata: Json
+          signal_id: string | null
+          stop_loss_contract_price: number | null
+          stopped_at: string | null
+          strike: number | null
+          target_1_contract_price: number | null
+          target_2_contract_price: number | null
+          target_3_contract_price: number | null
+          ticker: string
+          trade_rationale: string | null
+          trigger_direction: string | null
+          triggered_at: string | null
+          underlying_trigger_price: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alert_status?: string
+          cancelled_at?: string | null
+          confidence_score?: number | null
+          contract_snapshot_id?: string | null
+          contract_symbol?: string | null
+          created_at?: string
+          entered_at?: string | null
+          entry_contract_price_max?: number | null
+          entry_contract_price_min?: number | null
+          expires_at?: string | null
+          expiry?: string | null
+          hit_t1_at?: string | null
+          hit_t2_at?: string | null
+          hit_t3_at?: string | null
+          id?: string
+          invalidation_underlying_price?: number | null
+          last_contract_mid?: number | null
+          last_evaluated_at?: string | null
+          last_notified_status?: string | null
+          last_underlying_price?: number | null
+          option_side: string
+          paper_trade_id?: string | null
+          plan_metadata?: Json
+          signal_id?: string | null
+          stop_loss_contract_price?: number | null
+          stopped_at?: string | null
+          strike?: number | null
+          target_1_contract_price?: number | null
+          target_2_contract_price?: number | null
+          target_3_contract_price?: number | null
+          ticker: string
+          trade_rationale?: string | null
+          trigger_direction?: string | null
+          triggered_at?: string | null
+          underlying_trigger_price?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alert_status?: string
+          cancelled_at?: string | null
+          confidence_score?: number | null
+          contract_snapshot_id?: string | null
+          contract_symbol?: string | null
+          created_at?: string
+          entered_at?: string | null
+          entry_contract_price_max?: number | null
+          entry_contract_price_min?: number | null
+          expires_at?: string | null
+          expiry?: string | null
+          hit_t1_at?: string | null
+          hit_t2_at?: string | null
+          hit_t3_at?: string | null
+          id?: string
+          invalidation_underlying_price?: number | null
+          last_contract_mid?: number | null
+          last_evaluated_at?: string | null
+          last_notified_status?: string | null
+          last_underlying_price?: number | null
+          option_side?: string
+          paper_trade_id?: string | null
+          plan_metadata?: Json
+          signal_id?: string | null
+          stop_loss_contract_price?: number | null
+          stopped_at?: string | null
+          strike?: number | null
+          target_1_contract_price?: number | null
+          target_2_contract_price?: number | null
+          target_3_contract_price?: number | null
+          ticker?: string
+          trade_rationale?: string | null
+          trigger_direction?: string | null
+          triggered_at?: string | null
+          underlying_trigger_price?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       trade_reviews: {
         Row: {
           created_at: string
