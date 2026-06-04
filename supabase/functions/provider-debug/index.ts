@@ -14,6 +14,7 @@ const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") ?? "";
 const APIFY_TOKEN = Deno.env.get("APIFY_API_TOKEN") ?? "";
 const ALPACA_KEY = Deno.env.get("ALPACA_API_KEY_ID") ?? "";
 const ALPACA_SECRET = Deno.env.get("ALPACA_API_SECRET_KEY") ?? "";
+const UW_KEY = Deno.env.get("UNUSUAL_WHALES_API_KEY") ?? "";
 
 function classify(text: string, contentType: string, finalUrl: string) {
   const head = text.slice(0, 200).toLowerCase();
