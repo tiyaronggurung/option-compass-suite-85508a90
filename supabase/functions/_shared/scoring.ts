@@ -156,32 +156,34 @@ async function scoreVolatility(ticker: string): Promise<ComponentScore> {
 async function scoreOptionsFlowFinviz(
   ticker: string,
   direction: "CALL" | "PUT",
-  snap: Record<string, string> | null,
+  fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
 ): Promise<ComponentScore> {
-  if (!FINVIZ_KEY) return neutral("finviz", "Finviz key not configured (options flow)");
-  if (!snap) return { score: 50, configured: true, source: "finviz", reason: "Finviz snapshot unavailable" };
+  if (fv.state !== "ok" || !fv.row) {
+    return {
+      score: 50,
+      configured: fv.state !== "missing_key",
+      source: "finviz",
+      reason: `${fv.reason}${fv.detail ? ` (${fv.detail})` : ""}`,
+      details: { finviz_state: fv.state, fallback: "neutral_50" },
+    };
+  }
+  const snap = fv.row;
   const optionable = (snap["Optionable"] ?? "").trim().toLowerCase() === "yes";
   if (!optionable) {
     return { score: 40, configured: true, source: "finviz", reason: "Underlying not optionable per Finviz" };
   }
   const relVol = parseFloat(snap["Rel Volume"] ?? "1") || 1;
-  const shortFloat = parsePct(snap["Short Float"]) ?? 0; // percent
-  const recom = parseFloat(snap["Recom"] ?? "3") || 3;   // 1 strong buy .. 5 strong sell
+  const shortFloat = parsePct(snap["Short Float"]) ?? 0;
+  const recom = parseFloat(snap["Recom"] ?? "3") || 3;
   const perfWeek = parsePct(snap["Perf Week"]) ?? 0;
 
-  // Analyst directional pressure: 1=buy → +1, 5=sell → -1
-  const analystDir = clamp100(((3 - recom) / 2 + 1) * 50); // 0..100, 100 = strong buy
-  // Short interest acts as fuel for the opposite side.
-  // High short + CALL = squeeze potential (bullish). High short + PUT = crowded short (bearish-confirming).
+  const analystDir = clamp100(((3 - recom) / 2 + 1) * 50);
   const shortBoost = direction === "CALL"
-    ? Math.min(20, shortFloat * 0.8)      // squeeze fuel for calls
-    : Math.min(15, shortFloat * 0.5);     // mild confirm for puts
-  // Volume surge = real positioning (institutional footprint proxy).
+    ? Math.min(20, shortFloat * 0.8)
+    : Math.min(15, shortFloat * 0.5);
   const volSurge = clamp100(50 + (relVol - 1) * 30);
-  // Direction-aligned price action (week %).
   const moveAligned = direction === "CALL" ? perfWeek : -perfWeek;
   const moveScore = clamp100(50 + moveAligned * 2);
-  // Analyst dir aligned with trade direction.
   const analystAligned = direction === "CALL" ? analystDir : (100 - analystDir);
 
   const raw = volSurge * 0.40 + analystAligned * 0.30 + moveScore * 0.20 + shortBoost;
@@ -203,24 +205,28 @@ async function scoreOptionsFlowFinviz(
 
 async function scoreVolatilityFinviz(
   ticker: string,
-  snap: Record<string, string> | null,
+  fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
 ): Promise<ComponentScore> {
-  if (!FINVIZ_KEY) return neutral("finviz", "Finviz key not configured (volatility)");
-  if (!snap) return { score: 50, configured: true, source: "finviz", reason: "Finviz snapshot unavailable" };
-  // Finviz "Volatility" field is "W% M%" (week% month%).
+  if (fv.state !== "ok" || !fv.row) {
+    return {
+      score: 50,
+      configured: fv.state !== "missing_key",
+      source: "finviz",
+      reason: `${fv.reason}${fv.detail ? ` (${fv.detail})` : ""}`,
+      details: { finviz_state: fv.state, fallback: "neutral_50" },
+    };
+  }
+  const snap = fv.row;
   const volStr = snap["Volatility"] ?? "";
   const matches = volStr.match(/-?\d+(\.\d+)?/g) ?? [];
-  const volWeek = matches[0] ? parseFloat(matches[0]) : 0; // % daily HV approx
+  const volWeek = matches[0] ? parseFloat(matches[0]) : 0;
   const volMonth = matches[1] ? parseFloat(matches[1]) : volWeek;
   const atr = parseFloat(snap["ATR"] ?? "0") || 0;
   const price = parseFloat(snap["Price"] ?? "0") || 0;
   const atrPct = price > 0 ? (atr / price) * 100 : 0;
 
-  // Sweet spot for options trades: ~2-4% daily HV (≈30-60% annualized).
-  // 1% → low premium, low movement (bad). 6%+ → expensive premium (bad).
   const hv = (volWeek + volMonth) / 2 || atrPct;
   const ivScore = hv > 0 ? clamp100(100 - Math.abs(hv - 3) * 25) : 50;
-  // ATR liquidity proxy — meaningful range = tradable.
   const atrScore = clamp100(50 + Math.min(30, atrPct * 8));
   const score = clamp100(ivScore * 0.7 + atrScore * 0.3);
   return {
