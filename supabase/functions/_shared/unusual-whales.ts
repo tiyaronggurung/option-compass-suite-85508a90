@@ -144,41 +144,48 @@ export async function scoreOptionsFlowUnusualWhales(
   let bullishPremium = 0, bearishPremium = 0;
   let sweeps = 0, blocks = 0, unusual = 0;
 
-  // Normalize row fields conservatively — UW field names may vary by endpoint version.
+  // Normalize per real UW flow-alerts schema:
+  //   type: "call"|"put", total_premium, total_ask_side_prem, total_bid_side_prem,
+  //   has_sweep, has_floor (block-ish), volume_oi_ratio, alert_rule, strike, expiry
   const normalized = rows.map((row) => {
-    const type = String(row.type ?? row.option_type ?? row.put_call ?? "").toLowerCase();
-    const isCall = type.includes("call") || type === "c";
-    const isPut = type.includes("put") || type === "p";
-    const side = String(row.side ?? row.execution ?? row.aggressor_ind ?? "").toLowerCase();
-    const isAsk = side.includes("ask") || side === "a" || side === "buy";
-    const isBid = side.includes("bid") || side === "b" || side === "sell";
-    const premium = num(row.total_premium ?? row.premium ?? row.total_size ?? row.notional);
-    const isSweep = !!(row.is_sweep ?? row.sweep ?? (String(row.rule_name ?? "").toLowerCase().includes("sweep")));
-    const isBlock = !!(row.is_block ?? row.block ?? (String(row.rule_name ?? "").toLowerCase().includes("block")));
-    const isUnusual = !!(row.has_unusual_volume ?? row.unusual ?? (String(row.rule_name ?? "").toLowerCase().includes("unusual")));
+    const type = String(row.type ?? row.option_type ?? "").toLowerCase();
+    const isCall = type === "call" || type === "c";
+    const isPut = type === "put" || type === "p";
+    const totalPrem = num(row.total_premium ?? row.premium);
+    const askPrem = num(row.total_ask_side_prem ?? row.ask_side_premium);
+    const bidPrem = num(row.total_bid_side_prem ?? row.bid_side_premium);
+    const isSweep = !!(row.has_sweep ?? row.is_sweep ?? row.sweep);
+    const isBlock = !!(row.has_floor ?? row.is_block ?? row.block);
+    const volOiRatio = num(row.volume_oi_ratio);
+    const isUnusual = volOiRatio > 0.5
+      || String(row.alert_rule ?? "").toLowerCase().includes("unusual")
+      || String(row.alert_rule ?? "").toLowerCase().includes("repeatedhits");
 
-    if (isCall) callPremium += premium;
-    if (isPut) putPremium += premium;
-    if (isAsk) askPremium += premium;
-    if (isBid) bidPremium += premium;
+    if (isCall) callPremium += totalPrem;
+    if (isPut) putPremium += totalPrem;
+    askPremium += askPrem;
+    bidPremium += bidPrem;
 
-    // Heuristic for bullish/bearish premium:
-    //   bullish = call bought on ask  OR  put sold on bid
-    //   bearish = put  bought on ask  OR  call sold on bid
-    if ((isCall && isAsk) || (isPut && isBid)) bullishPremium += premium;
-    if ((isPut && isAsk) || (isCall && isBid)) bearishPremium += premium;
+    // Bullish / bearish premium using actual ask/bid split per row:
+    //   bullish = call premium on ask  +  put premium on bid
+    //   bearish = put  premium on ask  +  call premium on bid
+    if (isCall) { bullishPremium += askPrem; bearishPremium += bidPrem; }
+    if (isPut)  { bearishPremium += askPrem; bullishPremium += bidPrem; }
 
     if (isSweep) sweeps++;
     if (isBlock) blocks++;
     if (isUnusual) unusual++;
 
+    // Determine dominant side for display
+    const side = askPrem > bidPrem ? "ask" : bidPrem > askPrem ? "bid" : "mixed";
+
     return {
       ticker: row.ticker ?? row.underlying ?? ticker,
       type: isCall ? "call" : isPut ? "put" : type,
-      side: isAsk ? "ask" : isBid ? "bid" : side,
-      premium,
+      side,
+      premium: totalPrem,
       strike: row.strike ?? row.strike_price,
-      expiry: row.expiry ?? row.expiration ?? row.expires_at,
+      expiry: row.expiry ?? row.expiration,
       is_sweep: isSweep,
       is_block: isBlock,
     };
