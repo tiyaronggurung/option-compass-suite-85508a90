@@ -71,21 +71,24 @@ function parseCsv(text: string): Record<string, string> | null {
   } catch { return null; }
 }
 
-async function probe(ticker: string, paramName: "auth" | "apikey") {
+async function probe(ticker: string, paramName: "auth" | "apikey", followRedirect: boolean) {
   const url = `https://elite.finviz.com/quote_export.ashx?t=${encodeURIComponent(ticker)}&${paramName}=${encodeURIComponent(FINVIZ_KEY)}`;
   const start = Date.now();
   let status = 0, contentType = "", body = "", error: string | null = null;
+  let location: string | null = null;
+  let finalUrl: string | null = null;
   try {
-    const res = await fetch(url, { redirect: "manual" });
+    const res = await fetch(url, { redirect: followRedirect ? "follow" : "manual" });
     status = res.status;
     contentType = res.headers.get("content-type") ?? "";
+    location = res.headers.get("location");
+    finalUrl = res.url;
     body = await res.text();
   } catch (e) {
     error = (e as Error).message;
   }
   const cls = classify(status, contentType, body);
   const parsedRow = cls.kind === "csv_ok" ? parseCsv(body) : null;
-  // Sample only the keys most relevant to scoring.
   const keyFields = parsedRow ? Object.fromEntries(
     ["Ticker", "Price", "Optionable", "Rel Volume", "SMA50", "SMA200", "Perf Week",
      "Volatility", "ATR", "Short Float", "Recom"]
@@ -94,7 +97,10 @@ async function probe(ticker: string, paramName: "auth" | "apikey") {
   return {
     ticker,
     auth_param: paramName,
+    follow_redirect: followRedirect,
     url_template: `https://elite.finviz.com/quote_export.ashx?t=${ticker}&${paramName}=***REDACTED***`,
+    final_url: finalUrl ? redact(finalUrl) : null,
+    redirect_location: location ? redact(location) : null,
     duration_ms: Date.now() - start,
     http_status: status,
     content_type: contentType,
