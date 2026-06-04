@@ -451,6 +451,92 @@ function OptionsFlowTransparency({ details, source }: { details: any; source?: s
   );
 }
 
+function SocialIntelTransparency({ details, source }: { details: any; source?: string }) {
+  if (!details || typeof details !== "object") return null;
+  const provider = String(details.source ?? source ?? "");
+  const status = String(details.provider_status ?? "");
+  if (provider !== "twitterapi_io" || status !== "active") {
+    if (!status || status === "missing_key") return null;
+    return (
+      <div className="mt-1.5 ml-24 pl-2 border-l border-border/60 text-[10px] text-muted-foreground">
+        TwitterAPI.io unavailable ({status}) — Sentiment fell back to neutral 50
+      </div>
+    );
+  }
+  const samples = (details.samples ?? {}) as any;
+  const subs = (details.subscores ?? {}) as any;
+  const top: any[] = Array.isArray(samples.top_kol_tweets) ? samples.top_kol_tweets : [];
+  const bullPct = Number(samples.bullish_pct ?? 0);
+  const bearPct = Number(samples.bearish_pct ?? 0);
+  const neuPct = Number(samples.neutral_pct ?? 0);
+  const totalTweets = Number(samples.total_tweets ?? 0);
+  const velocity = Number(samples.mention_velocity_ratio ?? 0);
+  const kolCount = Number(samples.kol_count ?? 0);
+  const classifier = String(details.classifier ?? "");
+  const humanReason = String(details.human_reason ?? "");
+  return (
+    <div className="mt-1.5 ml-24 pl-2 border-l border-border/60 space-y-1.5">
+      <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5">
+        <span className="text-bull/90">TwitterAPI.io active</span>
+        <span>Tweets <span className="ticker-mono text-foreground/80">{totalTweets}</span></span>
+        <span>Velocity <span className="ticker-mono text-foreground/80">{velocity.toFixed(1)}x</span></span>
+        <span>KOLs <span className="ticker-mono text-foreground/80">{kolCount}</span></span>
+        {classifier && <span>· {classifier}</span>}
+      </div>
+      <div className="flex h-1.5 rounded overflow-hidden bg-muted/30">
+        <div className="bg-bull/70" style={{ width: `${bullPct}%` }} title={`Bullish ${bullPct}%`} />
+        <div className="bg-muted-foreground/40" style={{ width: `${neuPct}%` }} title={`Neutral ${neuPct}%`} />
+        <div className="bg-bear/70" style={{ width: `${bearPct}%` }} title={`Bearish ${bearPct}%`} />
+      </div>
+      <div className="text-[10px] text-foreground/70 flex gap-2">
+        <span className="text-bull">▲ {bullPct.toFixed(0)}%</span>
+        <span className="text-muted-foreground">— {neuPct.toFixed(0)}%</span>
+        <span className="text-bear">▼ {bearPct.toFixed(0)}%</span>
+      </div>
+      <div className="grid grid-cols-4 gap-1 text-[10px]">
+        {[
+          { k: "polarity", l: "Polarity", w: "40%" },
+          { k: "velocity", l: "Velocity", w: "25%" },
+          { k: "kol", l: "KOL", w: "20%" },
+          { k: "engagement", l: "Engage", w: "15%" },
+        ].map((s) => (
+          <div key={s.k} className="bg-muted/20 rounded px-1 py-0.5">
+            <div className="text-muted-foreground">{s.l} <span className="opacity-60">{s.w}</span></div>
+            <div className="ticker-mono text-foreground/80">{Math.round(Number(subs[s.k] ?? 50))}</div>
+          </div>
+        ))}
+      </div>
+      {top.length > 0 && (
+        <ul className="text-[10px] space-y-0.5">
+          {top.slice(0, 3).map((t, i) => (
+            <li key={i} className="text-foreground/70">
+              <span className={cn(
+                "ticker-mono mr-1",
+                t.sentiment === "bullish" ? "text-bull" : t.sentiment === "bearish" ? "text-bear" : "text-muted-foreground",
+              )}>
+                {t.sentiment === "bullish" ? "▲" : t.sentiment === "bearish" ? "▼" : "—"}
+              </span>
+              {t.userName && (
+                <span className="opacity-80">@{t.userName}</span>
+              )}
+              <span className="opacity-50 ml-1">({Math.round((t.followers ?? 0) / 1000)}k)</span>
+              {t.url ? (
+                <a href={t.url} target="_blank" rel="noreferrer" className="ml-1 hover:underline">
+                  {String(t.text).slice(0, 120)}
+                </a>
+              ) : (
+                <span className="ml-1">{String(t.text).slice(0, 120)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {humanReason && (
+        <div className="text-[10px] text-muted-foreground/90 italic">↳ {humanReason}</div>
+      )}
+    </div>
+  );
+
 type Headline = { headline: string; source: "finnhub" | "finviz"; url?: string };
 
 function NewsTransparency({ details, source }: { details: any; source?: string }) {
