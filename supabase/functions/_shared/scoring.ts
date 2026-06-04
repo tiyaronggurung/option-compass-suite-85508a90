@@ -1012,11 +1012,30 @@ export async function scoreInstitutional(
       }
       return { provider: "finnhub", role: "news + sentiment", state, detail };
     })(),
-    {
-      provider: "apify",
-      role: "x/twitter sentiment",
-      state: APIFY_TOKEN ? "active" : "missing_key",
-    },
+    (() => {
+      const sd = (sentiment.details ?? {}) as Record<string, unknown>;
+      const ps = String(sd.provider_status ?? "missing_key");
+      let state: ProviderStatus["state"];
+      let detail: string | undefined;
+      if (!TAPI_CONFIGURED) {
+        state = "missing_key";
+        detail = "TWITTERAPI_IO_API_KEY not configured — Sentiment neutral 50";
+      } else if (ps === "active") {
+        state = "active";
+        const samples = (sd.samples ?? {}) as Record<string, unknown>;
+        detail = `Powering Sentiment (tweets=${samples.total_tweets ?? 0}, score=${Math.round(Number(sd.score ?? 50))})`;
+      } else {
+        state = ps === "auth_failed" ? "auth_failed" : "degraded";
+        detail = `TwitterAPI.io ${ps} — Sentiment fell back to neutral 50`;
+      }
+      return {
+        provider: "twitterapi_io",
+        role: "sentiment (social intelligence — primary)",
+        state,
+        detail,
+        note: "TwitterAPI.io + AI classifier power Sentiment; neutral 50 on failure.",
+      };
+    })(),
     {
       provider: "tradier",
       role: "options_flow + volatility (per-contract)",

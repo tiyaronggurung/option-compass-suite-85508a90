@@ -15,6 +15,7 @@ const APIFY_TOKEN = Deno.env.get("APIFY_API_TOKEN") ?? "";
 const ALPACA_KEY = Deno.env.get("ALPACA_API_KEY_ID") ?? "";
 const ALPACA_SECRET = Deno.env.get("ALPACA_API_SECRET_KEY") ?? "";
 const UW_KEY = Deno.env.get("UNUSUAL_WHALES_API_KEY") ?? "";
+const TAPI_KEY = Deno.env.get("TWITTERAPI_IO_API_KEY") ?? "";
 
 function classify(text: string, contentType: string, finalUrl: string) {
   const head = text.slice(0, 200).toLowerCase();
@@ -125,6 +126,14 @@ Deno.serve(async (req) => {
       if (!UW_KEY) return { skipped: true, reason: "UNUSUAL_WHALES_API_KEY not configured" };
       return probeUrl(`https://api.unusualwhales.com/api/stock/${ticker}/flow-alerts?limit=5`, {
         Authorization: `Bearer ${UW_KEY}`,
+        Accept: "application/json",
+      });
+    },
+    twitterapi_io: async () => {
+      if (!TAPI_KEY) return { skipped: true, reason: "TWITTERAPI_IO_API_KEY not configured" };
+      const q = encodeURIComponent(`$${ticker} lang:en -is:retweet`);
+      return probeUrl(`https://api.twitterapi.io/twitter/tweet/advanced_search?query=${q}&queryType=Latest`, {
+        "X-API-Key": TAPI_KEY,
         Accept: "application/json",
       });
     },
