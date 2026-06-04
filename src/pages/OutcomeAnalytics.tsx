@@ -218,9 +218,25 @@ function BucketTable({
   );
 }
 
+type PaperTradeLite = {
+  signal_id: string | null;
+  paper_test_class: string | null;
+  confidence_at_approval: number | null;
+};
+
+const PAPER_CLASS_ORDER = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
+const PAPER_CLASS_LABEL: Record<string, string> = {
+  developing: "Developing (50–64)",
+  near_watchlist: "Near Watchlist (65–69)",
+  watchlist: "Watchlist (70–79)",
+  strong: "Strong (80–89)",
+  elite: "Elite (90+)",
+};
+
 export default function OutcomeAnalytics() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [rows, setRows] = useState<Outcome[] | null>(null);
+  const [paperTrades, setPaperTrades] = useState<PaperTradeLite[]>([]);
   const [running, setRunning] = useState(false);
 
   // Filters
@@ -233,12 +249,12 @@ export default function OutcomeAnalytics() {
 
   async function refresh() {
     setRows(null);
-    const { data } = await supabase
-      .from("signal_outcomes")
-      .select("*")
-      .order("entry_at", { ascending: false })
-      .limit(5000);
-    setRows((data ?? []) as unknown as Outcome[]);
+    const [{ data: outcomeData }, { data: tradeData }] = await Promise.all([
+      supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
+      supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval").limit(5000),
+    ]);
+    setRows((outcomeData ?? []) as unknown as Outcome[]);
+    setPaperTrades((tradeData ?? []) as unknown as PaperTradeLite[]);
   }
   useEffect(() => { if (isAdmin) refresh(); }, [isAdmin]);
 
@@ -300,6 +316,40 @@ export default function OutcomeAnalytics() {
       buckets: buildBuckets(filtered, (r) => sourceStateOf(r, comp, active, fallback)),
     }));
   }, [filtered]);
+
+  // Paper Trade Class Comparison — bucket paper trades by their stored class,
+  // join to the matching signal_outcomes row to read 5D win/return.
+  const paperClassRows = useMemo(() => {
+    const outcomeBySignal = new Map<string, Outcome>();
+    for (const r of filtered) outcomeBySignal.set(r.signal_id, r);
+    const aggByClass: Record<string, { n: number; withOutcome: number; wins: number; retSum: number }> = {};
+    for (const t of paperTrades) {
+      const cls = (t.paper_test_class || "").trim();
+      if (!cls) continue;
+      if (!aggByClass[cls]) aggByClass[cls] = { n: 0, withOutcome: 0, wins: 0, retSum: 0 };
+      aggByClass[cls].n += 1;
+      if (!t.signal_id) continue;
+      const o = outcomeBySignal.get(t.signal_id);
+      if (!o) continue;
+      if (o.win_5d === null || o.return_5d === null) continue;
+      aggByClass[cls].withOutcome += 1;
+      aggByClass[cls].wins += o.win_5d ? 1 : 0;
+      aggByClass[cls].retSum += Number(o.return_5d);
+    }
+    return PAPER_CLASS_ORDER
+      .filter((k) => aggByClass[k])
+      .map((k) => {
+        const a = aggByClass[k];
+        return {
+          key: k,
+          label: PAPER_CLASS_LABEL[k] ?? k,
+          n: a.n,
+          withOutcome: a.withOutcome,
+          winRate: a.withOutcome > 0 ? (a.wins / a.withOutcome) * 100 : 0,
+          avgReturn: a.withOutcome > 0 ? a.retSum / a.withOutcome : 0,
+        };
+      });
+  }, [paperTrades, filtered]);
 
   if (adminLoading) return <div className="p-6 text-muted-foreground text-sm">Checking permissions…</div>;
   if (!isAdmin) {
@@ -483,6 +533,53 @@ export default function OutcomeAnalytics() {
               />
             ),
           )}
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold">Paper Trade Class Comparison</h2>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              Approved paper trades bucketed by the confidence band at approval time.
+              Win rate / avg return computed from the 5D outcome window for trades whose signal has a completed outcome.
+            </p>
+            {paperClassRows.length === 0 ? (
+              <div className="text-xs text-muted-foreground mt-2">
+                No paper trades with a recorded class yet. Approve some Developing / Near Watchlist signals to populate.
+              </div>
+            ) : (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2">Class</th>
+                      <th className="text-right py-1.5 px-2">Paper trades</th>
+                      <th className="text-right py-1.5 px-2">With 5D outcome</th>
+                      <th className="text-right py-1.5 px-2">Win rate (5D)</th>
+                      <th className="text-right py-1.5 px-2">Avg return (5D)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paperClassRows.map((d) => {
+                      const low = d.withOutcome > 0 && d.withOutcome < MIN_N;
+                      const empty = d.withOutcome === 0;
+                      return (
+                        <tr key={d.key} className={cn("border-b border-border/50", (low || empty) && "text-muted-foreground/60")}>
+                          <td className="py-1.5 px-2 flex items-center gap-2">
+                            {d.label}
+                            {low && <span className="text-[10px] uppercase tracking-wide">low sample</span>}
+                          </td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.withOutcome}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{empty ? "—" : `${d.winRate.toFixed(0)}%`}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{empty ? "—" : `${d.avgReturn >= 0 ? "+" : ""}${d.avgReturn.toFixed(2)}%`}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="text-[10px] text-muted-foreground mt-2">
+              Goal: determine whether 65–69 performs like 70–79 and whether 50–64 has any predictive value.
+            </div>
+          </Card>
         </>
       )}
     </div>

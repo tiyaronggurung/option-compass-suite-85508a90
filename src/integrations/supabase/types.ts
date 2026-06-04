@@ -383,6 +383,7 @@ export type Database = {
       paper_trades: {
         Row: {
           closed_at: string | null
+          confidence_at_approval: number | null
           contract_idea: string | null
           current_pl: number
           current_pl_pct: number | null
@@ -399,6 +400,7 @@ export type Database = {
           max_gain: number
           mfe: number | null
           opened_at: string
+          paper_test_class: string | null
           realized_pl_pct: number | null
           risk_amount: number | null
           signal_id: string | null
@@ -410,6 +412,7 @@ export type Database = {
         }
         Insert: {
           closed_at?: string | null
+          confidence_at_approval?: number | null
           contract_idea?: string | null
           current_pl?: number
           current_pl_pct?: number | null
@@ -426,6 +429,7 @@ export type Database = {
           max_gain?: number
           mfe?: number | null
           opened_at?: string
+          paper_test_class?: string | null
           realized_pl_pct?: number | null
           risk_amount?: number | null
           signal_id?: string | null
@@ -437,6 +441,7 @@ export type Database = {
         }
         Update: {
           closed_at?: string | null
+          confidence_at_approval?: number | null
           contract_idea?: string | null
           current_pl?: number
           current_pl_pct?: number | null
@@ -453,6 +458,7 @@ export type Database = {
           max_gain?: number
           mfe?: number | null
           opened_at?: string
+          paper_test_class?: string | null
           realized_pl_pct?: number | null
           risk_amount?: number | null
           signal_id?: string | null

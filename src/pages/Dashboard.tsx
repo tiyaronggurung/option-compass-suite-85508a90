@@ -323,20 +323,20 @@ export default function Dashboard() {
             </Button>
           </div>
           {showDeveloping && (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-60 hover:opacity-90 transition-opacity">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-75 hover:opacity-100 transition-opacity">
               {developing.map((s) => (
                 <SignalCard
                   key={s.id}
                   signal={s}
                   watchlist={watchSet}
-                  onApprove={() => toast.warning("Below threshold — not tradeable yet")}
+                  onApprove={approve}
                   onReject={dismiss}
                   onDetails={(sig) => setDetailSignal(sig)}
                   outcome={signalOutcome(s, trades, dismissedIds)}
                   subLabel={
                     (s.confidence ?? 0) >= 65
-                      ? "Near Watchlist — Needs one more confirmation"
-                      : "Developing — Below Threshold"
+                      ? "Near Watchlist — Paper Test"
+                      : "Paper Test Candidate"
                   }
                 />
               ))}

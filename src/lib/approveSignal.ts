@@ -5,6 +5,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { checkRiskGuards, type RiskSettingsLike } from "@/lib/riskGuard";
 import type { Signal } from "@/lib/signalHelpers";
 
+export type PaperTestClass = "developing" | "near_watchlist" | "watchlist" | "strong" | "elite";
+
+export function paperTestClassFor(confidence: number): PaperTestClass {
+  if (confidence >= 90) return "elite";
+  if (confidence >= 80) return "strong";
+  if (confidence >= 70) return "watchlist";
+  if (confidence >= 65) return "near_watchlist";
+  return "developing";
+}
+
 export type ApproveInput = {
   userId: string;
   signal: Signal;
@@ -29,6 +39,8 @@ export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<Ap
   if (!guard.ok) return { ok: false, reason: (guard as { reason: string }).reason };
 
   const s = input.signal;
+  const confidenceSnapshot = Number(s.confidence ?? 0);
+  const testClass = paperTestClassFor(confidenceSnapshot);
   const { error } = await supabase.from("paper_trades").insert({
     user_id: input.userId,
     signal_id: s.id,
@@ -39,7 +51,9 @@ export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<Ap
     stop_idea: s.premium ? Number(s.premium) * 0.6 : null,
     target_idea: s.premium ? Number(s.premium) * 1.8 : null,
     risk_amount: intendedRisk,
-  });
+    paper_test_class: testClass,
+    confidence_at_approval: confidenceSnapshot,
+  } as any);
   if (error) return { ok: false, reason: error.message };
   return { ok: true };
 }
