@@ -430,6 +430,92 @@ export default function OutcomeAnalytics() {
       });
   }, [paperTrades, filtered]);
 
+  // ---------- Confidence Drift Analytics (signals-wide, analytics only) ----------
+  const driftByClass = useMemo(() => {
+    const agg: Record<string, { n: number; deltaSum: number; maxSum: number; minSum: number }> = {};
+    for (const s of signalLifecycle) {
+      if (s.confidence == null || s.confidence_at_birth == null) continue;
+      const cls = paperClassForConfidence(s.confidence_at_birth);
+      if (!cls) continue;
+      const delta = s.confidence - s.confidence_at_birth;
+      const max = s.max_confidence_seen ?? s.confidence;
+      const min = s.min_confidence_seen ?? s.confidence;
+      if (!agg[cls]) agg[cls] = { n: 0, deltaSum: 0, maxSum: 0, minSum: 0 };
+      agg[cls].n += 1;
+      agg[cls].deltaSum += delta;
+      agg[cls].maxSum += max;
+      agg[cls].minSum += min;
+    }
+    return PAPER_CLASS_ORDER.filter((k) => agg[k]).map((k) => ({
+      key: k,
+      label: PAPER_CLASS_LABEL[k] ?? k,
+      n: agg[k].n,
+      avgDelta: agg[k].deltaSum / agg[k].n,
+      avgMax: agg[k].maxSum / agg[k].n,
+      avgMin: agg[k].minSum / agg[k].n,
+    }));
+  }, [signalLifecycle]);
+
+  const driftTransitions = useMemo(() => {
+    const promo: Record<string, number> = {
+      "developing→near_watchlist": 0,
+      "near_watchlist→watchlist": 0,
+      "watchlist→strong": 0,
+      "strong→elite": 0,
+    };
+    const demo: Record<string, number> = {
+      "watchlist→near_watchlist": 0,
+      "near_watchlist→developing": 0,
+    };
+    let invalidated = 0;
+    for (const s of signalLifecycle) {
+      if (s.lifecycle_state === "invalidated") invalidated += 1;
+      const birth = s.confidence_at_birth ?? s.confidence;
+      const birthClass = paperClassForConfidence(birth);
+      const maxTier = s.max_tier_seen;
+      const minTier = s.min_tier_seen;
+      const birthRank = birthClass ? TIER_RANK_UI[birthClass] : null;
+      // Promotions: max_tier_seen strictly above birth band.
+      if (birthRank != null && maxTier && TIER_RANK_UI[maxTier] != null) {
+        const order = ["developing", "near_watchlist", "watchlist", "strong", "elite"];
+        const startIdx = order.indexOf(birthClass!);
+        const endIdx = order.indexOf(maxTier);
+        if (startIdx >= 0 && endIdx > startIdx) {
+          for (let i = startIdx; i < endIdx; i++) {
+            const key = `${order[i]}→${order[i + 1]}`;
+            if (key in promo) promo[key] += 1;
+          }
+        }
+      }
+      // Demotions: min_tier_seen strictly below birth band.
+      if (birthRank != null && minTier && TIER_RANK_UI[minTier] != null) {
+        const order = ["developing", "near_watchlist", "watchlist", "strong", "elite"];
+        const startIdx = order.indexOf(birthClass!);
+        const endIdx = order.indexOf(minTier);
+        if (startIdx >= 0 && endIdx >= 0 && endIdx < startIdx) {
+          for (let i = startIdx; i > endIdx; i--) {
+            const key = `${order[i]}→${order[i - 1]}`;
+            if (key in demo) demo[key] += 1;
+          }
+        }
+      }
+    }
+    return { promo, demo, invalidated };
+  }, [signalLifecycle]);
+
+  const driftHistogram = useMemo(() => {
+    const buckets: Record<string, number> = { gain_10: 0, gain_5_9: 0, flat: 0, loss_5_9: 0, loss_10: 0 };
+    let n = 0;
+    for (const s of signalLifecycle) {
+      if (s.confidence == null || s.confidence_at_birth == null) continue;
+      buckets[driftBucket(s.confidence - s.confidence_at_birth)] += 1;
+      n += 1;
+    }
+    return { buckets, n };
+  }, [signalLifecycle]);
+
+
+
   if (adminLoading) return <div className="p-6 text-muted-foreground text-sm">Checking permissions…</div>;
   if (!isAdmin) {
     return (
