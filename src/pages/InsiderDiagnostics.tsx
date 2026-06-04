@@ -55,8 +55,8 @@ export default function InsiderDiagnostics() {
       supabase.from("insider_strength_scores").select("*").order("score", { ascending: false }).limit(100),
       supabase.from("insider_transactions").select("ticker, insider_name, role, transaction_type, transaction_date, shares, price, total_value, direction, source").order("transaction_date", { ascending: false }).limit(50),
     ]);
-    setStrength((s ?? []) as StrengthRow[]);
-    setRecent((t ?? []) as TxRow[]);
+    setStrength((s ?? []) as unknown as StrengthRow[]);
+    setRecent((t ?? []) as unknown as TxRow[]);
     setLoading(false);
   }
 
