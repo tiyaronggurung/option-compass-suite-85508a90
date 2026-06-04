@@ -553,11 +553,20 @@ Deno.serve(async (req) => {
     }
 
     if (collected.length > 0) {
-      // Pre-filter against existing external_ref (cannot use onConflict here because
-      // the dedupe unique index is expression-based: COALESCE(shares, 0)).
-      const refs = Array.from(new Set(collected.map((r) => r.external_ref).filter(Boolean)));
+      // Dedupe within payload by the same composite key the DB unique index uses:
+      // (ticker, insider_name, transaction_date, transaction_type, COALESCE(shares,0), source).
+      const seen = new Set<string>();
+      const deduped: RawTx[] = [];
+      for (const r of collected) {
+        const k = [r.ticker, r.insider_name, r.transaction_date, r.transaction_type, r.shares ?? 0, r.source].join("|");
+        if (seen.has(k)) continue;
+        seen.add(k);
+        deduped.push(r);
+      }
+
+      // Pre-filter against existing external_ref to cut the insert size.
+      const refs = Array.from(new Set(deduped.map((r) => r.external_ref).filter(Boolean)));
       const existing = new Set<string>();
-      // Chunk in case of long IN lists.
       for (let i = 0; i < refs.length; i += 200) {
         const chunk = refs.slice(i, i + 200);
         const { data } = await admin
@@ -568,9 +577,13 @@ Deno.serve(async (req) => {
           if (row?.external_ref) existing.add(String(row.external_ref));
         }
       }
-      const fresh = collected.filter((r) => r.external_ref && !existing.has(r.external_ref));
-      if (fresh.length > 0) {
-        const payload = fresh.map((r) => ({
+      const fresh = deduped.filter((r) => r.external_ref && !existing.has(r.external_ref));
+
+      // Per-row insert to swallow expression-index unique violations silently
+      // (cannot use ON CONFLICT here — index uses COALESCE(shares,0)).
+      let inserted = 0; let skipped = 0; let lastErr: string | null = null;
+      for (const r of fresh) {
+        const { error } = await admin.from("insider_transactions").insert({
           ticker: r.ticker,
           insider_name: r.insider_name,
           role: r.role,
@@ -584,16 +597,15 @@ Deno.serve(async (req) => {
           source: r.source,
           external_ref: r.external_ref,
           raw: r.raw,
-        }));
-        const { error, count } = await admin
-          .from("insider_transactions")
-          .insert(payload, { count: "exact" });
-        if (error) {
-          perTicker[ticker].error = error.message.slice(0, 200);
-        } else if (typeof count === "number") {
-          totalInserted += count;
-        }
+        });
+        if (!error) { inserted++; continue; }
+        const msg = error.message || "";
+        if (msg.includes("insider_tx_dedupe") || msg.includes("duplicate key")) { skipped++; continue; }
+        lastErr = msg.slice(0, 200);
       }
+      totalInserted += inserted;
+      perTicker[ticker].adapters["_insert"] = { state: lastErr ? "partial_error" : "ok", rows: inserted, reason: lastErr ?? `${skipped} dupes skipped` };
+      if (lastErr) perTicker[ticker].error = lastErr;
     }
 
     // Strength score: read last 90d (covers prior history + new inserts).
