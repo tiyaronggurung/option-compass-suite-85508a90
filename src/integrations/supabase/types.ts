@@ -98,6 +98,7 @@ export type Database = {
       contract_selection_snapshots: {
         Row: {
           ask: number | null
+          below_band: boolean
           bid: number | null
           candidates_considered: number
           contract_score: number | null
@@ -119,8 +120,10 @@ export type Database = {
           premium: number | null
           rationale: string | null
           rationale_factors: Json
+          rejection_counts: Json
           risk_profile: string | null
           selected_at: string
+          selection_mode: string
           signal_id: string | null
           spread_pct: number | null
           strike: number | null
@@ -129,9 +132,11 @@ export type Database = {
           user_id: string | null
           vega: number | null
           volume: number | null
+          warning: string | null
         }
         Insert: {
           ask?: number | null
+          below_band?: boolean
           bid?: number | null
           candidates_considered?: number
           contract_score?: number | null
@@ -153,8 +158,10 @@ export type Database = {
           premium?: number | null
           rationale?: string | null
           rationale_factors?: Json
+          rejection_counts?: Json
           risk_profile?: string | null
           selected_at?: string
+          selection_mode?: string
           signal_id?: string | null
           spread_pct?: number | null
           strike?: number | null
@@ -163,9 +170,11 @@ export type Database = {
           user_id?: string | null
           vega?: number | null
           volume?: number | null
+          warning?: string | null
         }
         Update: {
           ask?: number | null
+          below_band?: boolean
           bid?: number | null
           candidates_considered?: number
           contract_score?: number | null
@@ -187,8 +196,10 @@ export type Database = {
           premium?: number | null
           rationale?: string | null
           rationale_factors?: Json
+          rejection_counts?: Json
           risk_profile?: string | null
           selected_at?: string
+          selection_mode?: string
           signal_id?: string | null
           spread_pct?: number | null
           strike?: number | null
@@ -197,6 +208,7 @@ export type Database = {
           user_id?: string | null
           vega?: number | null
           volume?: number | null
+          warning?: string | null
         }
         Relationships: []
       }
