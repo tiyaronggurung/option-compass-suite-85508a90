@@ -95,6 +95,111 @@ export type Database = {
         }
         Relationships: []
       }
+      contract_selection_snapshots: {
+        Row: {
+          ask: number | null
+          bid: number | null
+          candidates_considered: number
+          contract_score: number | null
+          contract_source: string
+          contract_symbol: string | null
+          created_at: string
+          delta: number | null
+          dte: number | null
+          expiry: string | null
+          gamma: number | null
+          id: string
+          iv: number | null
+          iv_rank: number | null
+          liquidity_score: number | null
+          mid: number | null
+          open_interest: number | null
+          option_type: string
+          paper_trade_id: string | null
+          premium: number | null
+          rationale: string | null
+          rationale_factors: Json
+          risk_profile: string | null
+          selected_at: string
+          signal_id: string | null
+          spread_pct: number | null
+          strike: number | null
+          theta: number | null
+          underlying: string
+          user_id: string | null
+          vega: number | null
+          volume: number | null
+        }
+        Insert: {
+          ask?: number | null
+          bid?: number | null
+          candidates_considered?: number
+          contract_score?: number | null
+          contract_source?: string
+          contract_symbol?: string | null
+          created_at?: string
+          delta?: number | null
+          dte?: number | null
+          expiry?: string | null
+          gamma?: number | null
+          id?: string
+          iv?: number | null
+          iv_rank?: number | null
+          liquidity_score?: number | null
+          mid?: number | null
+          open_interest?: number | null
+          option_type: string
+          paper_trade_id?: string | null
+          premium?: number | null
+          rationale?: string | null
+          rationale_factors?: Json
+          risk_profile?: string | null
+          selected_at?: string
+          signal_id?: string | null
+          spread_pct?: number | null
+          strike?: number | null
+          theta?: number | null
+          underlying: string
+          user_id?: string | null
+          vega?: number | null
+          volume?: number | null
+        }
+        Update: {
+          ask?: number | null
+          bid?: number | null
+          candidates_considered?: number
+          contract_score?: number | null
+          contract_source?: string
+          contract_symbol?: string | null
+          created_at?: string
+          delta?: number | null
+          dte?: number | null
+          expiry?: string | null
+          gamma?: number | null
+          id?: string
+          iv?: number | null
+          iv_rank?: number | null
+          liquidity_score?: number | null
+          mid?: number | null
+          open_interest?: number | null
+          option_type?: string
+          paper_trade_id?: string | null
+          premium?: number | null
+          rationale?: string | null
+          rationale_factors?: Json
+          risk_profile?: string | null
+          selected_at?: string
+          signal_id?: string | null
+          spread_pct?: number | null
+          strike?: number | null
+          theta?: number | null
+          underlying?: string
+          user_id?: string | null
+          vega?: number | null
+          volume?: number | null
+        }
+        Relationships: []
+      }
       earnings_events: {
         Row: {
           created_at: string
@@ -387,6 +492,7 @@ export type Database = {
           closed_at: string | null
           confidence_at_approval: number | null
           contract_idea: string | null
+          contract_snapshot_id: string | null
           contracts: number
           current_pl: number
           current_pl_pct: number | null
@@ -447,6 +553,7 @@ export type Database = {
           closed_at?: string | null
           confidence_at_approval?: number | null
           contract_idea?: string | null
+          contract_snapshot_id?: string | null
           contracts?: number
           current_pl?: number
           current_pl_pct?: number | null
@@ -507,6 +614,7 @@ export type Database = {
           closed_at?: string | null
           confidence_at_approval?: number | null
           contract_idea?: string | null
+          contract_snapshot_id?: string | null
           contracts?: number
           current_pl?: number
           current_pl_pct?: number | null
@@ -998,6 +1106,7 @@ export type Database = {
           source_confirmations: Json
           status: Database["public"]["Enums"]["signal_status"]
           strike: number | null
+          suggested_contract_snapshot_id: string | null
           technical_at_birth: Json
           technical_metrics: Json
           ticker: string
@@ -1039,6 +1148,7 @@ export type Database = {
           source_confirmations?: Json
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
+          suggested_contract_snapshot_id?: string | null
           technical_at_birth?: Json
           technical_metrics?: Json
           ticker: string
@@ -1080,6 +1190,7 @@ export type Database = {
           source_confirmations?: Json
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
+          suggested_contract_snapshot_id?: string | null
           technical_at_birth?: Json
           technical_metrics?: Json
           ticker?: string
