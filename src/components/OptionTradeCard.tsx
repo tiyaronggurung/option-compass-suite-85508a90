@@ -8,7 +8,7 @@
 // Pure presentation — no mutations.
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -209,6 +209,9 @@ type Snapshot = {
   contract_source: string | null;
   risk_profile: string | null;
   candidates_considered: number | null;
+  selection_mode: string | null;
+  below_band: boolean | null;
+  warning: string | null;
 };
 
 function RationalePanel({ snapshotId }: { snapshotId: string }) {
@@ -222,7 +225,7 @@ function RationalePanel({ snapshotId }: { snapshotId: string }) {
     (async () => {
       const { data } = await (supabase as any)
         .from("contract_selection_snapshots")
-        .select("contract_symbol,strike,expiry,dte,delta,spread_pct,open_interest,volume,iv,contract_score,liquidity_score,rationale,rationale_factors,contract_source,risk_profile,candidates_considered")
+        .select("contract_symbol,strike,expiry,dte,delta,spread_pct,open_interest,volume,iv,contract_score,liquidity_score,rationale,rationale_factors,contract_source,risk_profile,candidates_considered,selection_mode,below_band,warning")
         .eq("id", snapshotId)
         .maybeSingle();
       if (!cancelled) {
@@ -233,6 +236,8 @@ function RationalePanel({ snapshotId }: { snapshotId: string }) {
     return () => { cancelled = true; };
   }, [open, loaded, snapshotId]);
 
+  const isBestEffort = snap?.selection_mode === "best_effort" || snap?.below_band === true;
+
   return (
     <div className="border-t border-border/50 pt-2">
       <button
@@ -240,7 +245,19 @@ function RationalePanel({ snapshotId }: { snapshotId: string }) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-[11px] text-muted-foreground hover:text-foreground transition-colors"
       >
-        <span className="uppercase tracking-wider">Why this contract</span>
+        <span className="uppercase tracking-wider flex items-center gap-1.5">
+          Why this contract
+          {loaded && snap && (
+            <Badge
+              className={cn(
+                "border-0 text-[9px] uppercase tracking-wider",
+                isBestEffort ? "bg-warn/15 text-warn" : "bg-info/15 text-info",
+              )}
+            >
+              {isBestEffort ? "Best Effort" : "Normal"}
+            </Badge>
+          )}
+        </span>
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
@@ -249,6 +266,18 @@ function RationalePanel({ snapshotId }: { snapshotId: string }) {
           {loaded && !snap && <div className="text-[11px] text-muted-foreground">No rationale stored.</div>}
           {snap && (
             <>
+              {isBestEffort && (
+                <div className="rounded-md border border-warn/40 bg-warn/10 p-2 flex gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-warn flex-shrink-0 mt-0.5" />
+                  <div className="text-[11px] text-warn leading-snug">
+                    <div className="font-medium">Below Preferred Contract Band</div>
+                    <div className="text-warn/90 mt-0.5">
+                      {snap.warning ??
+                        "This contract was selected because no candidate met all preferred liquidity and spread requirements. Review before approval."}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="text-[11px] text-foreground/90 leading-relaxed">{snap.rationale ?? "—"}</div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] ticker-mono text-muted-foreground">
                 <span>Score {snap.contract_score ?? "—"}/100</span>
