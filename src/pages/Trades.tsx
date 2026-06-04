@@ -115,13 +115,35 @@ export default function Trades() {
       <Section title="Open">
         {!trades ? <Skeleton className="h-24" />
           : open.length === 0 ? <Empty text="No open paper trades. Approve a signal from the dashboard." />
-          : <TradeTable trades={open} live onCloseClick={(t) => setClosing(t)} reviews={reviews} onReviewClick={setReviewing} />}
+          : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {open.map((t) => (
+                <OptionTradeCard
+                  key={t.id}
+                  trade={t}
+                  live
+                  onClose={(x) => setClosing(x)}
+                />
+              ))}
+            </div>
+          )}
       </Section>
 
       <Section title="Closed">
         {!trades ? null
           : closed.length === 0 ? <Empty text="No closed trades yet." />
-          : <TradeTable trades={closed} reviews={reviews} onReviewClick={setReviewing} />}
+          : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {closed.map((t) => (
+                <OptionTradeCard
+                  key={t.id}
+                  trade={t}
+                  onReview={(x) => setReviewing(x)}
+                  hasReview={!!reviews[t.id]}
+                />
+              ))}
+            </div>
+          )}
       </Section>
 
       <CloseTradeDialog
@@ -150,146 +172,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Empty({ text }: { text: string }) {
   return <div className="glass-card p-8 text-center text-sm text-muted-foreground">{text}</div>;
-}
-
-function TradeTable({
-  trades, onCloseClick, reviews, onReviewClick, live,
-}: {
-  trades: PaperTrade[];
-  onCloseClick?: (t: PaperTrade) => void;
-  reviews: Record<string, TradeReview>;
-  onReviewClick: (t: PaperTrade) => void;
-  live?: boolean;
-}) {
-  return (
-    <div className="glass-card overflow-x-auto">
-      <table className="min-w-max w-full text-sm whitespace-nowrap">
-        <thead className="text-xs text-muted-foreground">
-          <tr className="border-b border-border">
-            <Th>Ticker</Th><Th>Dir</Th><Th>Contract</Th><Th className="text-right">Entry</Th>
-            <Th className="text-right">{live ? "Mark" : "Exit"}</Th>
-            <Th className="text-right">P/L</Th><Th className="text-right">P/L %</Th>
-            <Th>{live ? "Signals" : "Reason"}</Th>
-            <Th>Status</Th><Th>{live ? "Mark age" : "Opened"}</Th>
-            <Th className="text-right">Actions</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {trades.map((t) => {
-            const pl = Number(t.current_pl ?? 0);
-            const plPct = live
-              ? (t.current_pl_pct != null ? Number(t.current_pl_pct) : null)
-              : (t.realized_pl_pct != null ? Number(t.realized_pl_pct) : null);
-            const tint = live && t.last_mark_at
-              ? (pl > 0 ? "bg-bull/[0.04]" : pl < 0 ? "bg-bear/[0.04]" : "")
-              : "";
-            const touched = live ? targetStopTouched(t) : null;
-            return (
-              <tr key={t.id} className={cn("border-b border-border/60 last:border-0 transition-colors hover:bg-card-elevated/60", tint)}>
-                <Td className="ticker-mono font-semibold">{t.ticker}</Td>
-                <Td>
-                  <Badge className={cn("border-0", t.direction === "CALL" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
-                    {t.direction}
-                  </Badge>
-                </Td>
-                <Td className="ticker-mono text-muted-foreground">{t.contract_idea ?? "—"}</Td>
-                <Td className="text-right ticker-mono">${fmtPrice(Number(t.entry_price))}</Td>
-                <Td className="text-right ticker-mono text-muted-foreground">
-                  {live
-                    ? (t.last_mark_price != null ? `$${fmtPrice(Number(t.last_mark_price))}` : "—")
-                    : (t.exit_price != null ? `$${fmtPrice(Number(t.exit_price))}` : "—")}
-                </Td>
-                <Td className={cn("text-right ticker-mono", pl >= 0 ? "text-bull" : "text-bear")}>
-                  ${fmtPL(pl)}
-                </Td>
-                <Td className={cn("text-right ticker-mono", (plPct ?? 0) >= 0 ? "text-bull" : "text-bear")}>
-                  {plPct != null ? `${plPct.toFixed(1)}%` : "—"}
-                </Td>
-                <Td className="text-xs">
-                  {live ? (
-                    touched ? <TouchedBadge kind={touched} /> : <span className="text-muted-foreground">—</span>
-                  ) : (
-                    <span className="text-muted-foreground">{t.exit_reason ? reasonLabel(t.exit_reason) : "—"}</span>
-                  )}
-                </Td>
-                <Td><StatusBadge status={t.status} /></Td>
-                <Td className="text-muted-foreground whitespace-nowrap">
-                  {live
-                    ? (t.last_mark_at ? timeAgo(t.last_mark_at as string) : <span className="opacity-60">no mark yet</span>)
-                    : timeAgo(t.opened_at)}
-                </Td>
-                <Td className="text-right whitespace-nowrap space-x-1">
-                  {onCloseClick ? (
-                    <Button size="sm" variant="ghost" onClick={() => onCloseClick(t)}>Close…</Button>
-                  ) : (
-                    <Button size="sm" variant="ghost" onClick={() => onReviewClick(t)}>
-                      <Sparkles className="h-4 w-4 mr-1" />
-                      {reviews[t.id] ? "Review" : "Review trade"}
-                    </Button>
-                  )}
-                </Td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function targetStopTouched(t: PaperTrade): "target" | "stop" | null {
-  const mark = t.last_mark_price != null ? Number(t.last_mark_price) : null;
-  if (mark == null) return null;
-  const entry = Number(t.entry_price ?? 0);
-  if (!entry) return null;
-  const dir = t.direction === "CALL" ? 1 : -1;
-  const move = (mark - entry) * dir; // signed favorable price move
-
-  // The stop/target ideas are stored as option premium-style numbers in Phase 4E,
-  // but for live mark we compare against the favorable price move vs entry.
-  // Target idea / stop idea are interpreted as required favorable / unfavorable
-  // price move in same units as entry_price (best-effort heuristic).
-  const target = t.target_idea != null ? Number(t.target_idea) : null;
-  const stop = t.stop_idea != null ? Number(t.stop_idea) : null;
-
-  // Heuristic: target_idea > entry means absolute price target; otherwise treat as % of entry.
-  if (target != null) {
-    const targetMove = target > entry ? (target - entry) : entry * (target / 100);
-    if (move >= Math.max(0.01, targetMove)) return "target";
-  }
-  if (stop != null) {
-    const stopMove = stop < entry && stop > 0 ? (entry - stop) : entry * (stop / 100);
-    if (-move >= Math.max(0.01, stopMove)) return "stop";
-  }
-  return null;
-}
-
-function TouchedBadge({ kind }: { kind: "target" | "stop" }) {
-  if (kind === "target") {
-    return (
-      <Badge className="bg-bull/15 text-bull border-0 gap-1">
-        <TargetIcon className="h-3 w-3" /> Target touched
-      </Badge>
-    );
-  }
-  return (
-    <Badge className="bg-bear/15 text-bear border-0 gap-1">
-      <OctagonAlert className="h-3 w-3" /> Stop touched
-    </Badge>
-  );
-}
-
-const Th = ({ children, className }: any) => <th className={cn("px-3 py-2 text-left font-medium", className)}>{children}</th>;
-const Td = ({ children, className }: any) => <td className={cn("px-3 py-3", className)}>{children}</td>;
-
-function StatusBadge({ status }: { status: PaperTrade["status"] }) {
-  const m: Record<string, string> = {
-    OPEN: "bg-info/15 text-info",
-    WIN: "bg-bull/15 text-bull",
-    LOSS: "bg-bear/15 text-bear",
-    CLOSED: "bg-muted text-muted-foreground",
-  };
-  return <Badge className={cn("border-0", m[status])}>{status}</Badge>;
 }
 
 function reasonLabel(r: CloseReason): string {
