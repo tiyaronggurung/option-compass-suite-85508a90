@@ -872,6 +872,7 @@ export type Database = {
         Row: {
           catalyst_summary: string | null
           confidence: number
+          confidence_at_birth: number | null
           confirmation_label: string | null
           confirmation_score: number | null
           contract_symbol: string | null
@@ -881,10 +882,15 @@ export type Database = {
           expires_at: string | null
           expiry: string | null
           external_id: string | null
+          flow_at_birth: Json
           flow_metrics: Json
           hidden: boolean
           id: string
           is_demo: boolean
+          lifecycle_history: Json
+          lifecycle_reason: string | null
+          lifecycle_state: string
+          lifecycle_updated_at: string
           macro_score: number | null
           premium: number | null
           price: number | null
@@ -895,6 +901,7 @@ export type Database = {
           source_confirmations: Json
           status: Database["public"]["Enums"]["signal_status"]
           strike: number | null
+          technical_at_birth: Json
           technical_metrics: Json
           ticker: string
           tier: string | null
@@ -902,6 +909,7 @@ export type Database = {
         Insert: {
           catalyst_summary?: string | null
           confidence: number
+          confidence_at_birth?: number | null
           confirmation_label?: string | null
           confirmation_score?: number | null
           contract_symbol?: string | null
@@ -911,10 +919,15 @@ export type Database = {
           expires_at?: string | null
           expiry?: string | null
           external_id?: string | null
+          flow_at_birth?: Json
           flow_metrics?: Json
           hidden?: boolean
           id?: string
           is_demo?: boolean
+          lifecycle_history?: Json
+          lifecycle_reason?: string | null
+          lifecycle_state?: string
+          lifecycle_updated_at?: string
           macro_score?: number | null
           premium?: number | null
           price?: number | null
@@ -925,6 +938,7 @@ export type Database = {
           source_confirmations?: Json
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
+          technical_at_birth?: Json
           technical_metrics?: Json
           ticker: string
           tier?: string | null
@@ -932,6 +946,7 @@ export type Database = {
         Update: {
           catalyst_summary?: string | null
           confidence?: number
+          confidence_at_birth?: number | null
           confirmation_label?: string | null
           confirmation_score?: number | null
           contract_symbol?: string | null
@@ -941,10 +956,15 @@ export type Database = {
           expires_at?: string | null
           expiry?: string | null
           external_id?: string | null
+          flow_at_birth?: Json
           flow_metrics?: Json
           hidden?: boolean
           id?: string
           is_demo?: boolean
+          lifecycle_history?: Json
+          lifecycle_reason?: string | null
+          lifecycle_state?: string
+          lifecycle_updated_at?: string
           macro_score?: number | null
           premium?: number | null
           price?: number | null
@@ -955,6 +975,7 @@ export type Database = {
           source_confirmations?: Json
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
+          technical_at_birth?: Json
           technical_metrics?: Json
           ticker?: string
           tier?: string | null

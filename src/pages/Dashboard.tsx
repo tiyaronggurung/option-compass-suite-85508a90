@@ -13,6 +13,7 @@ import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
 import { signalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
 import { isExpired } from "@/lib/signalFreshness";
+import { getLifecycleState, LIFECYCLE_META, LIFECYCLE_ORDER, type LifecycleState } from "@/lib/signalLifecycle";
 import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
@@ -58,6 +59,7 @@ export default function Dashboard() {
   const [tagFilter, setTagFilter] = useState<TagId | null>(null);
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
   const [includeExpired, setIncludeExpired] = useState(false);
+  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleState | "all">("all");
   const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
   const [risk, setRisk] = useState<RiskSettingsLike>(null);
   const [showDeveloping, setShowDeveloping] = useState(true);
@@ -109,7 +111,14 @@ export default function Dashboard() {
     return signals.filter((s) => {
       if (dismissedIds.has(s.id)) return false;
       if (!s.is_demo && (s.confidence ?? 0) < 50) return false;
-      if (!includeExpired && isExpired(s)) return false;
+      const lc = getLifecycleState(s);
+      // Default view hides expired/invalidated unless filter selected explicitly.
+      if (lifecycleFilter === "all") {
+        if (lc === "expired" || lc === "invalidated") return false;
+        if (!includeExpired && isExpired(s)) return false;
+      } else if (lc !== lifecycleFilter) {
+        return false;
+      }
       if (sourceMode === "live" && s.is_demo) return false;
       if (sourceMode === "demo" && !s.is_demo) return false;
       if (filter === "bullish" && s.direction !== "CALL") return false;
@@ -124,7 +133,7 @@ export default function Dashboard() {
       }
       return true;
     });
-  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired, dismissedIds]);
+  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
@@ -257,6 +266,29 @@ export default function Dashboard() {
               onClick={() => setFilter(f.id)}
             >
               {f.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground mr-1">Lifecycle</span>
+          <Button
+            size="sm"
+            variant={lifecycleFilter === "all" ? "secondary" : "ghost"}
+            className="h-7 text-[11px] px-2"
+            onClick={() => setLifecycleFilter("all")}
+          >
+            All active
+          </Button>
+          {LIFECYCLE_ORDER.map((ls) => (
+            <Button
+              key={ls}
+              size="sm"
+              variant={lifecycleFilter === ls ? "secondary" : "ghost"}
+              className="h-7 text-[11px] px-2 gap-1"
+              onClick={() => setLifecycleFilter(lifecycleFilter === ls ? "all" : ls)}
+              title={LIFECYCLE_META[ls].description}
+            >
+              <span>{LIFECYCLE_META[ls].emoji}</span> {LIFECYCLE_META[ls].label}
             </Button>
           ))}
         </div>

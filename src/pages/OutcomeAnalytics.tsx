@@ -224,6 +224,11 @@ type PaperTradeLite = {
   confidence_at_approval: number | null;
 };
 
+type SignalLifecycleLite = {
+  id: string;
+  lifecycle_state: string | null;
+};
+
 const PAPER_CLASS_ORDER = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
 const PAPER_CLASS_LABEL: Record<string, string> = {
   developing: "Developing (50–64)",
@@ -233,10 +238,20 @@ const PAPER_CLASS_LABEL: Record<string, string> = {
   elite: "Elite (90+)",
 };
 
+const LIFECYCLE_ROW_ORDER = ["fresh", "active", "weakening", "expired", "invalidated"] as const;
+const LIFECYCLE_ROW_LABEL: Record<string, string> = {
+  fresh: "Fresh",
+  active: "Active",
+  weakening: "Weakening",
+  expired: "Expired",
+  invalidated: "Invalidated",
+};
+
 export default function OutcomeAnalytics() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [rows, setRows] = useState<Outcome[] | null>(null);
   const [paperTrades, setPaperTrades] = useState<PaperTradeLite[]>([]);
+  const [signalLifecycle, setSignalLifecycle] = useState<SignalLifecycleLite[]>([]);
   const [running, setRunning] = useState(false);
 
   // Filters
@@ -249,12 +264,14 @@ export default function OutcomeAnalytics() {
 
   async function refresh() {
     setRows(null);
-    const [{ data: outcomeData }, { data: tradeData }] = await Promise.all([
+    const [{ data: outcomeData }, { data: tradeData }, { data: sigData }] = await Promise.all([
       supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
       supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval").limit(5000),
+      supabase.from("signals").select("id, lifecycle_state").limit(5000),
     ]);
     setRows((outcomeData ?? []) as unknown as Outcome[]);
     setPaperTrades((tradeData ?? []) as unknown as PaperTradeLite[]);
+    setSignalLifecycle((sigData ?? []) as unknown as SignalLifecycleLite[]);
   }
   useEffect(() => { if (isAdmin) refresh(); }, [isAdmin]);
 
@@ -319,6 +336,30 @@ export default function OutcomeAnalytics() {
 
   // Paper Trade Class Comparison — bucket paper trades by their stored class,
   // join to the matching signal_outcomes row to read 5D win/return.
+  // Lifecycle Win-Rate Comparison — bucket outcomes by the signal's current
+  // lifecycle_state, then read 5D win/return.
+  const lifecycleRows = useMemo(() => {
+    const stateById = new Map<string, string>();
+    for (const s of signalLifecycle) if (s.lifecycle_state) stateById.set(s.id, s.lifecycle_state);
+    const agg: Record<string, { n: number; wins: number; retSum: number }> = {};
+    for (const r of filtered) {
+      const st = stateById.get(r.signal_id);
+      if (!st) continue;
+      if (r.win_5d === null || r.return_5d === null) continue;
+      if (!agg[st]) agg[st] = { n: 0, wins: 0, retSum: 0 };
+      agg[st].n += 1;
+      agg[st].wins += r.win_5d ? 1 : 0;
+      agg[st].retSum += Number(r.return_5d);
+    }
+    return LIFECYCLE_ROW_ORDER.filter((k) => agg[k]).map((k) => ({
+      key: k,
+      label: LIFECYCLE_ROW_LABEL[k] ?? k,
+      n: agg[k].n,
+      winRate: agg[k].n > 0 ? (agg[k].wins / agg[k].n) * 100 : 0,
+      avgReturn: agg[k].n > 0 ? agg[k].retSum / agg[k].n : 0,
+    }));
+  }, [signalLifecycle, filtered]);
+
   const paperClassRows = useMemo(() => {
     const outcomeBySignal = new Map<string, Outcome>();
     for (const r of filtered) outcomeBySignal.set(r.signal_id, r);
@@ -533,6 +574,42 @@ export default function OutcomeAnalytics() {
               />
             ),
           )}
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold">Lifecycle Win-Rate Comparison</h2>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              5D win rate and average return grouped by each signal's current lifecycle state.
+              Tests whether Weakening signals still have predictive value.
+            </p>
+            {lifecycleRows.length === 0 ? (
+              <div className="text-xs text-muted-foreground mt-2">No completed outcomes with lifecycle data yet.</div>
+            ) : (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2">Lifecycle</th>
+                      <th className="text-right py-1.5 px-2">n (5D)</th>
+                      <th className="text-right py-1.5 px-2">Win rate (5D)</th>
+                      <th className="text-right py-1.5 px-2">Avg return (5D)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lifecycleRows.map((d) => {
+                      const low = d.n > 0 && d.n < MIN_N;
+                      return (
+                        <tr key={d.key} className={cn("border-b border-border/50", low && "text-muted-foreground/60")}>
+                          <td className="py-1.5 px-2">{d.label}{low && <span className="ml-2 text-[10px] uppercase tracking-wide">low sample</span>}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.winRate.toFixed(0)}%</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.avgReturn >= 0 ? "+" : ""}{d.avgReturn.toFixed(2)}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
           <Card className="p-4">
             <h2 className="text-sm font-semibold">Paper Trade Class Comparison</h2>
             <p className="text-[11px] text-muted-foreground mb-2">

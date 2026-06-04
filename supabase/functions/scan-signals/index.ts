@@ -7,6 +7,13 @@ import { getEarningsCatalyst, type CatalystResult } from "../_shared/earningsCat
 import { buildConfirmations } from "../_shared/confirmations.ts";
 import { scoreInstitutional, tierFor as tierForScore } from "../_shared/scoring.ts";
 import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED, type UWFlowScore } from "../_shared/unusual-whales.ts";
+import {
+  evaluateLifecycle,
+  appendHistory,
+  type LifecycleSignal,
+  type FlowSnapshot,
+  type TechnicalSnapshot,
+} from "../_shared/lifecycle.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -665,6 +672,12 @@ Deno.serve(async (req) => {
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
 
+  // Lifecycle: capture fresh per-(ticker,direction) scoring this scan, used
+  // after the per-ticker loop to re-evaluate state of existing non-terminal signals.
+  type ScoringSnapshot = { confidence: number; flow: FlowSnapshot; technical: TechnicalSnapshot };
+  const scoringByKey = new Map<string, ScoringSnapshot>();
+  const keyOf = (t: string, d: string) => `${t.toUpperCase()}|${d}`;
+
   // Macro context fetched ONCE per scan run (global, not per-ticker).
   const macroCtx = await fetchMacroContext();
 
@@ -699,6 +712,15 @@ Deno.serve(async (req) => {
         institutionalConfidence = institutional.final;
         institutionalTier = tierForScore(institutionalConfidence);
         institutionalReasons.push(...institutional.reasons);
+        // Lifecycle: record fresh scoring snapshot for this (ticker, direction).
+        scoringByKey.set(keyOf(draft.ticker, draft.direction), {
+          confidence: institutionalConfidence,
+          flow: (institutional.components.options_flow?.details ?? {}) as FlowSnapshot,
+          technical: {
+            score: institutional.components.technical?.score ?? null,
+            ...(institutional.components.technical?.details ?? {}),
+          } as TechnicalSnapshot,
+        });
       } catch (e) {
         errors.push(`${sym} institutional: ${(e as Error).message}`);
         // Hard fail → skip this candidate; do not fall back to old pre-score.
@@ -876,6 +898,22 @@ Deno.serve(async (req) => {
           provider_status: institutional.provider_status,
           reasons: institutional.reasons,
         } : {},
+        // Lifecycle: birth snapshot + initial state.
+        lifecycle_state: "fresh",
+        lifecycle_reason: "created",
+        lifecycle_updated_at: new Date().toISOString(),
+        confidence_at_birth: finalScore,
+        flow_at_birth: institutional?.components.options_flow?.details ?? {},
+        technical_at_birth: institutional ? {
+          score: institutional.components.technical?.score ?? null,
+          ...(institutional.components.technical?.details ?? {}),
+        } : {},
+        lifecycle_history: [{
+          state: "fresh",
+          reason: "created",
+          at: new Date().toISOString(),
+          confidence: finalScore,
+        }],
         ...contractFields,
       });
       if (error) {
@@ -902,6 +940,54 @@ Deno.serve(async (req) => {
     await releaseScanLock();
   }
 
+  // ---------- Lifecycle pass ----------
+  // Re-evaluate every non-terminal signal using either the fresh scoring
+  // captured this scan or a time-only check when fresh data isn't available.
+  // Never deletes; only updates lifecycle_state/reason/history.
+  const lifecycleTransitions: Record<string, number> = {
+    fresh: 0, active: 0, weakening: 0, expired: 0, invalidated: 0,
+  };
+  try {
+    const { data: livingSignals } = await admin
+      .from("signals")
+      .select("id, ticker, direction, confidence, confidence_at_birth, created_at, lifecycle_state, lifecycle_history, flow_at_birth, technical_at_birth")
+      .in("lifecycle_state", ["fresh", "active", "weakening"])
+      .eq("is_demo", false)
+      .limit(2000);
+
+    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
+    for (const row of (livingSignals ?? []) as any[]) {
+      const snap = scoringByKey.get(keyOf(row.ticker, row.direction));
+      const decision = evaluateLifecycle(row as LifecycleSignal, {
+        currentConfidence: snap?.confidence ?? row.confidence,
+        currentFlow: snap?.flow ?? null,
+        currentTechnical: snap?.technical ?? null,
+        nowMs,
+      });
+      if (!decision.transitioned) continue;
+      lifecycleTransitions[decision.state] = (lifecycleTransitions[decision.state] ?? 0) + 1;
+      const history = appendHistory(row.lifecycle_history, {
+        state: decision.state,
+        reason: decision.reason,
+        at: nowIso,
+        confidence: snap?.confidence ?? row.confidence,
+      });
+      const { error: lcErr } = await admin
+        .from("signals")
+        .update({
+          lifecycle_state: decision.state,
+          lifecycle_reason: decision.reason,
+          lifecycle_updated_at: nowIso,
+          lifecycle_history: history,
+        })
+        .eq("id", row.id);
+      if (lcErr) errors.push(`lifecycle ${row.ticker}: ${lcErr.message}`);
+    }
+  } catch (e) {
+    errors.push(`lifecycle pass: ${(e as Error).message}`);
+  }
+
   const topSkipped = settings.debug_mode
     ? skippedList.sort((a, b) => b.score - a.score).slice(0, 3)
     : [];
@@ -910,9 +996,10 @@ Deno.serve(async (req) => {
     ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2))
     : null;
 
-  const avgComponents: Record<string, number | null> & { candidate_count: number } = {
+  const avgComponents: Record<string, unknown> & { candidate_count: number } = {
     trend: null, momentum: null, levels: null, volume: null, options: null, macro: null,
     candidate_count: candidates,
+    lifecycle: lifecycleTransitions,
   };
   if (candidates > 0) {
     for (const k of Object.keys(compSums) as ComponentName[]) {
