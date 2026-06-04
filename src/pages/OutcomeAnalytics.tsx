@@ -977,7 +977,150 @@ export default function OutcomeAnalytics() {
               is predictive over time.
             </div>
           </Card>
+
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold">Confidence → Actual Win Rate</h2>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              Calibration: each bucket uses <strong>birth confidence</strong> (captured at signal
+              creation) so post-creation drift cannot leak in. Expected = bucket midpoint as a
+              percent. Gap = actual − expected (positive = model under-predicted).
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-muted-foreground">
+                  <tr className="border-b border-border">
+                    <th className="text-left py-1.5 px-2">Confidence</th>
+                    <th className="text-right py-1.5 px-2">Signals</th>
+                    <th className="text-right py-1.5 px-2">Win rate (5D)</th>
+                    <th className="text-right py-1.5 px-2">Avg return (5D)</th>
+                    <th className="text-right py-1.5 px-2">Expected</th>
+                    <th className="text-right py-1.5 px-2">Gap</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calibrationRows.map((d) => {
+                    const low = d.n > 0 && d.n < MIN_N;
+                    const empty = d.n === 0;
+                    return (
+                      <tr key={d.bucket} className={cn("border-b border-border/50", (low || empty) && "text-muted-foreground/60")}>
+                        <td className="py-1.5 px-2">
+                          {d.bucket}
+                          {low && <span className="ml-2 text-[10px] uppercase tracking-wide">low sample</span>}
+                        </td>
+                        <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                        <td className="py-1.5 px-2 text-right ticker-mono">{empty ? "—" : `${d.winRate.toFixed(0)}%`}</td>
+                        <td className="py-1.5 px-2 text-right ticker-mono">{empty ? "—" : `${d.avgReturn >= 0 ? "+" : ""}${d.avgReturn.toFixed(2)}%`}</td>
+                        <td className="py-1.5 px-2 text-right ticker-mono">{d.expected.toFixed(0)}%</td>
+                        <td className={cn("py-1.5 px-2 text-right ticker-mono", empty ? "" : d.gap >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                          {empty ? "—" : `${d.gap >= 0 ? "+" : ""}${d.gap.toFixed(0)}pp`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4" style={{ width: "100%", height: 220 }}>
+              <ResponsiveContainer>
+                <BarChart data={calibrationRows.map((d) => ({
+                  bucket: d.bucket,
+                  Expected: d.expected,
+                  Actual: d.n > 0 ? Number(d.winRate.toFixed(1)) : 0,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="bucket" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" unit="%" />
+                  <RTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="Expected" fill="hsl(var(--muted-foreground))" />
+                  <Bar dataKey="Actual" fill="hsl(var(--primary))" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-1">
+              Low-sample buckets (n &lt; {MIN_N}) are dimmed in the table; the chart still plots them
+              so you can see where evidence is missing.
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold">Promotion Rates</h2>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              % of signals born in a band that <strong>ever reached</strong> a higher band
+              (uses max_tier_seen vs. birth band). Demotion = ever fell below the birth band
+              (uses min_tier_seen).
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+              <div>
+                <h3 className="text-xs font-medium mb-1">Promotions</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1.5 px-2">Transition</th>
+                        <th className="text-right py-1.5 px-2">Hits / n</th>
+                        <th className="text-right py-1.5 px-2">Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {promotionRows.promotions.map((d) => {
+                        const low = d.n > 0 && d.n < MIN_N;
+                        const empty = d.n === 0;
+                        return (
+                          <tr key={d.key} className={cn("border-b border-border/50", (low || empty) && "text-muted-foreground/60")}>
+                            <td className="py-1.5 px-2">
+                              {d.label}
+                              {low && <span className="ml-2 text-[10px] uppercase tracking-wide">low sample</span>}
+                            </td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.hits} / {d.n}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{empty ? "—" : `${d.rate.toFixed(0)}%`}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-xs font-medium mb-1">Demotions (fell below birth band)</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1.5 px-2">Birth band</th>
+                        <th className="text-right py-1.5 px-2">Hits / n</th>
+                        <th className="text-right py-1.5 px-2">Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {promotionRows.demotions.length === 0 ? (
+                        <tr><td colSpan={3} className="py-1.5 px-2 text-muted-foreground">No data yet.</td></tr>
+                      ) : promotionRows.demotions.map((d) => {
+                        const low = d.n > 0 && d.n < MIN_N;
+                        return (
+                          <tr key={d.key} className={cn("border-b border-border/50", low && "text-muted-foreground/60")}>
+                            <td className="py-1.5 px-2">
+                              {d.label}
+                              {low && <span className="ml-2 text-[10px] uppercase tracking-wide">low sample</span>}
+                            </td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.hits} / {d.n}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.rate.toFixed(0)}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-3">
+              Goal: learn whether 65–69 signals frequently mature into 70+ (validating Near
+              Watchlist) and whether high-confidence births rarely demote (validating the gate).
+            </div>
+          </Card>
         </>
+
 
       )}
     </div>
