@@ -16,6 +16,7 @@ import Analyst from "@/pages/Analyst";
 import Alerts from "@/pages/Alerts";
 import Performance from "@/pages/Performance";
 import SettingsPage from "@/pages/Settings";
+import Diagnostics from "@/pages/Diagnostics";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="alerts" element={<Alerts />} />
               <Route path="performance" element={<Performance />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="diagnostics" element={<Diagnostics />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
