@@ -222,6 +222,12 @@ type PaperTradeLite = {
   signal_id: string | null;
   paper_test_class: string | null;
   confidence_at_approval: number | null;
+  status: string | null;
+  is_option: boolean | null;
+  unrealized_pl: number | null;
+  unrealized_pl_pct: number | null;
+  realized_pl: number | null;
+  total_cost: number | null;
 };
 
 type SignalLifecycleLite = {
