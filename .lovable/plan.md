@@ -1,89 +1,117 @@
+# Signal Lifecycle Engine — Implementation Plan
 
-# Social Intelligence v2 — TwitterAPI.io Primary
+Replaces the current freshness-by-age heuristic with a thesis-aware lifecycle. Signals are never deleted; they transition through states and remain queryable for outcome tracking, paper history, and analytics.
 
-Replaces the prior Apify Kaito plan. TwitterAPI.io becomes the primary source feeding the existing **15% Sentiment** component. No scoring weights, thresholds, gates, or protected paths change.
+## Lifecycle states
 
-## Scope (additive only)
+`fresh` · `active` · `weakening` · `expired` · `invalidated`
 
-**Touched:** Sentiment component logic, SignalDetailDialog, Diagnostics page, provider-debug probe.
-**Untouched:** Options Flow (UW), Technical, News, Volatility, weights, tier thresholds, scanner gate (40), hidden-flag logic, regime engine, insider scoring, SEC Form 4, Tradier reserved paths, paper trades, live orders, guest flows, scoring architecture.
+State is recomputed on every scan (and on-demand for individual signals) by a pure evaluator that reads the latest scoring snapshot and compares it to the snapshot stored at signal birth.
+
+## 1. Schema changes (single migration)
+
+Additive columns on `public.signals`:
+
+- `lifecycle_state text not null default 'fresh'`
+- `lifecycle_reason text` — short machine code (e.g. `confidence_drop_15`, `flow_flip`, `time_exceeded`, `breakout_lost`)
+- `lifecycle_updated_at timestamptz not null default now()`
+- `confidence_at_birth integer` — backfilled to `confidence` for existing rows
+- `flow_at_birth jsonb default '{}'::jsonb` — snapshot of UW bias/premium/sweeps
+- `technical_at_birth jsonb default '{}'::jsonb` — breakout/breakdown level + side
+- `lifecycle_history jsonb not null default '[]'::jsonb` — append-only `{state, reason, at, confidence}` entries (capped at last 20 client-side)
+
+Index: `create index signals_lifecycle_state_idx on public.signals(lifecycle_state);`
+
+Backfill in same migration:
+- `confidence_at_birth = confidence`
+- `flow_at_birth = score_components->'options_flow'` (if present)
+- `technical_at_birth = score_components->'technical'` (if present)
+- Initial `lifecycle_state`:
+  - age < 2h → `fresh`
+  - age within tier soft limit → `active`
+  - age > tier soft limit → `expired`
+
+No changes to `tier`, `confidence`, `hidden`, `status`, scoring weights, scanner gate, or RLS. Existing GRANTs already cover the new columns.
+
+## 2. Lifecycle evaluator
+
+New file: `supabase/functions/_shared/lifecycle.ts`
+
+Pure function:
+```
+evaluateLifecycle({
+  signal,           // current row incl. *_at_birth snapshots
+  currentScoring,   // fresh score_components from this scan
+  nowMs
+}) => { state, reason, transitioned }
+```
+
+Tier → soft max age (hours): developing 6 · near_watchlist 12 · watchlist 24 · strong 36 · elite 48. Tier derived from `confidence_at_birth` to keep the budget stable.
+
+Evaluation order (first match wins, strongest signal first):
+
+1. **Invalidated**
+   - `confidence_drop >= 15`
+   - UW flow flip: bullish↔bearish bias reversal OR net premium sign flip
+   - Technical break: CALL breakout level lost, or PUT breakdown level reclaimed (from `technical_at_birth`)
+2. **Weakening**
+   - `confidence_drop` between 5 and 14
+   - UW: sweep activity disappeared OR premium magnitude halved
+   - Sentiment/trusted-source score collapsed below neutral
+3. **Expired** — `age > tierMaxHours` AND no upgrade signal (confidence not rising, flow not strengthening). Time alone does NOT expire if confirmations remain strong (confidence stable ±4 and flow intact) → stays `active`.
+4. **Fresh** — `age < 2h` and no weakening/invalidation
+5. **Active** — default
+
+Terminal rule: once `invalidated` or `expired`, no transitions back. `weakening → active` allowed if confirmations recover.
+
+## 3. Scan-time integration
+
+Touch only `supabase/functions/scan-signals/index.ts`:
+
+- After the existing institutional scoring pass, fetch all non-terminal signals for the universe being scanned (state in `fresh|active|weakening`).
+- For each, run `evaluateLifecycle` against the freshly computed `score_components` for that ticker/direction (already in memory for the scan).
+- Batch-update changed rows with `{lifecycle_state, lifecycle_reason, lifecycle_updated_at, lifecycle_history = lifecycle_history || new_entry}`.
+- Append per-scan counters to `signal_scan_runs.avg_components.lifecycle` (transitions by state) for observability. No new table required.
+
+Cost: 1 extra select + 1 batched update per scan. No extra provider calls — uses scoring already computed.
+
+Off-scan: a lightweight evaluator pass also runs from `update-paper-marks` (already cron'd) so lifecycle keeps moving between scans without new infra.
+
+## 4. UI
+
+Files touched:
+
+- `src/lib/signalLifecycle.ts` (new) — types, labels, colors, badge meta. Mirrors `signalTiers.ts` style.
+- `src/components/SignalCard.tsx` — render lifecycle badge next to freshness badge. Freshness badge stays (different concept: age-only). Lifecycle badge takes precedence visually when state ≠ `active`.
+- `src/components/SignalDetailDialog.tsx` — new "Lifecycle" section showing current state, reason, age vs tier budget, and `lifecycle_history` timeline.
+- `src/pages/Dashboard.tsx` — add lifecycle filter chips (All · Fresh · Active · Weakening · Expired · Invalidated). Default view hides `expired` + `invalidated` from main grids; Developing Signals section unchanged otherwise.
+- `src/pages/OutcomeAnalytics.tsx` — new "Lifecycle Win-Rate Comparison" card: n, win rate, avg return for each state, joined from `signal_outcomes` on `signal_id`.
+
+No changes to: SignalCard approve button copy, paper approval flow, public guest flows, scanner gate, hidden logic, scoring components.
+
+## 5. Behavior for existing signals
+
+- Migration backfills `*_at_birth` and an initial `lifecycle_state` from age + tier.
+- First scan after deploy re-evaluates and may move rows to `weakening`/`invalidated` if current scoring already shows decay vs birth snapshot.
+- No existing signal is hidden, deleted, or has its `confidence`/`tier` changed.
+
+## 6. Out of scope (explicitly untouched)
+
+scoring weights · tier thresholds · scanner gate · `hidden` logic · paper/live trade rules · UW/Twitter/insider/SEC Form 4/Tradier scoring · public guest flows (`join`, `status`, `booking`).
 
 ## Files
 
 **New**
-- `supabase/functions/_shared/twitterapi.ts` — auth, retries, rate-limit handling, error classification, 15-min ticker cache, never throws into scoring.
-- `supabase/functions/_shared/social-intel.ts` — `scoreSocialIntelligence(ticker, direction)` returning the Sentiment block.
-- `supabase/functions/twitterapi-health/index.ts` — health probe writing to `provider_configs`.
+- `supabase/functions/_shared/lifecycle.ts`
+- `src/lib/signalLifecycle.ts`
+- one migration file (schema + backfill)
 
 **Modified**
-- `supabase/functions/_shared/scoring.ts` — replace neutral-50 sentiment path with `scoreSocialIntelligence()`. Same component slot, same 15% weight. Direction-aware (CALL rewards bullish, PUT rewards bearish). Same fallback ladder used for UW.
-- `supabase/functions/provider-debug/index.ts` — add `twitterapi_io` probe.
-- `src/pages/Diagnostics.tsx` — add TwitterAPI.io card (status, latency, last refresh, errors).
-- `src/components/SignalDetailDialog.tsx` — add "Social Intelligence — X/Twitter" block.
+- `supabase/functions/scan-signals/index.ts` (lifecycle pass)
+- `supabase/functions/update-paper-marks/index.ts` (between-scan refresh)
+- `src/components/SignalCard.tsx`
+- `src/components/SignalDetailDialog.tsx`
+- `src/pages/Dashboard.tsx`
+- `src/pages/OutcomeAnalytics.tsx`
 
-## Social Intelligence engine
-
-- **Universe:** NVDA, TSLA, AMD, META, AAPL, MSFT, SPY, QQQ (cashtag `$TICKER`)
-- **Window:** last 4 hours, latest tweets, English, target 200/ticker
-- **Cache:** 15 min per ticker (in-memory + `kv_cache` table if present, else memory only)
-- **Sentiment classifier:** `google/gemini-2.5-flash-lite` via Lovable AI Gateway, batched ~50 tweets/call; lexicon fallback on LLM failure
-- **Baselines:** 7-day rolling mention count & engagement medians stored per ticker
-
-## Sub-scores (Sentiment 0–100)
-
-| Sub-score | Weight | Inputs |
-|---|---|---|
-| Polarity | 40% | bullish/bearish/neutral % (direction-aware) |
-| Mention velocity | 25% | current 4h count ÷ baseline |
-| KOL activity | 20% | verified / blue / followers>50k count + Σ engagement × log(followers) |
-| Engagement momentum | 15% | (likes + 2×RT + replies + views/100) vs 7-day median |
-
-## Provider states
-
-`active` · `missing_key` · `auth_failed` · `rate_limited` · `degraded` · `no_data`
-
-On `missing_key` / `auth_failed` / `no_data` → neutral 50 (preserves current behavior).
-
-## Stored metadata (`score_components.components.sentiment`)
-
-```
-{
-  source: "twitterapi_io",
-  provider_status,
-  score,
-  subscores: { polarity, velocity, kol, engagement },
-  samples: { total_tweets, bullish_count, bearish_count, neutral_count, top_kol_tweets[3] },
-  reason_code,
-  human_reason
-}
-```
-
-Example `human_reason`:
-> "Twitter/X sentiment is strongly bullish. 68% bullish vs 14% bearish. Mention velocity 2.3× normal. 12 verified KOLs actively discussing NVDA."
-
-## UI
-
-**SignalDetailDialog** — new "Social Intelligence — X/Twitter" section: score, bullish/bearish/neutral %, mention count, velocity ratio, KOL count, engagement score, top 3 KOL tweets, human reason.
-
-**Diagnostics** — TwitterAPI.io card: status, latency, response count, rate-limit headers, last refresh, errors.
-
-## Validation (no DB writes, no signals inserted)
-
-Run `score-debug` for: NVDA CALL, TSLA CALL, AMD CALL, META CALL, SPY PUT, QQQ PUT.
-
-Report:
-- TwitterAPI.io provider status
-- Sentiment before vs after
-- Final confidence before vs after
-- Signals crossing 70+
-- Dashboard visible count vs Developing count
-- Estimated API cost
-- Cache hit ratio
-
-## Future (not implemented now)
-
-Apify Kaito fallback, Reddit, StockTwits, Discord, influencer tracking, narrative clustering. Architecture left pluggable.
-
----
-
-`TWITTERAPI_IO_API_KEY` is saved. Reply **"go"** to implement, or request changes.
+Reply **go** to proceed, or tell me what to change.
