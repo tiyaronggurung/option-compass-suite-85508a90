@@ -304,7 +304,8 @@ export default function OutcomeAnalytics() {
     const [{ data: outcomeData }, { data: tradeData }, { data: sigData }] = await Promise.all([
       supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
       supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval").limit(5000),
-      supabase.from("signals").select("id, lifecycle_state").limit(5000),
+      supabase.from("signals").select("id, lifecycle_state, confidence, confidence_at_birth, max_confidence_seen, min_confidence_seen, tier, max_tier_seen, min_tier_seen").limit(5000),
+
     ]);
     setRows((outcomeData ?? []) as unknown as Outcome[]);
     setPaperTrades((tradeData ?? []) as unknown as PaperTradeLite[]);
