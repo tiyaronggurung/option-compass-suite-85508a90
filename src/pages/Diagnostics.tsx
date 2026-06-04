@@ -38,8 +38,8 @@ const PROVIDERS = [
 ];
 
 function statusOf(r: ProbeResult): { kind: string; tone: "ok" | "warn" | "err" | "skip"; label: string } {
-  if ("skipped" in r && r.skipped) return { kind: "missing_key", tone: "skip", label: "Missing key" };
-  if ("error" in r && r.error) return { kind: "fetch_error", tone: "err", label: "Fetch error" };
+  if ("skipped" in r) return { kind: "missing_key", tone: "skip", label: "Missing key" };
+  if (r.error) return { kind: "fetch_error", tone: "err", label: "Fetch error" };
   if (r.classified?.kind === "ok") return { kind: "ok", tone: "ok", label: "OK" };
   if (r.classified?.kind === "not_entitled") return { kind: "not_entitled", tone: "warn", label: "Not entitled" };
   if (r.classified?.kind === "auth_failed") return { kind: "auth_failed", tone: "err", label: "Auth failed" };
