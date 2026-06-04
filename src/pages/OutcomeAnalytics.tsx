@@ -614,6 +614,46 @@ export default function OutcomeAnalytics() {
     return { promotions, demotions };
   }, [signalLifecycle]);
 
+  // ---------- Paper Option P/L by Class (option paper trades only) ----------
+  const optionPnlByClass = useMemo(() => {
+    const agg: Record<string, { n: number; open: number; closed: number; unrealSum: number; unrealN: number; realSum: number; realN: number; wins: number; costSum: number }> = {};
+    for (const t of paperTrades) {
+      if (t.is_option === false) continue;
+      const cls = (t.paper_test_class || "").trim();
+      if (!cls) continue;
+      if (!agg[cls]) agg[cls] = { n: 0, open: 0, closed: 0, unrealSum: 0, unrealN: 0, realSum: 0, realN: 0, wins: 0, costSum: 0 };
+      const a = agg[cls];
+      a.n += 1;
+      a.costSum += Number(t.total_cost ?? 0);
+      if (t.status === "OPEN") {
+        a.open += 1;
+        if (t.unrealized_pl_pct != null) { a.unrealSum += Number(t.unrealized_pl_pct); a.unrealN += 1; }
+      } else {
+        a.closed += 1;
+        if (t.realized_pl != null) {
+          const r = Number(t.realized_pl);
+          a.realSum += r;
+          a.realN += 1;
+          if (r > 0) a.wins += 1;
+        }
+      }
+    }
+    return PAPER_CLASS_ORDER.filter((k) => agg[k]).map((k) => {
+      const a = agg[k];
+      return {
+        key: k,
+        label: PAPER_CLASS_LABEL[k] ?? k,
+        n: a.n,
+        open: a.open,
+        closed: a.closed,
+        avgUnrealPct: a.unrealN > 0 ? a.unrealSum / a.unrealN : null,
+        totalRealized: a.realN > 0 ? a.realSum : null,
+        winRate: a.realN > 0 ? (a.wins / a.realN) * 100 : null,
+        totalCost: a.costSum,
+      };
+    });
+  }, [paperTrades]);
+
 
 
 
