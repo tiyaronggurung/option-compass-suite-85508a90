@@ -382,4 +382,73 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
   );
 }
 
+type Headline = { headline: string; source: "finnhub" | "finviz"; url?: string };
+
+function NewsTransparency({ details, source }: { details: any; source?: string }) {
+  if (!details || typeof details !== "object") return null;
+  const articles = Number(details.article_count ?? 0);
+  const finnhubN = Number(details.finnhub_articles ?? 0);
+  const finvizN = Number(details.finviz_extra_articles ?? 0);
+  const reasonCode = String(details.reason_code ?? "");
+  const sent403 = !!details.finnhub_sentiment_403;
+  const fallback = !!details.finviz_fallback_active;
+  const headlines: Headline[] = Array.isArray(details.top_headlines) ? details.top_headlines : [];
+
+  const srcLabel =
+    source === "finnhub" ? "Finnhub company-news + sentiment" :
+    source === "finnhub+finviz_news" ? "Finnhub + Finviz news" :
+    source === "finnhub_news" ? "Finnhub company-news" :
+    source === "finnhub_news+finviz_news" ? "Finnhub company-news + Finviz news" :
+    source === "finviz_news" ? "Finviz news (fallback)" :
+    source || "—";
+
+  return (
+    <div className="mt-1.5 ml-24 pl-2 border-l border-border/60 space-y-1">
+      <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5">
+        <span>Source: <span className="text-foreground/80">{srcLabel}</span></span>
+        <span>Articles: <span className="text-foreground/80 ticker-mono">{articles}</span>{(finnhubN > 0 || finvizN > 0) && (
+          <span className="opacity-70"> ({finnhubN} Finnhub · {finvizN} Finviz)</span>
+        )}</span>
+        {reasonCode && <span>Reason: <span className="text-foreground/80 ticker-mono">{reasonCode}</span></span>}
+      </div>
+      {(sent403 || fallback) && (
+        <div className="text-[10px] flex flex-wrap gap-1">
+          {sent403 && (
+            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 ticker-mono">
+              finnhub_sentiment_403
+            </span>
+          )}
+          {fallback && (
+            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 ticker-mono">
+              finnhub_403_finviz_news_fallback_active
+            </span>
+          )}
+        </div>
+      )}
+      {headlines.length > 0 && (
+        <ul className="text-[10px] space-y-0.5">
+          {headlines.slice(0, 5).map((h, i) => (
+            <li key={i} className="flex gap-1.5 text-foreground/70">
+              <span className={cn(
+                "shrink-0 px-1 rounded ticker-mono text-[9px] leading-4",
+                h.source === "finnhub" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+              )}>
+                {h.source === "finnhub" ? "FH" : "FV"}
+              </span>
+              {h.url ? (
+                <a href={h.url} target="_blank" rel="noreferrer" className="truncate hover:text-foreground hover:underline">
+                  {h.headline}
+                </a>
+              ) : (
+                <span className="truncate">{h.headline}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+
 
