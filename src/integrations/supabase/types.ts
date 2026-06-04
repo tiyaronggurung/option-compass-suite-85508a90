@@ -185,6 +185,36 @@ export type Database = {
         }
         Relationships: []
       }
+      market_regime: {
+        Row: {
+          details: Json
+          id: string
+          qqq_trend: number | null
+          regime: string
+          spy_trend: number | null
+          updated_at: string
+          vix_level: number | null
+        }
+        Insert: {
+          details?: Json
+          id?: string
+          qqq_trend?: number | null
+          regime?: string
+          spy_trend?: number | null
+          updated_at?: string
+          vix_level?: number | null
+        }
+        Update: {
+          details?: Json
+          id?: string
+          qqq_trend?: number | null
+          regime?: string
+          spy_trend?: number | null
+          updated_at?: string
+          vix_level?: number | null
+        }
+        Relationships: []
+      }
       options_contracts: {
         Row: {
           ask: number | null
@@ -654,12 +684,14 @@ export type Database = {
           price: number | null
           reasons: Json
           risk_level: Database["public"]["Enums"]["risk_level"]
+          score_components: Json
           source: string | null
           source_confirmations: Json
           status: Database["public"]["Enums"]["signal_status"]
           strike: number | null
           technical_metrics: Json
           ticker: string
+          tier: string | null
         }
         Insert: {
           catalyst_summary?: string | null
@@ -682,12 +714,14 @@ export type Database = {
           price?: number | null
           reasons?: Json
           risk_level?: Database["public"]["Enums"]["risk_level"]
+          score_components?: Json
           source?: string | null
           source_confirmations?: Json
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
           technical_metrics?: Json
           ticker: string
+          tier?: string | null
         }
         Update: {
           catalyst_summary?: string | null
@@ -710,12 +744,14 @@ export type Database = {
           price?: number | null
           reasons?: Json
           risk_level?: Database["public"]["Enums"]["risk_level"]
+          score_components?: Json
           source?: string | null
           source_confirmations?: Json
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
           technical_metrics?: Json
           ticker?: string
+          tier?: string | null
         }
         Relationships: []
       }
@@ -877,6 +913,9 @@ export type Database = {
         | "reddit"
         | "polymarket"
         | "kalshi"
+        | "finviz"
+        | "finnhub"
+        | "apify"
       provider_mode: "live" | "simulated"
       provider_status: "ok" | "error" | "unknown"
       risk_level: "LOW" | "MEDIUM" | "HIGH"
@@ -1037,6 +1076,9 @@ export const Constants = {
         "reddit",
         "polymarket",
         "kalshi",
+        "finviz",
+        "finnhub",
+        "apify",
       ],
       provider_mode: ["live", "simulated"],
       provider_status: ["ok", "error", "unknown"],
