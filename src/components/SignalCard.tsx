@@ -20,7 +20,7 @@ type Props = {
   subLabel?: string;
 };
 
-export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none" }: Props) {
+export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none", subLabel }: Props) {
   const isCall = signal.direction === "CALL";
   const tier = getTier(signal);
   const tierMeta = TIER_META[tier];
