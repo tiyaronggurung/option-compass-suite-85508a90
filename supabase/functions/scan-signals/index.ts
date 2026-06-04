@@ -327,17 +327,31 @@ type Draft = {
   components: AllComponents;
 };
 
-function evaluate(symbol: string, bars: Bar[]): Draft | null {
+async function evaluate(symbol: string, bars: Bar[], macroCtx: MacroContext): Promise<Draft | null> {
   if (bars.length < 35) return null;
   const closes = bars.map((b) => b.c);
   const last = bars[bars.length - 1];
 
+  // Phase 1: technical buckets (sync, no external IO)
   const trend = scoreTrend(closes);
   const momentum = scoreMomentum(closes);
   const levels = scoreLevels(bars);
   const volume = scoreVolume(bars, trend.score);
-  const options = scoreOptions();
-  const macro = scoreMacro();
+
+  // Provisional direction from technical-only blend (sum of weights = 0.90).
+  // We need a direction up-front because options flow is direction-aware.
+  const techBlended =
+    trend.score * WEIGHTS.trend +
+    momentum.score * WEIGHTS.momentum +
+    levels.score * WEIGHTS.levels +
+    volume.score * WEIGHTS.volume;
+  const provisionalDirection: "CALL" | "PUT" = techBlended >= 0 ? "CALL" : "PUT";
+
+  // Phase 2: direction-aware async buckets (options flow + macro).
+  const [options, macro] = await Promise.all([
+    scoreOptionsLive(symbol, provisionalDirection),
+    Promise.resolve(scoreMacroLive(macroCtx, provisionalDirection)),
+  ]);
 
   const components: AllComponents = { trend, momentum, levels, volume, options, macro };
 
@@ -358,7 +372,7 @@ function evaluate(symbol: string, bars: Bar[]): Draft | null {
   // Reasons: pick components whose signed score agrees with direction and is meaningful
   const sign = blended > 0 ? 1 : -1;
   const reasons: string[] = [];
-  for (const k of ["trend", "momentum", "levels", "volume"] as ComponentName[]) {
+  for (const k of ["trend", "momentum", "levels", "volume", "options", "macro"] as ComponentName[]) {
     const c = components[k];
     if (c.score * sign >= 0.15) reasons.push(c.reason);
   }
@@ -379,8 +393,8 @@ function evaluate(symbol: string, bars: Bar[]): Draft | null {
         momentum: { score: +momentum.score.toFixed(3), reason: momentum.reason, ...momentum.metrics },
         levels: { score: +levels.score.toFixed(3), reason: levels.reason, ...levels.metrics },
         volume: { score: +volume.score.toFixed(3), reason: volume.reason, ...volume.metrics },
-        options: { score: 0, reason: options.reason },
-        macro: { score: 0, reason: macro.reason },
+        options: { score: +options.score.toFixed(3), reason: options.reason, ...options.metrics },
+        macro: { score: +macro.score.toFixed(3), reason: macro.reason, ...macro.metrics },
       },
       // Flat fields kept for back-compat with any UI that read them directly
       rsi: momentum.metrics.rsi,
