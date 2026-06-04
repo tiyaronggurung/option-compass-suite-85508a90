@@ -10,6 +10,7 @@ import {
   type FinvizNewsSummary,
   type SectorPerf,
 } from "./finviz-extras.ts";
+import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED } from "./unusual-whales.ts";
 
 export type ComponentKey =
   | "options_flow"
