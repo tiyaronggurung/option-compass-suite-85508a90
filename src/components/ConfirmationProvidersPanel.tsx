@@ -16,12 +16,16 @@ type ProviderRow = {
 
 // Confirmation engine providers (Alpaca handled separately as primary)
 const CONFIRMATION_PROVIDERS: Array<{ provider: string; label: string; description: string }> = [
-  { provider: "unusual_whales", label: "Unusual Whales", description: "Unusual options flow / large prints" },
-  { provider: "x_twitter",      label: "X / Twitter API", description: "Cashtag mentions, sentiment (noisy)" },
+  { provider: "tradier",        label: "Tradier",         description: "Options chain · flow · Greeks · IV (primary)" },
+  { provider: "finviz",         label: "Finviz",          description: "Screener · technical · sector strength" },
+  { provider: "finnhub",        label: "Finnhub",         description: "News sentiment · analyst actions" },
+  { provider: "apify",          label: "Apify (X/Twitter)", description: "X cashtag sentiment & mention velocity" },
+  { provider: "unusual_whales", label: "Unusual Whales",  description: "Reserved — future flow expansion" },
+  { provider: "x_twitter",      label: "X / Twitter API", description: "Direct X API (placeholder)" },
   { provider: "reddit",         label: "Reddit API",      description: "WSB / investing post velocity (noisy)" },
   { provider: "polymarket",     label: "Polymarket",      description: "Prediction-market pricing" },
   { provider: "kalshi",         label: "Kalshi",          description: "Event contract pricing" },
-  { provider: "news",           label: "News API",        description: "Headline catalysts" },
+  { provider: "news",           label: "News API",        description: "Generic headline catalysts" },
   { provider: "alpha_vantage",  label: "Alpha Vantage",   description: "Earnings calendar enrichment" },
 ];
 
