@@ -890,7 +890,11 @@ export async function scoreInstitutional(
       ? (extras.sectors.data[sectorName] ?? null)
       : null;
 
-  const [optionsFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
+  // Options Flow priority: Unusual Whales (institutional) → Finviz (aggregate proxy) → neutral.
+  // UW runs in parallel with the Finviz adapter so we always have the fallback ready and
+  // can store side-by-side metadata for transparency. UW.state !== "active" → fallback used.
+  const [uwFlow, finvizFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
+    UW_CONFIGURED ? scoreOptionsFlowUnusualWhales(ticker, direction) : Promise.resolve(null),
     scoreOptionsFlowFinviz(ticker, direction, fv, extras.insider.data),
     scoreTechnicalWithSnap(ticker, baseTrendScore, fv, sectorPerf, direction),
     scoreNews(ticker, direction, extras.news.data),
@@ -898,6 +902,50 @@ export async function scoreInstitutional(
     scoreVolatilityFinviz(ticker, fv),
     getRegime(admin),
   ]);
+
+  // Build the unified options_flow ComponentScore.
+  // Active UW → use UW score. UW failed/missing → use Finviz proxy. Both missing → neutral 50.
+  let optionsFlow: ComponentScore;
+  if (uwFlow && uwFlow.state === "active") {
+    optionsFlow = {
+      score: uwFlow.score,
+      configured: true,
+      source: "unusual_whales",
+      reason: uwFlow.human_reason,
+      details: {
+        provider: "unusual_whales",
+        provider_status: uwFlow.state,
+        uw_score: uwFlow.score,
+        finviz_fallback_score: finvizFlow.score,
+        bullish_premium: uwFlow.bullish_premium,
+        bearish_premium: uwFlow.bearish_premium,
+        net_premium_bias: uwFlow.net_premium_bias,
+        call_put_bias: uwFlow.call_put_bias,
+        ask_side_premium: uwFlow.ask_side_premium,
+        bid_side_premium: uwFlow.bid_side_premium,
+        sweep_count: uwFlow.sweep_count,
+        block_count: uwFlow.block_count,
+        unusual_volume_count: uwFlow.unusual_volume_count,
+        largest_flows: uwFlow.largest_flows,
+        reason_code: uwFlow.reason_code,
+        human_reason: uwFlow.human_reason,
+        finviz_fallback_details: finvizFlow.details ?? null,
+      },
+    };
+  } else {
+    optionsFlow = {
+      ...finvizFlow,
+      details: {
+        ...(finvizFlow.details ?? {}),
+        provider: "finviz",
+        provider_status: uwFlow ? `uw_${uwFlow.state}` : "uw_missing_key",
+        uw_score: null,
+        finviz_fallback_score: finvizFlow.score,
+        uw_reason: uwFlow?.reason_code ?? "uw_missing_key",
+      },
+    };
+  }
+
 
   const components: Record<ComponentKey, ComponentScore> = {
     options_flow: optionsFlow,
