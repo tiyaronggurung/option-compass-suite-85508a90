@@ -679,6 +679,8 @@ async function scoreTechnicalWithSnap(
   ticker: string,
   baseTrendScore: number,
   fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
+  sectorPerf?: SectorPerf | null,
+  direction?: "CALL" | "PUT",
 ): Promise<ComponentScore> {
   const localScore = clamp100((baseTrendScore + 1) * 50);
   if (fv.state === "missing_key") {
@@ -690,7 +692,6 @@ async function scoreTechnicalWithSnap(
     };
   }
   if (fv.state !== "ok" || !fv.row) {
-    // Finviz returned HTML / upsell / login / empty — fall back to Alpaca-only.
     return {
       score: localScore,
       configured: true,
@@ -707,13 +708,29 @@ async function scoreTechnicalWithSnap(
   const finvizTrend = clamp100(50 + sma50 * 2 + sma200 + perfWeek * 1.5);
   const finvizVol = clamp100(50 + (relVol - 1) * 25);
   const finvizScore = clamp100(finvizTrend * 0.7 + finvizVol * 0.3);
-  const blended = clamp100(localScore * 0.5 + finvizScore * 0.5);
+  let blended = clamp100(localScore * 0.5 + finvizScore * 0.5);
+
+  // Sub-signal: sector strength nudge (capped ±3)
+  let sectorNudge = 0;
+  let sectorNote = "";
+  if (sectorPerf && direction) {
+    const aligned = direction === "CALL" ? sectorPerf.perf_week_pct : -sectorPerf.perf_week_pct;
+    sectorNudge = Math.max(-3, Math.min(3, aligned * 0.6));
+    blended = clamp100(blended + sectorNudge);
+    sectorNote = ` · ${sectorPerf.sector} ${sectorPerf.perf_week_pct >= 0 ? "+" : ""}${sectorPerf.perf_week_pct.toFixed(1)}%/wk`;
+  }
+
   return {
     score: blended,
     configured: true,
-    source: "alpaca+finviz",
-    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x`,
-    details: { perf_week: perfWeek, sma50, sma200, rel_volume: relVol },
+    source: sectorPerf ? "alpaca+finviz+sector" : "alpaca+finviz",
+    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}`,
+    details: {
+      perf_week: perfWeek, sma50, sma200, rel_volume: relVol,
+      sector: sectorPerf?.sector ?? null,
+      sector_perf_week_pct: sectorPerf?.perf_week_pct ?? null,
+      sector_nudge: sectorNudge,
+    },
   };
 }
 
