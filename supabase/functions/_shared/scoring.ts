@@ -371,10 +371,50 @@ async function finvizSnapshotChecked(ticker: string): Promise<FinvizSnap> {
   if (lines.length < 2) {
     return { row: null, state: "empty", reason: FINVIZ_REASONS.empty, detail: "CSV header only" };
   }
-  const headers = lines[0].split(",").map((s) => s.replace(/^"|"$/g, "").trim());
-  const values = lines[1].split(",").map((s) => s.replace(/^"|"$/g, "").trim());
-  const row: Record<string, string> = {};
-  headers.forEach((h, i) => { row[h] = values[i] ?? ""; });
+  // CSV parser that handles quoted fields containing commas (e.g. company names).
+  const splitCsv = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === "," && !inQ) { out.push(cur); cur = ""; continue; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.map((s) => s.trim());
+  };
+  const headers = splitCsv(lines[0]);
+  const values = splitCsv(lines[1]);
+  const rawRow: Record<string, string> = {};
+  headers.forEach((h, i) => { rawRow[h] = values[i] ?? ""; });
+
+  // Header alias map: Finviz export.ashx returns long-form column names. Map them to
+  // the short keys the scoring code already reads. Pure data normalization — no math change.
+  const HEADER_ALIASES: Record<string, string> = {
+    "Performance (Week)":             "Perf Week",
+    "Performance (Month)":            "Perf Month",
+    "50-Day Simple Moving Average":   "SMA50",
+    "200-Day Simple Moving Average":  "SMA200",
+    "20-Day Simple Moving Average":   "SMA20",
+    "Relative Volume":                "Rel Volume",
+    "Average True Range":             "ATR",
+    "Volatility (Week)":              "Volatility W",
+    "Volatility (Month)":             "Volatility M",
+    "Analyst Recom":                  "Recom",
+    "Recommendation":                 "Recom",
+  };
+  const row: Record<string, string> = { ...rawRow };
+  for (const [long, short] of Object.entries(HEADER_ALIASES)) {
+    if (long in rawRow && !(short in row)) row[short] = rawRow[long];
+  }
+  // Synthesize combined "Volatility" string ("W M") to match legacy snapshot field.
+  if (!row["Volatility"] && (row["Volatility W"] || row["Volatility M"])) {
+    row["Volatility"] = `${row["Volatility W"] ?? ""} ${row["Volatility M"] ?? ""}`.trim();
+  }
+  // Optionable is not in export.ashx; default to "yes" for all listed equities (Finviz
+  // only returns rows for tradable tickers anyway). Preserves prior scoring behavior.
+  if (!("Optionable" in row)) row["Optionable"] = "yes";
 
   const missing = EXPECTED_FIELDS.filter((f) => !(f in row));
   if (missing.length > 0) {
