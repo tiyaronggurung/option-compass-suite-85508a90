@@ -514,6 +514,102 @@ export default function OutcomeAnalytics() {
     return { buckets, n };
   }, [signalLifecycle]);
 
+  // ---------- Confidence Calibration (uses birth confidence only) ----------
+  // signal_outcomes.confidence is captured at insert time by the seed trigger,
+  // so it equals confidence_at_birth and is safe to use here without leaking drift.
+  const calibrationRows = useMemo(() => {
+    const order = ["50–54", "55–59", "60–64", "65–69", "70–79", "80–89", "90+"] as const;
+    const bucketOf = (c: number): typeof order[number] | null => {
+      if (c >= 90) return "90+";
+      if (c >= 80) return "80–89";
+      if (c >= 70) return "70–79";
+      if (c >= 65) return "65–69";
+      if (c >= 60) return "60–64";
+      if (c >= 55) return "55–59";
+      if (c >= 50) return "50–54";
+      return null;
+    };
+    const midpoint: Record<string, number> = {
+      "50–54": 52, "55–59": 57, "60–64": 62, "65–69": 67,
+      "70–79": 74.5, "80–89": 84.5, "90+": 92.5,
+    };
+    const agg: Record<string, { n: number; wins: number; retSum: number }> = {};
+    for (const r of filtered) {
+      const b = bucketOf(r.confidence);
+      if (!b) continue;
+      if (r.win_5d === null || r.return_5d === null) continue;
+      if (!agg[b]) agg[b] = { n: 0, wins: 0, retSum: 0 };
+      agg[b].n += 1;
+      agg[b].wins += r.win_5d ? 1 : 0;
+      agg[b].retSum += Number(r.return_5d);
+    }
+    return order.map((k) => {
+      const a = agg[k] ?? { n: 0, wins: 0, retSum: 0 };
+      const winRate = a.n > 0 ? (a.wins / a.n) * 100 : 0;
+      const expected = midpoint[k];
+      return {
+        bucket: k,
+        n: a.n,
+        winRate,
+        avgReturn: a.n > 0 ? a.retSum / a.n : 0,
+        expected,
+        gap: a.n > 0 ? winRate - expected : 0,
+      };
+    });
+  }, [filtered]);
+
+  // ---------- Promotion / Demotion rates (from watermarks vs birth band) ----------
+  const promotionRows = useMemo(() => {
+    const order = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
+    const rank: Record<string, number> = {
+      rejected: 0, developing: 1, near_watchlist: 2, watchlist: 3, strong: 4, elite: 5,
+    };
+    const promoTargets = [
+      { key: "developing→near_watchlist", from: "developing", to: "near_watchlist" },
+      { key: "developing→watchlist",      from: "developing", to: "watchlist" },
+      { key: "near_watchlist→watchlist",  from: "near_watchlist", to: "watchlist" },
+      { key: "watchlist→strong",          from: "watchlist", to: "strong" },
+      { key: "strong→elite",              from: "strong", to: "elite" },
+    ] as const;
+
+    const bornInBand: Record<string, number> = Object.fromEntries(order.map((o) => [o, 0]));
+    const promoHits: Record<string, number> = Object.fromEntries(promoTargets.map((p) => [p.key, 0]));
+    const demoHits: Record<string, number> = Object.fromEntries(order.map((o) => [o, 0]));
+
+    for (const s of signalLifecycle) {
+      const cls = paperClassForConfidence(s.confidence_at_birth ?? null);
+      if (!cls) continue;
+      bornInBand[cls] += 1;
+      const maxR = s.max_tier_seen ? (rank[s.max_tier_seen] ?? -1) : -1;
+      const minR = s.min_tier_seen ? (rank[s.min_tier_seen] ?? 99) : 99;
+      const birthR = rank[cls];
+      for (const p of promoTargets) {
+        if (p.from === cls && maxR >= rank[p.to]) promoHits[p.key] += 1;
+      }
+      if (minR < birthR) demoHits[cls] += 1;
+    }
+
+    const promotions = promoTargets.map((p) => ({
+      key: p.key,
+      label: p.key.replace("→", " → "),
+      hits: promoHits[p.key],
+      n: bornInBand[p.from],
+      rate: bornInBand[p.from] > 0 ? (promoHits[p.key] / bornInBand[p.from]) * 100 : 0,
+    }));
+    const demotions = order
+      .filter((b) => bornInBand[b] > 0 || demoHits[b] > 0)
+      .map((b) => ({
+        key: b,
+        label: PAPER_CLASS_LABEL[b] ?? b,
+        hits: demoHits[b],
+        n: bornInBand[b],
+        rate: bornInBand[b] > 0 ? (demoHits[b] / bornInBand[b]) * 100 : 0,
+      }));
+    return { promotions, demotions };
+  }, [signalLifecycle]);
+
+
+
 
 
   if (adminLoading) return <div className="p-6 text-muted-foreground text-sm">Checking permissions…</div>;
