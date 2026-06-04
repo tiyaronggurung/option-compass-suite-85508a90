@@ -293,6 +293,44 @@ export default function Dashboard() {
             ))}
       </section>
 
+      {developing && developing.length > 0 && (
+        <section className="space-y-3 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-4">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold tracking-tight text-muted-foreground uppercase">
+                Developing Signals
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Below Threshold — Not Tradeable Yet · confidence 50–69 · for transparency only
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-transparent"
+              onClick={() => setShowDeveloping((v) => !v)}
+            >
+              {showDeveloping ? `Hide (${developing.length})` : `Show (${developing.length})`}
+            </Button>
+          </div>
+          {showDeveloping && (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-60 hover:opacity-90 transition-opacity">
+              {developing.map((s) => (
+                <SignalCard
+                  key={s.id}
+                  signal={s}
+                  watchlist={watchSet}
+                  onApprove={() => toast.warning("Below threshold — not tradeable yet")}
+                  onReject={dismiss}
+                  onDetails={(sig) => setDetailSignal(sig)}
+                  outcome={signalOutcome(s, trades, dismissedIds)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       <SignalDetailDialog
         signal={detailSignal}
         open={!!detailSignal}
