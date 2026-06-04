@@ -112,6 +112,13 @@ export default function Dashboard() {
       if (dismissedIds.has(s.id)) return false;
       if (!s.is_demo && (s.confidence ?? 0) < 50) return false;
       if (!includeExpired && isExpired(s)) return false;
+      const lc = getLifecycleState(s);
+      // Default view hides expired/invalidated unless filter selected explicitly.
+      if (lifecycleFilter === "all") {
+        if (lc === "expired" || lc === "invalidated") return false;
+      } else if (lc !== lifecycleFilter) {
+        return false;
+      }
       if (sourceMode === "live" && s.is_demo) return false;
       if (sourceMode === "demo" && !s.is_demo) return false;
       if (filter === "bullish" && s.direction !== "CALL") return false;
@@ -126,7 +133,7 @@ export default function Dashboard() {
       }
       return true;
     });
-  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired, dismissedIds]);
+  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
