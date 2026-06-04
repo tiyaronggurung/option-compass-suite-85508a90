@@ -376,6 +376,19 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Enrich: estimate delta when provider didn't return it (UW/Alpaca chain endpoints often omit greeks).
+  const spot = await fetchSpot(admin, ticker);
+  if (spot != null) {
+    for (const c of candidates) {
+      if (c.delta == null) {
+        const est = estimateDelta(optionType as "CALL"|"PUT", spot, c.strike, c.dte, c.iv ?? null);
+        if (est != null) c.delta = est;
+      }
+    }
+  }
+
+
+
   const { scored, best } = rankCandidates(candidates, profile);
   if (!best) {
     return json({
