@@ -493,12 +493,13 @@ function SocialIntelTransparency({ details, source }: { details: any; source?: s
         <span className="text-muted-foreground">— {neuPct.toFixed(0)}%</span>
         <span className="text-bear">▼ {bearPct.toFixed(0)}%</span>
       </div>
-      <div className="grid grid-cols-4 gap-1 text-[10px]">
+      <div className="grid grid-cols-5 gap-1 text-[10px]">
         {[
-          { k: "polarity", l: "Polarity", w: "40%" },
-          { k: "velocity", l: "Velocity", w: "25%" },
-          { k: "kol", l: "KOL", w: "20%" },
-          { k: "engagement", l: "Engage", w: "15%" },
+          { k: "polarity", l: "Polarity", w: "35%" },
+          { k: "velocity", l: "Velocity", w: "20%" },
+          { k: "kol", l: "KOL", w: "15%" },
+          { k: "engagement", l: "Engage", w: "10%" },
+          { k: "trusted_source", l: "Trusted", w: "20%" },
         ].map((s) => (
           <div key={s.k} className="bg-muted/20 rounded px-1 py-0.5">
             <div className="text-muted-foreground">{s.l} <span className="opacity-60">{s.w}</span></div>
@@ -506,6 +507,7 @@ function SocialIntelTransparency({ details, source }: { details: any; source?: s
           </div>
         ))}
       </div>
+      <TrustedSourceBlock details={details} />
       {top.length > 0 && (
         <ul className="text-[10px] space-y-0.5">
           {top.slice(0, 3).map((t, i) => (
@@ -537,6 +539,55 @@ function SocialIntelTransparency({ details, source }: { details: any; source?: s
     </div>
   );
 }
+
+function TrustedSourceBlock({ details }: { details: any }) {
+  const score = Number(details?.trusted_source_score ?? 50);
+  const hits = Number(details?.trusted_source_hits ?? 0);
+  const accounts: string[] = Array.isArray(details?.trusted_source_accounts) ? details.trusted_source_accounts : [];
+  const headlines: any[] = Array.isArray(details?.trusted_source_headlines) ? details.trusted_source_headlines : [];
+  const summary = String(details?.trusted_source_summary ?? "");
+  const dist = (details?.trusted_tier_distribution ?? {}) as Record<string, number>;
+  const monitored = Number(details?.monitored_account_count ?? 0);
+  return (
+    <div className="mt-1 rounded border border-border/60 bg-muted/10 px-2 py-1.5 space-y-1">
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-foreground/80 font-medium">Trusted Source Intelligence</span>
+        <span className="ticker-mono text-foreground/80">{Math.round(score)}</span>
+      </div>
+      <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5">
+        <span>Hits <span className="ticker-mono text-foreground/80">{hits}</span></span>
+        <span>Accounts <span className="ticker-mono text-foreground/80">{accounts.length}</span></span>
+        <span>Monitored <span className="ticker-mono text-foreground/80">{monitored}</span></span>
+        {[1, 2, 3, 4, 5].map((t) => (
+          <span key={t} className="opacity-80">T{t}:<span className="ticker-mono text-foreground/80 ml-0.5">{Number(dist[String(t)] ?? 0)}</span></span>
+        ))}
+      </div>
+      {headlines.length > 0 && (
+        <ul className="text-[10px] space-y-0.5">
+          {headlines.slice(0, 4).map((h, i) => (
+            <li key={i} className="text-foreground/75">
+              <span className={cn(
+                "ticker-mono mr-1",
+                h.sentiment === "bullish" ? "text-bull" : h.sentiment === "bearish" ? "text-bear" : "text-muted-foreground",
+              )}>
+                {h.sentiment === "bullish" ? "▲" : h.sentiment === "bearish" ? "▼" : "—"}
+              </span>
+              <span className="opacity-80">@{h.account}</span>
+              <span className="opacity-50 ml-1">T{h.tier}</span>
+              {h.url ? (
+                <a href={h.url} target="_blank" rel="noreferrer" className="ml-1 hover:underline">{String(h.headline).slice(0, 140)}</a>
+              ) : (
+                <span className="ml-1">{String(h.headline).slice(0, 140)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {summary && <div className="text-[10px] text-muted-foreground/90 italic">↳ {summary}</div>}
+    </div>
+  );
+}
+
 
 type Headline = { headline: string; source: "finnhub" | "finviz"; url?: string };
 

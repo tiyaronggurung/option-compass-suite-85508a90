@@ -192,3 +192,97 @@ export async function fetchCashtagTweets(
 export function cacheStats() {
   return { entries: CACHE.size, ttl_ms: CACHE_TTL_MS };
 }
+
+/**
+ * Fetch recent tweets from a curated set of trusted accounts that mention the
+ * ticker (cashtag, symbol word, or company aliases). Single advanced-search
+ * call using `from:` OR-group; cached 15 min like cashtag queries.
+ */
+export async function fetchTrustedSourceTweets(
+  ticker: string,
+  handles: string[],
+  opts: { hours?: number; limit?: number; useCache?: boolean } = {},
+): Promise<TAPIFetchResult> {
+  if (!TAPI_KEY) return { state: "missing_key", error: "TWITTERAPI_IO_API_KEY not configured" };
+  const hours = opts.hours ?? 4;
+  const limit = Math.min(Math.max(opts.limit ?? 60, 10), 200);
+  const useCache = opts.useCache ?? true;
+
+  const cacheKey = `TS:${ticker}:${hours}:${handles.length}`;
+  if (useCache) {
+    const hit = CACHE.get(cacheKey);
+    if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return { ...hit.result, ms: 0 };
+  }
+
+  const fromGroup = `(${handles.map((h) => `from:${h}`).join(" OR ")})`;
+  // Match cashtag OR bare symbol; company-name aliases are filtered post-fetch
+  // (advanced_search OR-trees get heavy with too many terms).
+  const symGroup = `($${ticker} OR ${ticker})`;
+  const query = `${fromGroup} ${symGroup} lang:en -is:retweet`;
+  const url = `${TAPI_BASE}/twitter/tweet/advanced_search?query=${encodeURIComponent(query)}&queryType=Latest`;
+
+  const t0 = Date.now();
+  let tweets: TAPITweet[] = [];
+  let cursor: string | undefined;
+  let lastStatus = 0;
+  let rate_limit: TAPIFetchResult["rate_limit"];
+
+  try {
+    for (let page = 0; page < 3 && tweets.length < limit; page++) {
+      const pagedUrl = cursor ? `${url}&cursor=${encodeURIComponent(cursor)}` : url;
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 9000);
+      const res = await fetch(pagedUrl, {
+        headers: { "X-API-Key": TAPI_KEY, "Accept": "application/json" },
+        signal: ctrl.signal,
+      });
+      clearTimeout(tid);
+      lastStatus = res.status;
+      const rlRem = Number(res.headers.get("x-ratelimit-remaining") ?? "");
+      const rlRst = Number(res.headers.get("x-ratelimit-reset") ?? "");
+      if (!Number.isNaN(rlRem) || !Number.isNaN(rlRst)) {
+        rate_limit = { remaining: Number.isNaN(rlRem) ? undefined : rlRem, reset: Number.isNaN(rlRst) ? undefined : rlRst };
+      }
+      if (res.status === 401 || res.status === 403) {
+        const t = await res.text().catch(() => "");
+        const result: TAPIFetchResult = { state: "auth_failed", status: res.status, error: t.slice(0, 200), ms: Date.now() - t0, rate_limit };
+        CACHE.set(cacheKey, { ts: Date.now(), result });
+        return result;
+      }
+      if (res.status === 429) {
+        return { state: "rate_limited", status: 429, error: "rate limited", ms: Date.now() - t0, rate_limit };
+      }
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        return { state: "degraded", status: res.status, error: t.slice(0, 200), ms: Date.now() - t0, rate_limit };
+      }
+      const json = await res.json().catch(() => null);
+      const items: any[] = json?.tweets ?? json?.data ?? json?.results ?? [];
+      for (const it of items) {
+        const nt = normalizeTweet(it);
+        if (nt && nt.text) tweets.push(nt);
+        if (tweets.length >= limit) break;
+      }
+      cursor = json?.next_cursor ?? json?.cursor ?? undefined;
+      if (!cursor || items.length === 0) break;
+      const last = items[items.length - 1];
+      const ts = Date.parse(last?.createdAt ?? last?.created_at ?? "");
+      if (!Number.isNaN(ts) && ts < Date.now() - hours * 3600 * 1000) break;
+    }
+    const cutoff = Date.now() - hours * 3600 * 1000;
+    tweets = tweets.filter((t) => {
+      const ts = Date.parse(t.createdAt);
+      return Number.isNaN(ts) ? true : ts >= cutoff;
+    });
+    if (tweets.length === 0) {
+      const result: TAPIFetchResult = { state: "no_data", status: lastStatus, tweets: [], ms: Date.now() - t0, rate_limit };
+      CACHE.set(cacheKey, { ts: Date.now(), result });
+      return result;
+    }
+    const result: TAPIFetchResult = { state: "active", status: lastStatus, tweets, ms: Date.now() - t0, rate_limit };
+    CACHE.set(cacheKey, { ts: Date.now(), result });
+    return result;
+  } catch (e) {
+    return { state: "degraded", error: (e as Error).message.slice(0, 200), ms: Date.now() - t0 };
+  }
+}
