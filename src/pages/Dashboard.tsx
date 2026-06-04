@@ -19,6 +19,7 @@ import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
 import MarketOverviewStrip from "@/components/MarketOverviewStrip";
 import ProviderStatusBanner from "@/components/ProviderStatusBanner";
+import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
@@ -63,7 +64,19 @@ export default function Dashboard() {
   const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
   const [risk, setRisk] = useState<RiskSettingsLike>(null);
   const [showDeveloping, setShowDeveloping] = useState(true);
+  const [alerts, setAlerts] = useState<TradeAlert[]>([]);
   const watchSet = useMemo(() => new Set(watch), [watch]);
+
+  const reloadAlerts = async () => {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from("trade_alerts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setAlerts((data ?? []) as TradeAlert[]);
+  };
 
   useEffect(() => {
     let cancel = false;
