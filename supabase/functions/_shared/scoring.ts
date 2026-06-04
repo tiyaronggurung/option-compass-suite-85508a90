@@ -1030,12 +1030,31 @@ export async function scoreInstitutional(
       state: "reserved",
       note: "Reserved for future upgrade — code paths preserved, currently inactive.",
     },
-    {
-      provider: "unusual_whales",
-      role: "institutional sweeps + dark pool",
-      state: "reserved",
-      note: "Reserved for future upgrade — preserved for later use.",
-    },
+    (() => {
+      const ofDetails = (optionsFlow.details ?? {}) as Record<string, unknown>;
+      const usingUW = optionsFlow.source === "unusual_whales";
+      let state: ProviderStatus["state"];
+      let detail: string | undefined;
+      if (!UW_CONFIGURED) {
+        state = "missing_key";
+        detail = "UNUSUAL_WHALES_API_KEY not configured — Options Flow using Finviz proxy";
+      } else if (usingUW) {
+        state = "active";
+        detail = `Powering Options Flow (uw_score=${ofDetails.uw_score})`;
+      } else {
+        const ps = String(ofDetails.provider_status ?? "uw_degraded");
+        state = ps.includes("auth") ? "auth_failed" : ps.includes("rate") ? "degraded" : "degraded";
+        detail = `UW unavailable (${ps}) — Options Flow fell back to Finviz proxy`;
+      }
+      return {
+        provider: "unusual_whales",
+        role: "options_flow (institutional flow — primary)",
+        state,
+        detail,
+        note: "UW powers Options Flow when active; Finviz proxy is used as fallback.",
+      };
+    })(),
+
   ];
 
   return {
