@@ -240,15 +240,15 @@ async function scoreVolatilityFinviz(
 
 // ---------- Finviz (technical confirmation) ----------
 async function finvizSnapshot(ticker: string): Promise<any | null> {
+  // LEGACY — preserved for the dormant scoreTechnical() Tradier-era code path.
+  // Active code path uses finvizSnapshotChecked() below.
   if (!FINVIZ_KEY) return null;
   try {
-    // Finviz Elite "quote" endpoint
     const url = `https://elite.finviz.com/quote_export.ashx?t=${ticker}&auth=${FINVIZ_KEY}`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const text = await res.text();
     if (!text || text.length < 20) return null;
-    // CSV: header, data
     const lines = text.trim().split("\n");
     if (lines.length < 2) return null;
     const headers = lines[0].split(",").map((s) => s.replace(/^"|"$/g, ""));
@@ -257,6 +257,87 @@ async function finvizSnapshot(ticker: string): Promise<any | null> {
     headers.forEach((h, i) => { row[h] = values[i] ?? ""; });
     return row;
   } catch { return null; }
+}
+
+// ---------- Finviz defensive fetch (ACTIVE) ----------
+// Detects HTML/upsell/login/empty responses so scoring never parses garbage.
+export type FinvizState =
+  | "ok"
+  | "missing_key"
+  | "auth_failed"
+  | "not_entitled"
+  | "html_response"
+  | "empty"
+  | "missing_fields"
+  | "http_error"
+  | "fetch_error";
+
+const FINVIZ_REASONS: Record<FinvizState, string> = {
+  ok:              "finviz_ok",
+  missing_key:     "finviz_key_not_configured",
+  auth_failed:     "finviz_auth_failed_or_not_entitled",
+  not_entitled:    "finviz_export_endpoint_unavailable",
+  html_response:   "finviz_returned_html_instead_of_csv",
+  empty:           "finviz_empty_response",
+  missing_fields:  "finviz_csv_missing_expected_fields",
+  http_error:      "finviz_http_error",
+  fetch_error:     "finviz_fetch_error",
+};
+
+const EXPECTED_FIELDS = ["Ticker", "Price", "SMA50", "SMA200", "Rel Volume"];
+
+export type FinvizSnap = {
+  row: Record<string, string> | null;
+  state: FinvizState;
+  reason: string;
+  detail?: string;
+};
+
+async function finvizSnapshotChecked(ticker: string): Promise<FinvizSnap> {
+  if (!FINVIZ_KEY) return { row: null, state: "missing_key", reason: FINVIZ_REASONS.missing_key };
+  let res: Response;
+  const url = `https://elite.finviz.com/quote_export.ashx?t=${ticker}&auth=${FINVIZ_KEY}`;
+  try {
+    res = await fetch(url); // default redirect: follow
+  } catch (e) {
+    return { row: null, state: "fetch_error", reason: FINVIZ_REASONS.fetch_error, detail: (e as Error).message.slice(0, 120) };
+  }
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  const finalUrl = (res.url ?? "").toLowerCase();
+  if (!res.ok) {
+    return { row: null, state: "http_error", reason: FINVIZ_REASONS.http_error, detail: `HTTP ${res.status}` };
+  }
+  const text = await res.text();
+  if (!text || text.trim().length < 20) {
+    return { row: null, state: "empty", reason: FINVIZ_REASONS.empty };
+  }
+  const head = text.slice(0, 500).toLowerCase();
+
+  // Upsell / non-entitled redirect (confirmed by finviz-debug probe).
+  if (finalUrl.includes("utm_campaign=quote-export") || finalUrl.includes("finviz.com/elite")) {
+    return { row: null, state: "not_entitled", reason: FINVIZ_REASONS.not_entitled, detail: "redirected to Elite upsell page" };
+  }
+  if (head.includes("login") && contentType.includes("text/html")) {
+    return { row: null, state: "auth_failed", reason: FINVIZ_REASONS.auth_failed, detail: "login page returned" };
+  }
+  if (contentType.includes("text/html") || head.includes("<!doctype html") || head.includes("<html")) {
+    return { row: null, state: "html_response", reason: FINVIZ_REASONS.html_response, detail: `content-type: ${contentType || "unknown"}` };
+  }
+
+  const lines = text.trim().split("\n");
+  if (lines.length < 2) {
+    return { row: null, state: "empty", reason: FINVIZ_REASONS.empty, detail: "CSV header only" };
+  }
+  const headers = lines[0].split(",").map((s) => s.replace(/^"|"$/g, "").trim());
+  const values = lines[1].split(",").map((s) => s.replace(/^"|"$/g, "").trim());
+  const row: Record<string, string> = {};
+  headers.forEach((h, i) => { row[h] = values[i] ?? ""; });
+
+  const missing = EXPECTED_FIELDS.filter((f) => !(f in row));
+  if (missing.length > 0) {
+    return { row: null, state: "missing_fields", reason: FINVIZ_REASONS.missing_fields, detail: `missing: ${missing.join(", ")}` };
+  }
+  return { row, state: "ok", reason: FINVIZ_REASONS.ok };
 }
 
 function parsePct(s: string | undefined): number | null {
