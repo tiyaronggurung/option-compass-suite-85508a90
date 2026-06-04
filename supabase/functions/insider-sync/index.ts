@@ -553,30 +553,46 @@ Deno.serve(async (req) => {
     }
 
     if (collected.length > 0) {
-      // Upsert by external_ref (per-source unique). Use the dedupe unique index as fallback.
-      const payload = collected.map((r) => ({
-        ticker: r.ticker,
-        insider_name: r.insider_name,
-        role: r.role,
-        transaction_type: r.transaction_type,
-        filing_date: r.filing_date,
-        transaction_date: r.transaction_date,
-        shares: r.shares,
-        price: r.price,
-        total_value: r.total_value,
-        direction: r.direction,
-        source: r.source,
-        external_ref: r.external_ref,
-        raw: r.raw,
-      }));
-      // Idempotent: ignore conflicts on the dedupe unique index.
-      const { error, count } = await admin
-        .from("insider_transactions")
-        .upsert(payload, { onConflict: "ticker,insider_name,transaction_date,transaction_type,shares,source", ignoreDuplicates: true, count: "exact" });
-      if (error) {
-        perTicker[ticker].error = error.message.slice(0, 200);
-      } else if (typeof count === "number") {
-        totalInserted += count;
+      // Pre-filter against existing external_ref (cannot use onConflict here because
+      // the dedupe unique index is expression-based: COALESCE(shares, 0)).
+      const refs = Array.from(new Set(collected.map((r) => r.external_ref).filter(Boolean)));
+      const existing = new Set<string>();
+      // Chunk in case of long IN lists.
+      for (let i = 0; i < refs.length; i += 200) {
+        const chunk = refs.slice(i, i + 200);
+        const { data } = await admin
+          .from("insider_transactions")
+          .select("external_ref")
+          .in("external_ref", chunk);
+        for (const row of (data ?? [])) {
+          if (row?.external_ref) existing.add(String(row.external_ref));
+        }
+      }
+      const fresh = collected.filter((r) => r.external_ref && !existing.has(r.external_ref));
+      if (fresh.length > 0) {
+        const payload = fresh.map((r) => ({
+          ticker: r.ticker,
+          insider_name: r.insider_name,
+          role: r.role,
+          transaction_type: r.transaction_type,
+          filing_date: r.filing_date,
+          transaction_date: r.transaction_date,
+          shares: r.shares,
+          price: r.price,
+          total_value: r.total_value,
+          direction: r.direction,
+          source: r.source,
+          external_ref: r.external_ref,
+          raw: r.raw,
+        }));
+        const { error, count } = await admin
+          .from("insider_transactions")
+          .insert(payload, { count: "exact" });
+        if (error) {
+          perTicker[ticker].error = error.message.slice(0, 200);
+        } else if (typeof count === "number") {
+          totalInserted += count;
+        }
       }
     }
 
