@@ -44,7 +44,7 @@ async function probeUrl(url: string, headers: Record<string, string> = {}) {
       final_url: res.url,
       classified: cls,
       bytes: text.length,
-      preview: text.slice(0, 400),
+      preview: text.slice(0, 2500),
       ms: Date.now() - start,
     };
   } catch (e) {
@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
   const probes: Record<string, () => Promise<unknown>> = {
     finviz_main: async () => {
       if (!FINVIZ_KEY) return { skipped: true, reason: "FINVIZ_API_KEY not configured" };
-      return probeUrl(`https://elite.finviz.com/quote_export.ashx?t=${ticker}&auth=${FINVIZ_KEY}`);
+      return probeUrl(`https://elite.finviz.com/export.ashx?v=152&t=${ticker}&c=0,1,2,3,4,5,6,7,30,42,43,44,45,46,47,48,49,50,51,52,53,54,59,62,63,64,65,66,67,68,69,87&auth=${FINVIZ_KEY}`);
     },
     finviz_news: async () => {
       if (!FINVIZ_KEY) return { skipped: true, reason: "FINVIZ_API_KEY not configured" };
