@@ -534,12 +534,22 @@ export async function scoreInstitutional(
   }
 
   // Provider lifecycle metadata — surfaced in score_components.provider_status
+  // Finviz state reflects the actual fetch result (active / auth_failed / not_entitled / etc.)
+  const finvizProviderState: ProviderStatus["state"] =
+    fv.state === "ok"            ? "active" :
+    fv.state === "missing_key"   ? "missing_key" :
+    fv.state === "auth_failed"   ? "auth_failed" :
+    fv.state === "not_entitled"  ? "not_entitled" :
+                                   "degraded";
   const provider_status: ProviderStatus[] = [
     {
       provider: "finviz",
       role: "options_flow + volatility + technical",
-      state: FINVIZ_KEY ? "active" : "missing_key",
-      note: "Aggregate-level options data only (no per-contract sweeps).",
+      state: finvizProviderState,
+      detail: fv.state !== "ok" ? `${fv.reason}${fv.detail ? ` — ${fv.detail}` : ""}` : undefined,
+      note: finvizProviderState === "active"
+        ? "Aggregate-level options data only (no per-contract sweeps)."
+        : "Finviz request did not return valid CSV — all 3 components fell back to neutral 50.",
     },
     {
       provider: "finnhub",
