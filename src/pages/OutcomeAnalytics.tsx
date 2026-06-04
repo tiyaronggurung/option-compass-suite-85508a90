@@ -240,6 +240,8 @@ type SignalLifecycleLite = {
   tier: string | null;
   max_tier_seen: string | null;
   min_tier_seen: string | null;
+  is_demo: boolean | null;
+  source: string | null;
 };
 
 const PAPER_CLASS_ORDER = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
