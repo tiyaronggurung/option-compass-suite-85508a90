@@ -17,6 +17,7 @@ import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
 import MarketOverviewStrip from "@/components/MarketOverviewStrip";
+import ProviderStatusBanner from "@/components/ProviderStatusBanner";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
@@ -186,6 +187,8 @@ export default function Dashboard() {
       </header>
 
       <MarketOverviewStrip />
+
+      <ProviderStatusBanner signals={signals} />
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat icon={Radio} label="Live signals" value={String(totalLive)} accent="text-primary" />
