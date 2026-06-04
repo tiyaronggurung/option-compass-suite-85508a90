@@ -35,6 +35,8 @@ const PROVIDERS = [
   { key: "finnhub", label: "Finnhub" },
   { key: "apify", label: "Apify (X sentiment)" },
   { key: "alpaca", label: "Alpaca bars" },
+  { key: "unusual_whales", label: "Unusual Whales (options flow)" },
+
 ];
 
 function statusOf(r: ProbeResult): { kind: string; tone: "ok" | "warn" | "err" | "skip"; label: string } {
