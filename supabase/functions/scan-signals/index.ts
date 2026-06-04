@@ -214,11 +214,105 @@ function scoreVolume(bars: Bar[], trendSign: number): ComponentResult {
   };
 }
 
-function scoreOptions(): ComponentResult {
-  return { score: 0, reason: "options flow: n/a", metrics: {} };
+// ---------- Options Flow (UW) — wired into pre-score gate ----------
+// Async per-ticker fetch. Degrades to neutral (0) on any error/missing key,
+// so it never blocks scoring. Pure additive wiring; weight unchanged at 0.05.
+async function scoreOptionsLive(
+  ticker: string,
+  direction: "CALL" | "PUT",
+): Promise<ComponentResult> {
+  if (!UW_CONFIGURED) {
+    return { score: 0, reason: "options flow: UW key missing", metrics: {} };
+  }
+  try {
+    const uw: UWFlowScore = await scoreOptionsFlowUnusualWhales(ticker, direction);
+    // UW returns 0..100 (50 = neutral, already direction-aware: high = aligned with direction).
+    // Map to -1..+1 for the pre-score bucket.
+    const score = clamp((uw.score - 50) / 50);
+    if (uw.state !== "active") {
+      return { score: 0, reason: `options flow: ${uw.state}`, metrics: { uw_score: uw.score } };
+    }
+    return {
+      score,
+      reason: uw.human_reason || `UW flow ${uw.score}`,
+      metrics: {
+        uw_score: uw.score,
+        net_premium_bias: uw.net_premium_bias,
+        call_put_bias: uw.call_put_bias,
+        sweeps: uw.sweep_count,
+        blocks: uw.block_count,
+        bullish_premium: uw.bullish_premium,
+        bearish_premium: uw.bearish_premium,
+      },
+    };
+  } catch (_e) {
+    return { score: 0, reason: "options flow: error", metrics: {} };
+  }
 }
-function scoreMacro(): ComponentResult {
-  return { score: 0, reason: "macro regime: n/a", metrics: {} };
+
+// ---------- Macro Regime — wired into pre-score gate ----------
+// Fetched ONCE per scan run, then evaluated per-direction.
+type MacroContext = {
+  regime: string;
+  spy_trend: number;
+  qqq_trend: number;
+  vix_level: number;
+  fetched: boolean;
+};
+
+async function fetchMacroContext(): Promise<MacroContext> {
+  try {
+    const { data } = await admin
+      .from("market_regime")
+      .select("regime, spy_trend, qqq_trend, vix_level")
+      .eq("id", "global")
+      .maybeSingle();
+    if (!data) {
+      return { regime: "sideways", spy_trend: 0, qqq_trend: 0, vix_level: 0, fetched: false };
+    }
+    return {
+      regime: String(data.regime ?? "sideways"),
+      spy_trend: Number(data.spy_trend ?? 0),
+      qqq_trend: Number(data.qqq_trend ?? 0),
+      vix_level: Number(data.vix_level ?? 0),
+      fetched: true,
+    };
+  } catch {
+    return { regime: "sideways", spy_trend: 0, qqq_trend: 0, vix_level: 0, fetched: false };
+  }
+}
+
+function scoreMacroLive(
+  macro: MacroContext,
+  direction: "CALL" | "PUT",
+): ComponentResult {
+  if (!macro.fetched) {
+    return { score: 0, reason: "macro regime: n/a", metrics: {} };
+  }
+  // Blend SPY + QQQ trend (percent). ±5% trend → ±1.0 raw.
+  const trendAvg = (macro.spy_trend + macro.qqq_trend) / 2;
+  let bias = clamp(trendAvg / 5);
+
+  // Regime modifiers
+  const reg = macro.regime.toLowerCase();
+  if (reg.includes("bullish")) bias = clamp(bias + 0.2);
+  else if (reg.includes("bearish")) bias = clamp(bias - 0.2);
+  if (reg.includes("high_vol")) bias *= 0.5;       // damp in high-vol regimes
+  if (reg.includes("sideways")) bias *= 0.6;        // damp in sideways
+
+  // Direction alignment: CALL benefits from bullish bias, PUT from bearish.
+  const score = clamp(direction === "CALL" ? bias : -bias);
+
+  return {
+    score,
+    reason: `Macro ${macro.regime} · SPY ${macro.spy_trend.toFixed(2)}% · QQQ ${macro.qqq_trend.toFixed(2)}% · VIX ${macro.vix_level.toFixed(1)}`,
+    metrics: {
+      regime_bias: +bias.toFixed(3),
+      spy_trend: macro.spy_trend,
+      qqq_trend: macro.qqq_trend,
+      vix_level: macro.vix_level,
+    },
+  };
 }
 
 // ---------- Blend ----------
