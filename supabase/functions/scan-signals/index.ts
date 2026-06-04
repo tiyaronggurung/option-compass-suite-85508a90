@@ -940,6 +940,54 @@ Deno.serve(async (req) => {
     await releaseScanLock();
   }
 
+  // ---------- Lifecycle pass ----------
+  // Re-evaluate every non-terminal signal using either the fresh scoring
+  // captured this scan or a time-only check when fresh data isn't available.
+  // Never deletes; only updates lifecycle_state/reason/history.
+  const lifecycleTransitions: Record<string, number> = {
+    fresh: 0, active: 0, weakening: 0, expired: 0, invalidated: 0,
+  };
+  try {
+    const { data: livingSignals } = await admin
+      .from("signals")
+      .select("id, ticker, direction, confidence, confidence_at_birth, created_at, lifecycle_state, lifecycle_history, flow_at_birth, technical_at_birth")
+      .in("lifecycle_state", ["fresh", "active", "weakening"])
+      .eq("is_demo", false)
+      .limit(2000);
+
+    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
+    for (const row of (livingSignals ?? []) as any[]) {
+      const snap = scoringByKey.get(keyOf(row.ticker, row.direction));
+      const decision = evaluateLifecycle(row as LifecycleSignal, {
+        currentConfidence: snap?.confidence ?? row.confidence,
+        currentFlow: snap?.flow ?? null,
+        currentTechnical: snap?.technical ?? null,
+        nowMs,
+      });
+      if (!decision.transitioned) continue;
+      lifecycleTransitions[decision.state] = (lifecycleTransitions[decision.state] ?? 0) + 1;
+      const history = appendHistory(row.lifecycle_history, {
+        state: decision.state,
+        reason: decision.reason,
+        at: nowIso,
+        confidence: snap?.confidence ?? row.confidence,
+      });
+      const { error: lcErr } = await admin
+        .from("signals")
+        .update({
+          lifecycle_state: decision.state,
+          lifecycle_reason: decision.reason,
+          lifecycle_updated_at: nowIso,
+          lifecycle_history: history,
+        })
+        .eq("id", row.id);
+      if (lcErr) errors.push(`lifecycle ${row.ticker}: ${lcErr.message}`);
+    }
+  } catch (e) {
+    errors.push(`lifecycle pass: ${(e as Error).message}`);
+  }
+
   const topSkipped = settings.debug_mode
     ? skippedList.sort((a, b) => b.score - a.score).slice(0, 3)
     : [];
