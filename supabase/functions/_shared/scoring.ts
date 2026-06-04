@@ -394,12 +394,16 @@ export async function scoreInstitutional(
   },
 ): Promise<ScoringResult> {
   const { ticker, direction, baseTrendScore } = args;
+
+  // Shared Finviz snapshot — single fetch powers technical + options flow + volatility.
+  const snap = await finvizSnapshot(ticker);
+
   const [optionsFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
-    scoreOptionsFlow(ticker, direction),
-    scoreTechnical(ticker, baseTrendScore),
+    scoreOptionsFlowFinviz(ticker, direction, snap),
+    scoreTechnicalWithSnap(ticker, baseTrendScore, snap),
     scoreNews(ticker, direction),
     scoreSentiment(ticker, direction),
-    scoreVolatility(ticker),
+    scoreVolatilityFinviz(ticker, snap),
     getRegime(admin),
   ]);
 
@@ -434,7 +438,84 @@ export async function scoreInstitutional(
     reasons.push(`Regime: ${regimeName} (${adj >= 0 ? "+" : ""}${adj} pts)`);
   }
 
-  return { final: Math.round(final), base: Math.round(base), regime_adjust: adj, regime: regimeName, components, sources_used, reasons };
+  // Provider lifecycle metadata — surfaced in score_components.provider_status
+  const provider_status: ProviderStatus[] = [
+    {
+      provider: "finviz",
+      role: "options_flow + volatility + technical",
+      state: FINVIZ_KEY ? "active" : "missing_key",
+      note: "Aggregate-level options data only (no per-contract sweeps).",
+    },
+    {
+      provider: "finnhub",
+      role: "news + sentiment",
+      state: FINNHUB_KEY ? "active" : "missing_key",
+    },
+    {
+      provider: "apify",
+      role: "x/twitter sentiment",
+      state: APIFY_TOKEN ? "active" : "missing_key",
+    },
+    {
+      provider: "tradier",
+      role: "options_flow + volatility (per-contract)",
+      state: "reserved",
+      note: "Reserved for future upgrade — code paths preserved, currently inactive.",
+    },
+    {
+      provider: "unusual_whales",
+      role: "institutional sweeps + dark pool",
+      state: "reserved",
+      note: "Reserved for future upgrade — preserved for later use.",
+    },
+  ];
+
+  return {
+    final: Math.round(final),
+    base: Math.round(base),
+    regime_adjust: adj,
+    regime: regimeName,
+    components,
+    sources_used,
+    reasons,
+    provider_status,
+  };
+}
+
+// Variant of scoreTechnical that accepts a pre-fetched Finviz snapshot
+// to avoid double-fetching when called from scoreInstitutional.
+async function scoreTechnicalWithSnap(
+  ticker: string,
+  baseTrendScore: number,
+  snap: Record<string, string> | null,
+): Promise<ComponentScore> {
+  const localScore = clamp100((baseTrendScore + 1) * 50);
+  if (!FINVIZ_KEY) {
+    return {
+      score: localScore,
+      configured: false,
+      source: "alpaca",
+      reason: `Alpaca trend ${baseTrendScore >= 0 ? "+" : ""}${baseTrendScore.toFixed(2)} · Finviz not configured`,
+    };
+  }
+  if (!snap) {
+    return { score: localScore, configured: true, source: "alpaca+finviz", reason: "Finviz unreachable" };
+  }
+  const perfWeek = parsePct(snap["Perf Week"]) ?? 0;
+  const sma50 = parsePct(snap["SMA50"]) ?? 0;
+  const sma200 = parsePct(snap["SMA200"]) ?? 0;
+  const relVol = parseFloat(snap["Rel Volume"] ?? "1") || 1;
+  const finvizTrend = clamp100(50 + sma50 * 2 + sma200 + perfWeek * 1.5);
+  const finvizVol = clamp100(50 + (relVol - 1) * 25);
+  const finvizScore = clamp100(finvizTrend * 0.7 + finvizVol * 0.3);
+  const blended = clamp100(localScore * 0.5 + finvizScore * 0.5);
+  return {
+    score: blended,
+    configured: true,
+    source: "alpaca+finviz",
+    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x`,
+    details: { perf_week: perfWeek, sma50, sma200, rel_volume: relVol },
+  };
 }
 
 export function tierFor(confidence: number): "elite" | "strong" | "watchlist" | "rejected" {
