@@ -49,6 +49,7 @@ function marketStatus() {
 export default function Dashboard() {
   const { user } = useAuth();
   const [signals, setSignals] = useState<Signal[] | null>(null);
+  const [developing, setDeveloping] = useState<Signal[] | null>(null);
   const [trades, setTrades] = useState<PaperTrade[]>([]);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [watch, setWatch] = useState<string[]>([]);
@@ -59,13 +60,15 @@ export default function Dashboard() {
   const [includeExpired, setIncludeExpired] = useState(false);
   const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
   const [risk, setRisk] = useState<RiskSettingsLike>(null);
+  const [showDeveloping, setShowDeveloping] = useState(true);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }] = await Promise.all([
+      const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
+        supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 50).order("created_at", { ascending: false }).limit(30),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
@@ -75,6 +78,7 @@ export default function Dashboard() {
       ]);
       if (cancel) return;
       setSignals(s ?? []);
+      setDeveloping(dev ?? []);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
       setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
@@ -87,7 +91,12 @@ export default function Dashboard() {
       .channel("signals-stream")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "signals" }, (payload) => {
         const ns = payload.new as Signal;
-        if (ns.hidden) return;
+        if (ns.hidden) {
+          if (ns.tier === "rejected" && (ns.confidence ?? 0) >= 50) {
+            setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
+          }
+          return;
+        }
         setSignals((prev) => (prev ? [ns, ...prev] : [ns]));
         toast.success(`New ${ns.direction} signal on ${ns.ticker}`);
       })
