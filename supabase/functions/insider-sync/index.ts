@@ -180,8 +180,8 @@ const finvizAdapter: InsiderAdapter = {
 // Polite: User-Agent header + small inter-request sleeps; sequential only.
 const SEC_UA = "TradingFlow Insider Research insider-sync@tradingflow.app";
 const SEC_LOOKBACK_DAYS = 90;
-const SEC_MAX_FILINGS_PER_TICKER = 25;
-const SEC_REQUEST_GAP_MS = 130; // ~7-8 req/s, well under SEC 10 req/s limit
+const SEC_MAX_FILINGS_PER_TICKER = 12;
+const SEC_REQUEST_GAP_MS = 90; // ~10 req/s ceiling, matches SEC fair-use guidance
 
 let CIK_MAP: Map<string, string> | null = null;
 let CIK_MAP_FETCHED_AT = 0;
