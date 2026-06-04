@@ -18,7 +18,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// ───────────────── Bands (Hybrid philosophy) ─────────────────
+// ───────────────── Bands (Hybrid philosophy) — v1.1 relaxed ─────────────────
 type RiskProfile = "developing" | "near_watchlist" | "watchlist" | "strong" | "elite";
 type BandPrefs = {
   dteMin: number; dteMax: number;
@@ -26,14 +26,16 @@ type BandPrefs = {
   maxSpreadPct: number; minOI: number; minVolume: number;
 };
 const BAND_PREFS: Record<RiskProfile, BandPrefs> = {
-  developing:     { dteMin: 30, dteMax: 45, deltaMin: 0.65, deltaMax: 0.75, maxSpreadPct: 5,  minOI: 500, minVolume: 100 },
-  near_watchlist: { dteMin: 28, dteMax: 45, deltaMin: 0.55, deltaMax: 0.70, maxSpreadPct: 6,  minOI: 400, minVolume: 100 },
-  watchlist:      { dteMin: 21, dteMax: 40, deltaMin: 0.50, deltaMax: 0.65, maxSpreadPct: 7,  minOI: 300, minVolume: 75  },
-  strong:         { dteMin: 14, dteMax: 35, deltaMin: 0.45, deltaMax: 0.60, maxSpreadPct: 8,  minOI: 250, minVolume: 50  },
-  elite:          { dteMin: 14, dteMax: 30, deltaMin: 0.40, deltaMax: 0.55, maxSpreadPct: 10, minOI: 200, minVolume: 50  },
+  developing:     { dteMin: 30, dteMax: 45, deltaMin: 0.65, deltaMax: 0.75, maxSpreadPct: 7,  minOI: 500, minVolume: 25 },
+  near_watchlist: { dteMin: 28, dteMax: 45, deltaMin: 0.55, deltaMax: 0.70, maxSpreadPct: 8,  minOI: 400, minVolume: 20 },
+  watchlist:      { dteMin: 21, dteMax: 40, deltaMin: 0.50, deltaMax: 0.65, maxSpreadPct: 9,  minOI: 300, minVolume: 15 },
+  strong:         { dteMin: 14, dteMax: 35, deltaMin: 0.45, deltaMax: 0.60, maxSpreadPct: 10, minOI: 250, minVolume: 10 },
+  elite:          { dteMin: 14, dteMax: 30, deltaMin: 0.40, deltaMax: 0.55, maxSpreadPct: 12, minOI: 200, minVolume: 10 },
 };
 const MIN_DTE_FLOOR = 6;
 const MAX_PREMIUM_DOLLARS = 5000;
+const EXTREME_SPREAD_PCT = 25;
+const BEST_EFFORT_MIN_SCORE = 35;
 
 function profileForConfidence(c: number): RiskProfile {
   if (c >= 90) return "elite";
@@ -44,6 +46,7 @@ function profileForConfidence(c: number): RiskProfile {
 }
 
 // ───────────────── Scoring (pure) ─────────────────
+type RejectionCategory = "quote" | "dte" | "delta" | "spread" | "liquidity" | "affordability" | "data";
 type Candidate = {
   contract_symbol?: string | null;
   strike: number; expiry: string; dte: number;
@@ -56,6 +59,7 @@ type ScoredCandidate = Candidate & {
   contract_score: number; liquidity_score: number;
   rationale: string; rationale_factors: Record<string, number>;
   rejected_reason: string | null;
+  rejected_category: RejectionCategory | null;
 };
 
 function triangular(value: number, lo: number, hi: number): number {
@@ -76,25 +80,37 @@ function spreadPct(bid: number|null, ask: number|null, mid: number|null): number
 function scoreCandidate(c: Candidate, profile: RiskProfile): ScoredCandidate {
   const p = BAND_PREFS[profile];
   const sp = spreadPct(c.bid, c.ask, c.mid ?? null);
-  const baseRej = (reason: string): ScoredCandidate => ({
+  const baseRej = (reason: string, category: RejectionCategory): ScoredCandidate => ({
     ...c, spread_pct: sp, contract_score: 0, liquidity_score: 0,
-    rationale: `Rejected: ${reason}`, rationale_factors: {}, rejected_reason: reason,
+    rationale: `Rejected: ${reason}`, rationale_factors: {},
+    rejected_reason: reason, rejected_category: category,
   });
-  if (c.dte < MIN_DTE_FLOOR) return baseRej("too short DTE (< 6)");
-  if (c.bid == null || c.ask == null || c.bid <= 0 || c.ask <= 0) return baseRej("no two-sided quote");
-  if (sp == null || sp > p.maxSpreadPct) return baseRej(`spread too wide (${sp == null ? "n/a" : sp.toFixed(1)+"%"} > ${p.maxSpreadPct}%)`);
-  if ((c.open_interest ?? 0) < p.minOI) return baseRej(`OI below band min (${c.open_interest ?? 0} < ${p.minOI})`);
-  if ((c.volume ?? 0) < p.minVolume) return baseRej(`volume below band min (${c.volume ?? 0} < ${p.minVolume})`);
-  if (c.premium == null || c.premium <= 0) return baseRej("no premium");
-  if (c.premium * 100 > MAX_PREMIUM_DOLLARS) return baseRej(`premium above $${MAX_PREMIUM_DOLLARS} affordability cap`);
+  if (c.dte < MIN_DTE_FLOOR) return baseRej(`too short DTE (< ${MIN_DTE_FLOOR})`, "dte");
+  if (c.bid == null || c.ask == null || c.bid <= 0 || c.ask <= 0) return baseRej("no two-sided quote", "quote");
+  if (sp == null) return baseRej("invalid spread", "quote");
+  if (sp > EXTREME_SPREAD_PCT) return baseRej(`extreme spread (${sp.toFixed(1)}% > ${EXTREME_SPREAD_PCT}%)`, "spread");
+  if (sp > p.maxSpreadPct) return baseRej(`spread too wide (${sp.toFixed(1)}% > ${p.maxSpreadPct}%)`, "spread");
+  if ((c.open_interest ?? 0) < p.minOI) return baseRej(`OI below band min (${c.open_interest ?? 0} < ${p.minOI})`, "liquidity");
+  if (c.premium == null || c.premium <= 0) return baseRej("no premium", "data");
+  if (c.premium * 100 > MAX_PREMIUM_DOLLARS) return baseRej(`premium above $${MAX_PREMIUM_DOLLARS} affordability cap`, "affordability");
   const absDelta = c.delta == null ? null : Math.abs(c.delta);
-  if (absDelta == null) return baseRej("missing delta");
+  if (absDelta == null) return baseRej("missing delta", "data");
+
+  // v1.1: volume is a SOFT floor. Only reject when vol < floor AND OI does not compensate.
+  const vol = c.volume ?? 0;
+  const oi = c.open_interest ?? 0;
+  const volBelowFloor = vol < p.minVolume;
+  const oiCompensates = oi >= p.minOI * 2;
+  if (volBelowFloor && !oiCompensates) {
+    return baseRej(`volume below band min (${vol} < ${p.minVolume}) and OI insufficient to compensate`, "liquidity");
+  }
 
   const dteFit = triangular(c.dte, p.dteMin, p.dteMax);
   const deltaFit = triangular(absDelta, p.deltaMin, p.deltaMax);
-  const oiScore = clamp01(Math.log10(Math.max(1, c.open_interest ?? 0)) / Math.log10(Math.max(10, p.minOI * 20)));
-  const volScore = clamp01(Math.log10(Math.max(1, c.volume ?? 0)) / Math.log10(Math.max(10, p.minVolume * 20)));
-  const liquidity = (oiScore + volScore) / 2;
+  const oiScore = clamp01(Math.log10(Math.max(1, oi)) / Math.log10(Math.max(10, p.minOI * 20)));
+  const volScore = clamp01(Math.log10(Math.max(1, vol)) / Math.log10(Math.max(10, p.minVolume * 20)));
+  const volEffective = volBelowFloor ? volScore * 0.7 : volScore;
+  const liquidity = (oiScore + volEffective) / 2;
   const spreadQuality = clamp01(1 - sp / p.maxSpreadPct);
   const affordability = clamp01(1 - Math.max(0, c.premium * 100 - 1000) / (MAX_PREMIUM_DOLLARS - 1000));
   const ivNorm = c.iv == null ? null : (c.iv > 5 ? c.iv / 100 : c.iv);
@@ -112,6 +128,7 @@ function scoreCandidate(c: Candidate, profile: RiskProfile): ScoredCandidate {
   if (spreadQuality > 0.7) reasons.push(`tight spread ${sp!.toFixed(1)}%`);
   if (liquidity > 0.6) reasons.push("healthy liquidity");
   if (affordability > 0.7) reasons.push("affordable premium");
+  if (volBelowFloor && oiCompensates) reasons.push("low volume offset by strong OI");
 
   return {
     ...c, spread_pct: sp,
@@ -120,17 +137,79 @@ function scoreCandidate(c: Candidate, profile: RiskProfile): ScoredCandidate {
     rationale: reasons.length ? reasons.join(", ") : "Meets band guards",
     rationale_factors: factors,
     rejected_reason: null,
+    rejected_category: null,
   };
 }
 
+// Best-effort rescore: skips soft caps (band spread, liquidity), keeps hard safety checks.
+function scoreForBestEffort(c: Candidate, profile: RiskProfile): ScoredCandidate | null {
+  const p = BAND_PREFS[profile];
+  const sp = spreadPct(c.bid, c.ask, c.mid ?? null);
+  if (c.dte < MIN_DTE_FLOOR) return null;
+  if (c.bid == null || c.ask == null || c.bid <= 0 || c.ask <= 0) return null;
+  if (sp == null || sp > EXTREME_SPREAD_PCT) return null;
+  if (c.premium == null || c.premium <= 0) return null;
+  if (c.premium * 100 > MAX_PREMIUM_DOLLARS) return null;
+  const absDelta = c.delta == null ? null : Math.abs(c.delta);
+  if (absDelta == null) return null;
+  const dteFit = triangular(c.dte, p.dteMin, p.dteMax);
+  const deltaFit = triangular(absDelta, p.deltaMin, p.deltaMax);
+  if (deltaFit <= 0 && dteFit <= 0) return null;
+
+  const oi = c.open_interest ?? 0;
+  const vol = c.volume ?? 0;
+  const oiScore = clamp01(Math.log10(Math.max(1, oi)) / Math.log10(Math.max(10, p.minOI * 20)));
+  const volScore = clamp01(Math.log10(Math.max(1, vol)) / Math.log10(Math.max(10, p.minVolume * 20)));
+  const liquidity = (oiScore + volScore) / 2;
+  const spreadDen = Math.max(p.maxSpreadPct, sp);
+  const spreadQuality = clamp01(1 - sp / spreadDen);
+  const affordability = clamp01(1 - Math.max(0, c.premium * 100 - 1000) / (MAX_PREMIUM_DOLLARS - 1000));
+  const ivNorm = c.iv == null ? null : (c.iv > 5 ? c.iv / 100 : c.iv);
+  const ivPenalty = ivNorm == null ? 0.5 : clamp01(1 - Math.max(0, ivNorm - 0.8) * 2);
+
+  const factors = {
+    dte_fit: round3(dteFit), delta_fit: round3(deltaFit),
+    liquidity: round3(liquidity), spread_quality: round3(spreadQuality),
+    affordability: round3(affordability), iv_sanity: round3(ivPenalty),
+  };
+  const score01 = 0.25*dteFit + 0.25*deltaFit + 0.20*liquidity + 0.15*spreadQuality + 0.10*affordability + 0.05*ivPenalty;
+  return {
+    ...c, spread_pct: sp,
+    contract_score: Math.round(score01 * 100),
+    liquidity_score: Math.round(liquidity * 100),
+    rationale: `Best-effort pick — below preferred band (spread ${sp.toFixed(1)}%, OI ${oi}, vol ${vol})`,
+    rationale_factors: factors,
+    rejected_reason: null,
+    rejected_category: null,
+  };
+}
+
+function sortBest(a: ScoredCandidate, b: ScoredCandidate): number {
+  if (b.contract_score !== a.contract_score) return b.contract_score - a.contract_score;
+  if ((b.open_interest ?? 0) !== (a.open_interest ?? 0)) return (b.open_interest ?? 0) - (a.open_interest ?? 0);
+  return (a.spread_pct ?? 1e9) - (b.spread_pct ?? 1e9);
+}
+
 function rankCandidates(cands: Candidate[], profile: RiskProfile) {
-  const scored = cands.map(c => scoreCandidate(c, profile)).filter(s => s.rejected_reason == null);
-  scored.sort((a, b) => {
-    if (b.contract_score !== a.contract_score) return b.contract_score - a.contract_score;
-    if ((b.open_interest ?? 0) !== (a.open_interest ?? 0)) return (b.open_interest ?? 0) - (a.open_interest ?? 0);
-    return (a.spread_pct ?? 1e9) - (b.spread_pct ?? 1e9);
-  });
-  return { scored, best: scored[0] ?? null };
+  const all = cands.map(c => scoreCandidate(c, profile));
+  const scored = all.filter(s => s.rejected_reason == null);
+  const rejected = all.filter(s => s.rejected_reason != null);
+  const rejectionCounts: Record<RejectionCategory, number> = {
+    quote: 0, dte: 0, delta: 0, spread: 0, liquidity: 0, affordability: 0, data: 0,
+  };
+  for (const r of rejected) if (r.rejected_category) rejectionCounts[r.rejected_category]++;
+  scored.sort(sortBest);
+
+  let bestEffort: ScoredCandidate | null = null;
+  if (scored.length === 0) {
+    const beCands = rejected
+      .filter(r => r.rejected_category === "spread" || r.rejected_category === "liquidity")
+      .map(r => scoreForBestEffort(r, profile))
+      .filter((s): s is ScoredCandidate => s != null && s.contract_score >= BEST_EFFORT_MIN_SCORE);
+    beCands.sort(sortBest);
+    bestEffort = beCands[0] ?? null;
+  }
+  return { scored, best: scored[0] ?? null, rejected, rejectionCounts, bestEffort };
 }
 
 // ───────────────── Provider fetchers ─────────────────
