@@ -898,6 +898,22 @@ Deno.serve(async (req) => {
           provider_status: institutional.provider_status,
           reasons: institutional.reasons,
         } : {},
+        // Lifecycle: birth snapshot + initial state.
+        lifecycle_state: "fresh",
+        lifecycle_reason: "created",
+        lifecycle_updated_at: new Date().toISOString(),
+        confidence_at_birth: finalScore,
+        flow_at_birth: institutional?.components.options_flow?.details ?? {},
+        technical_at_birth: institutional ? {
+          score: institutional.components.technical?.score ?? null,
+          ...(institutional.components.technical?.details ?? {}),
+        } : {},
+        lifecycle_history: [{
+          state: "fresh",
+          reason: "created",
+          at: new Date().toISOString(),
+          confidence: finalScore,
+        }],
         ...contractFields,
       });
       if (error) {
