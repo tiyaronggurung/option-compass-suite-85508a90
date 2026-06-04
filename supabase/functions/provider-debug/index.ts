@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
   const probes: Record<string, () => Promise<unknown>> = {
     finviz_main: async () => {
       if (!FINVIZ_KEY) return { skipped: true, reason: "FINVIZ_API_KEY not configured" };
-      return probeUrl(`https://elite.finviz.com/quote_export.ashx?t=${ticker}&auth=${FINVIZ_KEY}`);
+      return probeUrl(`https://elite.finviz.com/export.ashx?v=152&t=${ticker}&auth=${FINVIZ_KEY}`);
     },
     finviz_news: async () => {
       if (!FINVIZ_KEY) return { skipped: true, reason: "FINVIZ_API_KEY not configured" };
