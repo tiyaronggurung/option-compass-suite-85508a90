@@ -533,6 +533,53 @@ export default function OutcomeAnalytics() {
               />
             ),
           )}
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold">Paper Trade Class Comparison</h2>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              Approved paper trades bucketed by the confidence band at approval time.
+              Win rate / avg return computed from the 5D outcome window for trades whose signal has a completed outcome.
+            </p>
+            {paperClassRows.length === 0 ? (
+              <div className="text-xs text-muted-foreground mt-2">
+                No paper trades with a recorded class yet. Approve some Developing / Near Watchlist signals to populate.
+              </div>
+            ) : (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2">Class</th>
+                      <th className="text-right py-1.5 px-2">Paper trades</th>
+                      <th className="text-right py-1.5 px-2">With 5D outcome</th>
+                      <th className="text-right py-1.5 px-2">Win rate (5D)</th>
+                      <th className="text-right py-1.5 px-2">Avg return (5D)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paperClassRows.map((d) => {
+                      const low = d.withOutcome > 0 && d.withOutcome < MIN_N;
+                      const empty = d.withOutcome === 0;
+                      return (
+                        <tr key={d.key} className={cn("border-b border-border/50", (low || empty) && "text-muted-foreground/60")}>
+                          <td className="py-1.5 px-2 flex items-center gap-2">
+                            {d.label}
+                            {low && <span className="text-[10px] uppercase tracking-wide">low sample</span>}
+                          </td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{d.withOutcome}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{empty ? "—" : `${d.winRate.toFixed(0)}%`}</td>
+                          <td className="py-1.5 px-2 text-right ticker-mono">{empty ? "—" : `${d.avgReturn >= 0 ? "+" : ""}${d.avgReturn.toFixed(2)}%`}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="text-[10px] text-muted-foreground mt-2">
+              Goal: determine whether 65–69 performs like 70–79 and whether 50–64 has any predictive value.
+            </div>
+          </Card>
         </>
       )}
     </div>
