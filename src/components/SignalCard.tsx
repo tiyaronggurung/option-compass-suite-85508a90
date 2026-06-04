@@ -80,6 +80,14 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
               <Badge className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", freshClass)} title={`Signal freshness: ${freshLabel}`}>
                 <Timer className="h-3 w-3" /> {freshLabel}
               </Badge>
+              {showLifecycleBadge && (
+                <Badge
+                  className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", lifecycleMeta.className)}
+                  title={lifecycleMeta.description}
+                >
+                  <span>{lifecycleMeta.emoji}</span> {lifecycleMeta.label}
+                </Badge>
+              )}
             </div>
             {subLabel && (
               <div className="text-[11px] text-primary/80 font-medium mt-0.5">{subLabel}</div>
