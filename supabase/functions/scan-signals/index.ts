@@ -838,25 +838,10 @@ Deno.serve(async (req) => {
         errors.push(`${sym} confirmations: ${(e as Error).message}`);
       }
 
-      // Institutional 5-component scoring (Tradier/Finviz/Finnhub/Apify + regime).
-      // Missing keys → component returns neutral 50 and does not block.
-      // Final confidence stored is the institutional score; tier derives from it.
-      let institutional: Awaited<ReturnType<typeof scoreInstitutional>> | null = null;
-      let finalScore = finalConfidence;
-      let tier = tierForScore(finalScore);
-      const institutionalReasons: string[] = [];
-      try {
-        institutional = await scoreInstitutional(admin, {
-          ticker: draft.ticker,
-          direction: draft.direction,
-          baseTrendScore: draft.components.trend.score,
-        });
-        finalScore = institutional.final;
-        tier = tierForScore(finalScore);
-        institutionalReasons.push(...institutional.reasons);
-      } catch (e) {
-        errors.push(`${sym} institutional: ${(e as Error).message}`);
-      }
+      // Institutional was already computed BEFORE the gate (A2).
+      // Reuse those values here for the insert — do not score twice.
+      const finalScore = institutionalConfidence;
+      const tier = institutionalTier;
 
       const allReasons = Array.from(new Set([...reasonsWithContract, ...institutionalReasons]));
       const hideForRejected = tier === "rejected";
