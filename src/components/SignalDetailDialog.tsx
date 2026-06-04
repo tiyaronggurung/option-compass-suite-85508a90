@@ -368,6 +368,7 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
                   style={{ width: `${score}%` }}
                 />
               </div>
+              {row.key === "news" && configured && <NewsTransparency details={c.details} source={c.source} />}
             </div>
           );
         })}
