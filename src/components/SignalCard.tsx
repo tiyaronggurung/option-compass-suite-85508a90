@@ -9,6 +9,7 @@ import { getFreshness } from "@/lib/signalFreshness";
 import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
 import { getTier, TIER_META } from "@/lib/signalTiers";
+import { getLifecycleState, LIFECYCLE_META } from "@/lib/signalLifecycle";
 
 type Props = {
   signal: Signal;
