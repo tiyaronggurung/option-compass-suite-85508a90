@@ -317,6 +317,40 @@ export default function OutcomeAnalytics() {
     }));
   }, [filtered]);
 
+  // Paper Trade Class Comparison — bucket paper trades by their stored class,
+  // join to the matching signal_outcomes row to read 5D win/return.
+  const paperClassRows = useMemo(() => {
+    const outcomeBySignal = new Map<string, Outcome>();
+    for (const r of filtered) outcomeBySignal.set(r.signal_id, r);
+    const aggByClass: Record<string, { n: number; withOutcome: number; wins: number; retSum: number }> = {};
+    for (const t of paperTrades) {
+      const cls = (t.paper_test_class || "").trim();
+      if (!cls) continue;
+      if (!aggByClass[cls]) aggByClass[cls] = { n: 0, withOutcome: 0, wins: 0, retSum: 0 };
+      aggByClass[cls].n += 1;
+      if (!t.signal_id) continue;
+      const o = outcomeBySignal.get(t.signal_id);
+      if (!o) continue;
+      if (o.win_5d === null || o.return_5d === null) continue;
+      aggByClass[cls].withOutcome += 1;
+      aggByClass[cls].wins += o.win_5d ? 1 : 0;
+      aggByClass[cls].retSum += Number(o.return_5d);
+    }
+    return PAPER_CLASS_ORDER
+      .filter((k) => aggByClass[k])
+      .map((k) => {
+        const a = aggByClass[k];
+        return {
+          key: k,
+          label: PAPER_CLASS_LABEL[k] ?? k,
+          n: a.n,
+          withOutcome: a.withOutcome,
+          winRate: a.withOutcome > 0 ? (a.wins / a.withOutcome) * 100 : 0,
+          avgReturn: a.withOutcome > 0 ? a.retSum / a.withOutcome : 0,
+        };
+      });
+  }, [paperTrades, filtered]);
+
   if (adminLoading) return <div className="p-6 text-muted-foreground text-sm">Checking permissions…</div>;
   if (!isAdmin) {
     return (
