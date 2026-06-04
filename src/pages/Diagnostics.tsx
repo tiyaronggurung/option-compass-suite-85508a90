@@ -101,11 +101,18 @@ export default function Diagnostics() {
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-xl font-semibold">Provider Diagnostics</h1>
-        <p className="text-sm text-muted-foreground">
-          Probes each data provider directly and classifies the response. Read-only — does not change scoring.
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold">Provider Diagnostics</h1>
+          <p className="text-sm text-muted-foreground">
+            Probes each data provider directly and classifies the response. Read-only — does not change scoring.
+          </p>
+        </div>
+        <div className="flex gap-2 text-xs">
+          <a href="/app/diagnostics/insiders" className="text-muted-foreground hover:text-foreground underline">Insiders</a>
+          <a href="/app/diagnostics/performance" className="text-muted-foreground hover:text-foreground underline">Performance</a>
+          <a href="/app/outcome-analytics" className="text-primary hover:underline">Outcome Analytics →</a>
+        </div>
       </div>
 
       <Card className="p-4 flex flex-wrap items-end gap-3">

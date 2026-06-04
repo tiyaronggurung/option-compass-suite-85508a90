@@ -19,6 +19,7 @@ import SettingsPage from "@/pages/Settings";
 import Diagnostics from "@/pages/Diagnostics";
 import InsiderDiagnostics from "@/pages/InsiderDiagnostics";
 import PerformanceDiagnostics from "@/pages/PerformanceDiagnostics";
+import OutcomeAnalytics from "@/pages/OutcomeAnalytics";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => (
               <Route path="diagnostics" element={<Diagnostics />} />
               <Route path="diagnostics/insiders" element={<InsiderDiagnostics />} />
               <Route path="diagnostics/performance" element={<PerformanceDiagnostics />} />
+              <Route path="outcome-analytics" element={<OutcomeAnalytics />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
