@@ -6,6 +6,7 @@ import { pickBestContract } from "../_shared/pickContract.ts";
 import { getEarningsCatalyst, type CatalystResult } from "../_shared/earningsCatalyst.ts";
 import { buildConfirmations } from "../_shared/confirmations.ts";
 import { scoreInstitutional, tierFor as tierForScore } from "../_shared/scoring.ts";
+import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED, type UWFlowScore } from "../_shared/unusual-whales.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
