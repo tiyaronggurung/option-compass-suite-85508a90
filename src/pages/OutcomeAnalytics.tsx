@@ -781,7 +781,108 @@ export default function OutcomeAnalytics() {
               Goal: determine whether 65–69 performs like 70–79 and whether 50–64 has any predictive value.
             </div>
           </Card>
+
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold">Confidence Drift Analytics</h2>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Tracks how each signal's confidence has moved since creation. Uses high/low watermarks
+              and the current vs. birth confidence delta. Analytics only — no scoring impact.
+            </p>
+
+            {/* Avg drift by paper_test_class */}
+            <div className="mt-2">
+              <h3 className="text-xs font-medium mb-1">Average drift by class</h3>
+              {driftByClass.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No signals with birth confidence yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1.5 px-2">Class</th>
+                        <th className="text-right py-1.5 px-2">n</th>
+                        <th className="text-right py-1.5 px-2">Avg Δ</th>
+                        <th className="text-right py-1.5 px-2">Avg max</th>
+                        <th className="text-right py-1.5 px-2">Avg min</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {driftByClass.map((d) => {
+                        const low = d.n > 0 && d.n < MIN_N;
+                        return (
+                          <tr key={d.key} className={cn("border-b border-border/50", low && "text-muted-foreground/60")}>
+                            <td className="py-1.5 px-2">{d.label}{low && <span className="ml-2 text-[10px] uppercase tracking-wide">low sample</span>}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.avgDelta >= 0 ? "+" : ""}{d.avgDelta.toFixed(1)}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.avgMax.toFixed(1)}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.avgMin.toFixed(1)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Promotions / demotions */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <h3 className="text-xs font-medium mb-1">Promotions</h3>
+                <table className="w-full text-xs">
+                  <tbody>
+                    {Object.entries(driftTransitions.promo).map(([k, v]) => (
+                      <tr key={k} className="border-b border-border/50">
+                        <td className="py-1 px-2">{k.replace("→", " → ")}</td>
+                        <td className="py-1 px-2 text-right ticker-mono">{v}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3 className="text-xs font-medium mb-1">Demotions</h3>
+                <table className="w-full text-xs">
+                  <tbody>
+                    {Object.entries(driftTransitions.demo).map(([k, v]) => (
+                      <tr key={k} className="border-b border-border/50">
+                        <td className="py-1 px-2">{k.replace("→", " → ")}</td>
+                        <td className="py-1 px-2 text-right ticker-mono">{v}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-b border-border/50">
+                      <td className="py-1 px-2">Invalidated</td>
+                      <td className="py-1 px-2 text-right ticker-mono">{driftTransitions.invalidated}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3 className="text-xs font-medium mb-1">Drift histogram</h3>
+                {driftHistogram.n === 0 ? (
+                  <div className="text-xs text-muted-foreground">No data yet.</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {DRIFT_BUCKETS.map((b) => (
+                        <tr key={b} className="border-b border-border/50">
+                          <td className="py-1 px-2">{DRIFT_LABEL[b]}</td>
+                          <td className="py-1 px-2 text-right ticker-mono">{driftHistogram.buckets[b]}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            <div className="text-[10px] text-muted-foreground mt-3">
+              Goal: learn whether signals strengthen or weaken after creation and whether confidence
+              is predictive over time.
+            </div>
+          </Card>
         </>
+
       )}
     </div>
   );
