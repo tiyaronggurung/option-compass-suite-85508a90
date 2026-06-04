@@ -218,9 +218,25 @@ function BucketTable({
   );
 }
 
+type PaperTradeLite = {
+  signal_id: string | null;
+  paper_test_class: string | null;
+  confidence_at_approval: number | null;
+};
+
+const PAPER_CLASS_ORDER = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
+const PAPER_CLASS_LABEL: Record<string, string> = {
+  developing: "Developing (50–64)",
+  near_watchlist: "Near Watchlist (65–69)",
+  watchlist: "Watchlist (70–79)",
+  strong: "Strong (80–89)",
+  elite: "Elite (90+)",
+};
+
 export default function OutcomeAnalytics() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [rows, setRows] = useState<Outcome[] | null>(null);
+  const [paperTrades, setPaperTrades] = useState<PaperTradeLite[]>([]);
   const [running, setRunning] = useState(false);
 
   // Filters
@@ -233,12 +249,12 @@ export default function OutcomeAnalytics() {
 
   async function refresh() {
     setRows(null);
-    const { data } = await supabase
-      .from("signal_outcomes")
-      .select("*")
-      .order("entry_at", { ascending: false })
-      .limit(5000);
-    setRows((data ?? []) as unknown as Outcome[]);
+    const [{ data: outcomeData }, { data: tradeData }] = await Promise.all([
+      supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
+      supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval").limit(5000),
+    ]);
+    setRows((outcomeData ?? []) as unknown as Outcome[]);
+    setPaperTrades((tradeData ?? []) as unknown as PaperTradeLite[]);
   }
   useEffect(() => { if (isAdmin) refresh(); }, [isAdmin]);
 
