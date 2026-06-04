@@ -13,6 +13,7 @@ import { ALL_TAGS, deriveTags, type TagId } from "@/lib/signalTags";
 import { signalOutcome } from "@/lib/signalOutcome";
 import { cn } from "@/lib/utils";
 import { isExpired } from "@/lib/signalFreshness";
+import { getLifecycleState, LIFECYCLE_META, LIFECYCLE_ORDER, type LifecycleState } from "@/lib/signalLifecycle";
 import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
