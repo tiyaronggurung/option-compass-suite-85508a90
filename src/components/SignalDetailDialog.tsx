@@ -372,6 +372,11 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
                 />
               </div>
               {row.key === "news" && configured && <NewsTransparency details={c.details} source={c.source} />}
+              {row.key === "technical" && configured && (c.details as any)?.trendline?.human_reason && (
+                <div className="text-[11px] text-muted-foreground/90 mt-1 pl-0.5">
+                  ↳ {(c.details as any).trendline.human_reason}
+                </div>
+              )}
             </div>
           );
         })}
