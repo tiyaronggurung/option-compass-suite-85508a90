@@ -175,21 +175,214 @@ const finvizAdapter: InsiderAdapter = {
   },
 };
 
-// ---------- Adapter: SEC Form 4 (future) ----------
+// ---------- Adapter: SEC EDGAR Form 4 ----------
+// Primary insider source. Canonical, free, structured XML.
+// Polite: User-Agent header + small inter-request sleeps; sequential only.
+const SEC_UA = "TradingFlow Insider Research insider-sync@tradingflow.app";
+const SEC_LOOKBACK_DAYS = 90;
+const SEC_MAX_FILINGS_PER_TICKER = 12;
+const SEC_REQUEST_GAP_MS = 90; // ~10 req/s ceiling, matches SEC fair-use guidance
+
+let CIK_MAP: Map<string, string> | null = null;
+let CIK_MAP_FETCHED_AT = 0;
+const CIK_MAP_TTL_MS = 6 * 60 * 60 * 1000;
+
+async function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function secFetch(url: string, attempt = 1): Promise<Response> {
+  const res = await fetch(url, { headers: { "User-Agent": SEC_UA, "Accept": "*/*" } });
+  if ((res.status === 429 || res.status >= 500) && attempt < 3) {
+    await sleep(400 * attempt);
+    return secFetch(url, attempt + 1);
+  }
+  return res;
+}
+
+async function loadCikMap(): Promise<Map<string, string>> {
+  const now = Date.now();
+  if (CIK_MAP && now - CIK_MAP_FETCHED_AT < CIK_MAP_TTL_MS) return CIK_MAP;
+  const res = await secFetch("https://www.sec.gov/files/company_tickers.json");
+  if (!res.ok) throw new Error(`company_tickers.json HTTP ${res.status}`);
+  const json = await res.json() as Record<string, { cik_str: number; ticker: string; title: string }>;
+  const map = new Map<string, string>();
+  for (const v of Object.values(json)) {
+    if (v?.ticker && v?.cik_str != null) {
+      map.set(String(v.ticker).toUpperCase(), String(v.cik_str).padStart(10, "0"));
+    }
+  }
+  CIK_MAP = map; CIK_MAP_FETCHED_AT = now;
+  return map;
+}
+
+function classifySecCode(code: string, acquiredDisposed: string): { code: string; direction: "buy" | "sell" | "neutral" } {
+  const c = (code || "").toUpperCase().trim();
+  if (c === "P") return { code: "P-Purchase", direction: "buy" };
+  if (c === "S") return { code: "S-Sale", direction: "sell" };
+  if (c === "A") return { code: "A-Grant", direction: "neutral" };
+  if (c === "M") return { code: "M-OptionExercise", direction: "neutral" };
+  if (c === "G") return { code: "G-Gift", direction: "neutral" };
+  if (c === "F") return { code: "F-TaxWithhold", direction: "neutral" };
+  if (c === "D") return { code: "D-Disposition", direction: acquiredDisposed === "A" ? "buy" : "sell" };
+  if (c === "X") return { code: "X-OptionExercise", direction: "neutral" };
+  if (c === "C") return { code: "C-Conversion", direction: "neutral" };
+  if (c === "J") return { code: "J-Other", direction: "neutral" };
+  return { code: c ? `${c}-Other` : "Other", direction: "neutral" };
+}
+
+function secRoleFrom(rel: { isDirector: boolean; isOfficer: boolean; isTenPercent: boolean; isOther: boolean; officerTitle: string }): string {
+  const title = (rel.officerTitle || "").trim();
+  if (rel.isOfficer && title) {
+    const norm = normalizeRole(title);
+    if (norm && norm !== "Other") return norm;
+    return "Officer";
+  }
+  if (rel.isOfficer) return "Officer";
+  if (rel.isDirector) return "Director";
+  if (rel.isTenPercent) return "10%";
+  if (rel.isOther) return "Other";
+  return "Other";
+}
+
+// Extract first match of <tag>...<value>X</value>...</tag> or <tag>X</tag>.
+function xmlInner(xml: string, tag: string): string | null {
+  const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+  if (!m) return null;
+  const inner = m[1];
+  const v = inner.match(/<value>([\s\S]*?)<\/value>/);
+  return (v ? v[1] : inner).trim();
+}
+function xmlFlag(xml: string, tag: string): boolean {
+  const v = xmlInner(xml, tag);
+  return v === "1" || v?.toLowerCase() === "true";
+}
+function blocks(xml: string, tag: string): string[] {
+  const out: string[] = [];
+  const re = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) out.push(m[1]);
+  return out;
+}
+
+type ParsedFiling = {
+  rows: RawTx[];
+  filing_date: string | null;
+  accession: string;
+};
+
+async function parseForm4Xml(xml: string, ticker: string, accession: string, filingDate: string | null): Promise<RawTx[]> {
+  const ownerBlock = blocks(xml, "reportingOwner")[0] ?? "";
+  const ownerName = xmlInner(ownerBlock, "rptOwnerName") ?? "Unknown";
+  const rel = {
+    isDirector: xmlFlag(ownerBlock, "isDirector"),
+    isOfficer: xmlFlag(ownerBlock, "isOfficer"),
+    isTenPercent: xmlFlag(ownerBlock, "isTenPercentOwner"),
+    isOther: xmlFlag(ownerBlock, "isOther"),
+    officerTitle: xmlInner(ownerBlock, "officerTitle") ?? "",
+  };
+  const role = secRoleFrom(rel);
+
+  const rows: RawTx[] = [];
+  const txTags = ["nonDerivativeTransaction", "derivativeTransaction"];
+  for (const tag of txTags) {
+    for (const tx of blocks(xml, tag)) {
+      const txDate = xmlInner(tx, "transactionDate");
+      if (!txDate) continue;
+      const codingBlock = blocks(tx, "transactionCoding")[0] ?? "";
+      const code = xmlInner(codingBlock, "transactionCode") ?? "";
+      const amounts = blocks(tx, "transactionAmounts")[0] ?? "";
+      const sharesStr = xmlInner(amounts, "transactionShares") ?? "";
+      const priceStr = xmlInner(amounts, "transactionPricePerShare") ?? "";
+      const adCode = xmlInner(amounts, "transactionAcquiredDisposedCode") ?? "";
+      const cls = classifySecCode(code, adCode);
+      const shares = num(sharesStr);
+      const price = num(priceStr);
+      const totalValue = (shares != null && price != null) ? Math.round(shares * price * 100) / 100 : null;
+      const ref = await sha(`sec|${accession}|${ticker}|${ownerName}|${txDate}|${cls.code}|${sharesStr}|${priceStr}|${tag}`);
+      rows.push({
+        ticker,
+        insider_name: ownerName.slice(0, 200),
+        role,
+        transaction_type: cls.code,
+        filing_date: filingDate,
+        transaction_date: txDate.slice(0, 10),
+        shares,
+        price,
+        total_value: totalValue,
+        direction: cls.direction,
+        source: "sec_form4",
+        external_ref: ref,
+        raw: { accession, securityKind: tag, code, ad: adCode, officerTitle: rel.officerTitle },
+      });
+    }
+  }
+  return rows;
+}
+
 const secForm4Adapter: InsiderAdapter = {
   name: "sec_form4",
-  available: false,
-  async fetchForTicker(_ticker: string): Promise<AdapterResult> {
-    return {
-      ok: false,
-      state: "not_implemented",
-      reason: "SEC Form 4 adapter architecture in place; implementation pending",
-      rows: [],
-    };
+  available: true,
+  async fetchForTicker(ticker: string): Promise<AdapterResult> {
+    try {
+      const map = await loadCikMap();
+      const cik = map.get(ticker.toUpperCase());
+      if (!cik) return { ok: false, state: "no_cik", reason: `no CIK for ${ticker}`, rows: [] };
+
+      const cutoff = Date.now() - SEC_LOOKBACK_DAYS * 86400000;
+      const feedUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=4&dateb=&owner=include&count=${SEC_MAX_FILINGS_PER_TICKER}&output=atom`;
+      await sleep(SEC_REQUEST_GAP_MS);
+      const feedRes = await secFetch(feedUrl);
+      if (!feedRes.ok) return { ok: false, state: "feed_error", reason: `feed HTTP ${feedRes.status}`, rows: [] };
+      const feed = await feedRes.text();
+
+      const entries: Array<{ accession: string; filingDate: string | null }> = [];
+      for (const entry of blocks(feed, "entry")) {
+        const accession = xmlInner(entry, "accession-number");
+        const filingDate = xmlInner(entry, "filing-date");
+        const formType = xmlInner(entry, "filing-type");
+        if (!accession || formType !== "4") continue;
+        if (filingDate) {
+          const ts = Date.parse(filingDate);
+          if (Number.isFinite(ts) && ts < cutoff) continue;
+        }
+        entries.push({ accession, filingDate });
+      }
+      if (entries.length === 0) return { ok: true, state: "no_recent_filings", rows: [] };
+
+      const allRows: RawTx[] = [];
+      for (const e of entries) {
+        const accNoDash = e.accession.replace(/-/g, "");
+        const idxUrl = `https://www.sec.gov/Archives/edgar/data/${parseInt(cik, 10)}/${accNoDash}/index.json`;
+        await sleep(SEC_REQUEST_GAP_MS);
+        const idxRes = await secFetch(idxUrl);
+        if (!idxRes.ok) continue;
+        const idx = await idxRes.json() as { directory?: { item?: Array<{ name: string }> } };
+        const items = idx?.directory?.item ?? [];
+        // Prefer the structured form4 xml; skip the index/footer xml.
+        const xmlFile = items.find((i) => /form4.*\.xml$/i.test(i.name))
+          ?? items.find((i) => /primary_doc\.xml$/i.test(i.name))
+          ?? items.find((i) => /\.xml$/i.test(i.name) && !/index|footer|filer/i.test(i.name));
+        if (!xmlFile) continue;
+        const xmlUrl = `https://www.sec.gov/Archives/edgar/data/${parseInt(cik, 10)}/${accNoDash}/${xmlFile.name}`;
+        await sleep(SEC_REQUEST_GAP_MS);
+        const xmlRes = await secFetch(xmlUrl);
+        if (!xmlRes.ok) continue;
+        const xml = await xmlRes.text();
+        if (!xml.includes("<ownershipDocument") && !xml.includes("ownershipDocument")) continue;
+        try {
+          const rows = await parseForm4Xml(xml, ticker.toUpperCase(), e.accession, e.filingDate);
+          allRows.push(...rows);
+        } catch (_) { /* skip malformed filing */ }
+      }
+
+      return { ok: true, state: "ok", rows: allRows };
+    } catch (e) {
+      return { ok: false, state: "fetch_error", reason: (e as Error).message.slice(0, 160), rows: [] };
+    }
   },
 };
 
-const ADAPTERS: InsiderAdapter[] = [finvizAdapter, secForm4Adapter];
+// Order matters: SEC first (canonical), Finviz second (degraded — usually html_response).
+const ADAPTERS: InsiderAdapter[] = [secForm4Adapter, finvizAdapter];
 
 // ---------- Strength score ----------
 type StrengthOut = {
@@ -360,31 +553,59 @@ Deno.serve(async (req) => {
     }
 
     if (collected.length > 0) {
-      // Upsert by external_ref (per-source unique). Use the dedupe unique index as fallback.
-      const payload = collected.map((r) => ({
-        ticker: r.ticker,
-        insider_name: r.insider_name,
-        role: r.role,
-        transaction_type: r.transaction_type,
-        filing_date: r.filing_date,
-        transaction_date: r.transaction_date,
-        shares: r.shares,
-        price: r.price,
-        total_value: r.total_value,
-        direction: r.direction,
-        source: r.source,
-        external_ref: r.external_ref,
-        raw: r.raw,
-      }));
-      // Idempotent: ignore conflicts on the dedupe unique index.
-      const { error, count } = await admin
-        .from("insider_transactions")
-        .upsert(payload, { onConflict: "ticker,insider_name,transaction_date,transaction_type,shares,source", ignoreDuplicates: true, count: "exact" });
-      if (error) {
-        perTicker[ticker].error = error.message.slice(0, 200);
-      } else if (typeof count === "number") {
-        totalInserted += count;
+      // Dedupe within payload by the same composite key the DB unique index uses:
+      // (ticker, insider_name, transaction_date, transaction_type, COALESCE(shares,0), source).
+      const seen = new Set<string>();
+      const deduped: RawTx[] = [];
+      for (const r of collected) {
+        const k = [r.ticker, r.insider_name, r.transaction_date, r.transaction_type, r.shares ?? 0, r.source].join("|");
+        if (seen.has(k)) continue;
+        seen.add(k);
+        deduped.push(r);
       }
+
+      // Pre-filter against existing external_ref to cut the insert size.
+      const refs = Array.from(new Set(deduped.map((r) => r.external_ref).filter(Boolean)));
+      const existing = new Set<string>();
+      for (let i = 0; i < refs.length; i += 200) {
+        const chunk = refs.slice(i, i + 200);
+        const { data } = await admin
+          .from("insider_transactions")
+          .select("external_ref")
+          .in("external_ref", chunk);
+        for (const row of (data ?? [])) {
+          if (row?.external_ref) existing.add(String(row.external_ref));
+        }
+      }
+      const fresh = deduped.filter((r) => r.external_ref && !existing.has(r.external_ref));
+
+      // Per-row insert to swallow expression-index unique violations silently
+      // (cannot use ON CONFLICT here — index uses COALESCE(shares,0)).
+      let inserted = 0; let skipped = 0; let lastErr: string | null = null;
+      for (const r of fresh) {
+        const { error } = await admin.from("insider_transactions").insert({
+          ticker: r.ticker,
+          insider_name: r.insider_name,
+          role: r.role,
+          transaction_type: r.transaction_type,
+          filing_date: r.filing_date,
+          transaction_date: r.transaction_date,
+          shares: r.shares,
+          price: r.price,
+          total_value: r.total_value,
+          direction: r.direction,
+          source: r.source,
+          external_ref: r.external_ref,
+          raw: r.raw,
+        });
+        if (!error) { inserted++; continue; }
+        const msg = error.message || "";
+        if (msg.includes("insider_tx_dedupe") || msg.includes("duplicate key")) { skipped++; continue; }
+        lastErr = msg.slice(0, 200);
+      }
+      totalInserted += inserted;
+      perTicker[ticker].adapters["_insert"] = { state: lastErr ? "partial_error" : "ok", rows: inserted, reason: lastErr ?? `${skipped} dupes skipped` };
+      if (lastErr) perTicker[ticker].error = lastErr;
     }
 
     // Strength score: read last 90d (covers prior history + new inserts).
