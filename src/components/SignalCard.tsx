@@ -8,6 +8,7 @@ import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOu
 import { getFreshness } from "@/lib/signalFreshness";
 import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
+import { getTier, TIER_META } from "@/lib/signalTiers";
 
 type Props = {
   signal: Signal;
