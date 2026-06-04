@@ -336,6 +336,30 @@ export default function OutcomeAnalytics() {
 
   // Paper Trade Class Comparison — bucket paper trades by their stored class,
   // join to the matching signal_outcomes row to read 5D win/return.
+  // Lifecycle Win-Rate Comparison — bucket outcomes by the signal's current
+  // lifecycle_state, then read 5D win/return.
+  const lifecycleRows = useMemo(() => {
+    const stateById = new Map<string, string>();
+    for (const s of signalLifecycle) if (s.lifecycle_state) stateById.set(s.id, s.lifecycle_state);
+    const agg: Record<string, { n: number; wins: number; retSum: number }> = {};
+    for (const r of filtered) {
+      const st = stateById.get(r.signal_id);
+      if (!st) continue;
+      if (r.win_5d === null || r.return_5d === null) continue;
+      if (!agg[st]) agg[st] = { n: 0, wins: 0, retSum: 0 };
+      agg[st].n += 1;
+      agg[st].wins += r.win_5d ? 1 : 0;
+      agg[st].retSum += Number(r.return_5d);
+    }
+    return LIFECYCLE_ROW_ORDER.filter((k) => agg[k]).map((k) => ({
+      key: k,
+      label: LIFECYCLE_ROW_LABEL[k] ?? k,
+      n: agg[k].n,
+      winRate: agg[k].n > 0 ? (agg[k].wins / agg[k].n) * 100 : 0,
+      avgReturn: agg[k].n > 0 ? agg[k].retSum / agg[k].n : 0,
+    }));
+  }, [signalLifecycle, filtered]);
+
   const paperClassRows = useMemo(() => {
     const outcomeBySignal = new Map<string, Outcome>();
     for (const r of filtered) outcomeBySignal.set(r.signal_id, r);
