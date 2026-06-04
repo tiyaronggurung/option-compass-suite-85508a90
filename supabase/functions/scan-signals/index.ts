@@ -31,7 +31,23 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
+// Tier ordering for max/min-tier-seen watermarks (analytics only).
+const TIER_RANK: Record<string, number> = {
+  rejected: 0, developing: 1, near_watchlist: 2, watchlist: 3, strong: 4, elite: 5,
+};
+function higherTier(a: string | null | undefined, b: string | null | undefined): string | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return (TIER_RANK[b] ?? -1) > (TIER_RANK[a] ?? -1) ? b : a;
+}
+function lowerTier(a: string | null | undefined, b: string | null | undefined): string | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return (TIER_RANK[b] ?? 99) < (TIER_RANK[a] ?? 99) ? b : a;
+}
+
 type Bar = { t: string; o: number; h: number; l: number; c: number; v: number };
+
 
 // ---------- Market hours (America/New_York) ----------
 function isMarketOpenET(now = new Date()): { open: boolean; reason: string } {
