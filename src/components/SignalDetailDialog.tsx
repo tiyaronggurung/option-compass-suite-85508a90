@@ -165,6 +165,9 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
             label={(s as any).confirmation_label ?? null}
           />
 
+          <InsiderActivity ticker={s.ticker} />
+
+
 
 
 
@@ -449,6 +452,130 @@ function NewsTransparency({ details, source }: { details: any; source?: string }
     </div>
   );
 }
+
+type InsiderStrength = {
+  score: number;
+  label: string;
+  buy_count_30d: number;
+  sell_count_30d: number;
+  buy_count_90d: number;
+  sell_count_90d: number;
+  signals: Array<{ kind: string; weight: number; detail?: string }>;
+  as_of: string;
+};
+type InsiderTx = {
+  insider_name: string;
+  role: string | null;
+  transaction_type: string;
+  transaction_date: string;
+  shares: number | null;
+  price: number | null;
+  total_value: number | null;
+  direction: string;
+};
+
+function labelTone(label: string): string {
+  if (label === "strong_buy") return "bg-emerald-500/15 text-emerald-400";
+  if (label === "buy") return "bg-emerald-500/10 text-emerald-300";
+  if (label === "sell") return "bg-red-500/10 text-red-300";
+  if (label === "strong_sell") return "bg-red-500/15 text-red-400";
+  return "bg-muted text-muted-foreground";
+}
+
+function InsiderActivity({ ticker }: { ticker: string }) {
+  const [strength, setStrength] = useState<InsiderStrength | null>(null);
+  const [txs, setTxs] = useState<InsiderTx[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const [{ data: s }, { data: t }] = await Promise.all([
+        supabase.from("insider_strength_scores").select("*").eq("ticker", ticker).maybeSingle(),
+        supabase.from("insider_transactions")
+          .select("insider_name, role, transaction_type, transaction_date, shares, price, total_value, direction")
+          .eq("ticker", ticker)
+          .order("transaction_date", { ascending: false })
+          .limit(5),
+      ]);
+      if (!active) return;
+      setStrength((s as unknown as InsiderStrength) ?? null);
+      setTxs((t as unknown as InsiderTx[]) ?? []);
+    })();
+    return () => { active = false; };
+  }, [ticker]);
+
+  if (txs === null) {
+    return (
+      <div className="pt-2 border-t border-border">
+        <div className="text-xs text-muted-foreground">Insider activity: loading…</div>
+      </div>
+    );
+  }
+  if (!strength && txs.length === 0) {
+    return (
+      <div className="pt-2 border-t border-border">
+        <div className="text-xs text-muted-foreground mb-1">Insider activity</div>
+        <div className="text-[11px] text-muted-foreground">No insider data on file for {ticker}.</div>
+        <div className="text-[10px] text-muted-foreground/70 mt-1 italic">Metadata only — does not affect confidence score.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-2 border-t border-border">
+      <div className="text-xs text-muted-foreground mb-1.5 flex items-center justify-between">
+        <span>Insider activity</span>
+        {strength && (
+          <span className="flex items-center gap-1.5">
+            <span className={cn("px-1.5 py-0.5 rounded text-[10px]", labelTone(strength.label))}>{strength.label}</span>
+            <span className="ticker-mono text-foreground/80">{strength.score}/100</span>
+          </span>
+        )}
+      </div>
+
+      {strength && (
+        <>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+            <div className="flex justify-between"><span className="text-muted-foreground">30d buys</span><span className="ticker-mono text-emerald-400">{strength.buy_count_30d}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">30d sells</span><span className="ticker-mono text-red-400">{strength.sell_count_30d}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">90d buys</span><span className="ticker-mono text-emerald-400">{strength.buy_count_90d}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">90d sells</span><span className="ticker-mono text-red-400">{strength.sell_count_90d}</span></div>
+          </div>
+          {Array.isArray(strength.signals) && strength.signals.length > 0 && (
+            <div className="mt-1.5 text-[10px] text-muted-foreground">
+              {strength.signals.slice(0, 4).map((s, i) => (
+                <span key={i} className="mr-2">
+                  {s.kind} <span className={s.weight >= 0 ? "text-emerald-400" : "text-red-400"}>{s.weight >= 0 ? "+" : ""}{s.weight}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {txs.length > 0 && (
+        <div className="mt-2">
+          <div className="text-[10px] text-muted-foreground mb-0.5">Top 5 recent transactions</div>
+          <ul className="space-y-0.5 text-[11px]">
+            {txs.map((t, i) => (
+              <li key={i} className="flex items-center gap-2">
+                <span className="ticker-mono text-muted-foreground w-16 shrink-0">{t.transaction_date}</span>
+                <span className="truncate flex-1">{t.insider_name}{t.role ? <span className="text-muted-foreground"> · {t.role}</span> : null}</span>
+                <span className={cn("text-[10px]", t.direction === "buy" ? "text-emerald-400" : t.direction === "sell" ? "text-red-400" : "text-muted-foreground")}>{t.direction}</span>
+                <span className="ticker-mono w-20 text-right text-muted-foreground">
+                  {t.total_value ? `$${Math.round(t.total_value).toLocaleString()}` : t.shares ? `${t.shares.toLocaleString()}sh` : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="text-[10px] text-muted-foreground/70 mt-2 italic">Metadata only — does not affect confidence score.</div>
+    </div>
+  );
+}
+
 
 
 
