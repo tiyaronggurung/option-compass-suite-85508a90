@@ -486,17 +486,25 @@ async function scoreNews(
     }
     return neutral("finnhub", "Finnhub key not configured");
   }
+  // Finnhub free tier: `company-news` works, `news-sentiment` is paid-only (403 on free).
+  // Strategy: probe both; if news-sentiment 403s we still use company-news for volume,
+  // and merge Finviz headlines as a sub-signal. If company-news also fails, fall back
+  // entirely to Finviz news. Math (sentimentScore * 0.8 + volume * 0.2) is unchanged.
   try {
     const to = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
     const url = `https://finnhub.io/api/v1/news-sentiment?symbol=${ticker}&token=${FINNHUB_KEY}`;
     const newsUrl = `https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${FINNHUB_KEY}`;
     const [sentRes, newsRes] = await Promise.all([fetch(url), fetch(newsUrl)]);
-    if (!sentRes.ok) return { score: 50, configured: true, source: "finnhub", reason: `HTTP ${sentRes.status}` };
-    const sent = await sentRes.json();
-    const news = newsRes.ok ? await newsRes.json() : [];
-    const bullish = Number(sent?.sentiment?.bullishPercent ?? 0);
-    const bearish = Number(sent?.sentiment?.bearishPercent ?? 0);
+
+    const sentimentOk = sentRes.ok;
+    const sent = sentimentOk ? await sentRes.json().catch(() => null) : null;
+    if (!sentimentOk) { try { await sentRes.text(); } catch { /* drain */ } }
+
+    const newsOk = newsRes.ok;
+    const news = newsOk ? await newsRes.json().catch(() => []) : [];
+    if (!newsOk) { try { await newsRes.text(); } catch { /* drain */ } }
+
     const finnhubArticles = Array.isArray(news) ? news.length : 0;
 
     // Sub-signal: merge Finviz headlines (dedupe by lowercased first 40 chars vs Finnhub).
@@ -513,27 +521,71 @@ async function scoreNews(
       }
     }
     const articles = finnhubArticles + extraCount;
-    const directional = direction === "CALL" ? bullish - bearish : bearish - bullish;
-    const sentimentScore = clamp100(50 + directional * 50);
-    const volumeBoost = Math.min(20, articles); // up to +20 for active coverage
-    const score = clamp100(sentimentScore * 0.8 + (50 + volumeBoost) * 0.2);
+
+    // Case A: full path — sentiment endpoint worked, use blended formula.
+    if (sentimentOk && sent) {
+      const bullish = Number(sent?.sentiment?.bullishPercent ?? 0);
+      const bearish = Number(sent?.sentiment?.bearishPercent ?? 0);
+      const directional = direction === "CALL" ? bullish - bearish : bearish - bullish;
+      const sentimentScore = clamp100(50 + directional * 50);
+      const volumeBoost = Math.min(20, articles);
+      const score = clamp100(sentimentScore * 0.8 + (50 + volumeBoost) * 0.2);
+      return {
+        score,
+        configured: true,
+        source: extraCount > 0 ? "finnhub+finviz_news" : "finnhub",
+        reason: `${articles} articles${extraCount > 0 ? ` (+${extraCount} Finviz)` : ""} · sentiment ${(bullish * 100).toFixed(0)}% bull / ${(bearish * 100).toFixed(0)}% bear`,
+        details: {
+          bullish, bearish,
+          article_count: articles,
+          finnhub_articles: finnhubArticles,
+          finviz_extra_articles: extraCount,
+          finviz_news_24h: finvizNews?.count_24h ?? null,
+          news_sentiment_endpoint: "ok",
+        },
+      };
+    }
+
+    // Case B: sentiment 403/failed but we have article coverage from company-news and/or Finviz.
+    if (articles > 0) {
+      const volumeBoost = Math.min(20, articles);
+      const score = clamp100(50 + volumeBoost);
+      const usingFinvizFallback = finnhubArticles === 0 && extraCount > 0;
+      return {
+        score,
+        configured: true,
+        source: usingFinvizFallback
+          ? "finviz_news"
+          : (extraCount > 0 ? "finnhub_news+finviz_news" : "finnhub_news"),
+        reason: `Sentiment ${sentRes.status} · ${articles} articles${extraCount > 0 ? ` (+${extraCount} Finviz)` : ""} · volume-only`,
+        details: {
+          article_count: articles,
+          finnhub_articles: finnhubArticles,
+          finviz_extra_articles: extraCount,
+          finviz_news_24h: finvizNews?.count_24h ?? null,
+          finviz_news_7d: finvizNews?.count_7d ?? null,
+          news_sentiment_endpoint: `http_${sentRes.status}`,
+          fallback_active: usingFinvizFallback ? "finnhub_403_finviz_news_fallback_active" : undefined,
+        },
+      };
+    }
+
+    // Case C: everything failed/empty — neutral.
     return {
-      score,
+      score: 50,
       configured: true,
-      source: extraCount > 0 ? "finnhub+finviz_news" : "finnhub",
-      reason: `${articles} articles${extraCount > 0 ? ` (+${extraCount} Finviz)` : ""} · sentiment ${(bullish * 100).toFixed(0)}% bull / ${(bearish * 100).toFixed(0)}% bear`,
+      source: "finnhub",
+      reason: `Sentiment HTTP ${sentRes.status} · company-news HTTP ${newsRes.status} · no Finviz headlines`,
       details: {
-        bullish, bearish,
-        article_count: articles,
-        finnhub_articles: finnhubArticles,
-        finviz_extra_articles: extraCount,
-        finviz_news_24h: finvizNews?.count_24h ?? null,
+        news_sentiment_endpoint: `http_${sentRes.status}`,
+        company_news_endpoint: `http_${newsRes.status}`,
       },
     };
   } catch (e) {
     return { score: 50, configured: true, source: "finnhub", reason: `error: ${(e as Error).message.slice(0, 80)}` };
   }
 }
+
 
 // ---------- Apify (X/Twitter sentiment) ----------
 async function scoreSentiment(ticker: string, direction: "CALL" | "PUT"): Promise<ComponentScore> {
