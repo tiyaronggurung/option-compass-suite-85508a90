@@ -19,6 +19,13 @@ export type ComponentScore = {
   details?: Record<string, unknown>;
 };
 
+export type ProviderStatus = {
+  provider: string;
+  role: string;            // what this provider currently powers
+  state: "active" | "reserved" | "missing_key";
+  note?: string;
+};
+
 export type ScoringResult = {
   final: number;            // 0..100 after regime adjust
   base: number;             // pre-regime
@@ -27,6 +34,7 @@ export type ScoringResult = {
   components: Record<ComponentKey, ComponentScore>;
   sources_used: string[];
   reasons: string[];
+  provider_status: ProviderStatus[];
 };
 
 export const WEIGHTS: Record<ComponentKey, number> = {
