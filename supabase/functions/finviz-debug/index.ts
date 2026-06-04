@@ -128,9 +128,11 @@ Deno.serve(async (req) => {
   const ticker = (url.searchParams.get("ticker") ?? "NVDA").toUpperCase().trim();
 
   // Probe with both auth param names to confirm which one Finviz accepts.
-  const [authResult, apikeyResult] = await Promise.all([
-    probe(ticker, "auth"),
-    probe(ticker, "apikey"),
+  const [authManual, apikeyManual, authFollow, apikeyFollow] = await Promise.all([
+    probe(ticker, "auth", false),
+    probe(ticker, "apikey", false),
+    probe(ticker, "auth", true),
+    probe(ticker, "apikey", true),
   ]);
 
   // Recommendation
