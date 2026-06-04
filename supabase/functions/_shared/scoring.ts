@@ -1010,22 +1010,28 @@ async function scoreTechnicalWithSnap(
   sectorPerf?: SectorPerf | null,
   direction?: "CALL" | "PUT",
 ): Promise<ComponentScore> {
+  const dir: "CALL" | "PUT" = direction ?? "CALL";
+  const [bars] = await Promise.all([fetchDailyBars(ticker, 60)]);
+  const tl = detectTrendlines(bars, dir);
+  const tlNote = tl.human_reason ? ` · ${tl.human_reason}` : "";
+
   const localScore = clamp100((baseTrendScore + 1) * 50);
   if (fv.state === "missing_key") {
     return {
-      score: localScore,
+      score: clamp100(localScore + tl.adjustment),
       configured: false,
       source: "alpaca",
-      reason: `Alpaca trend ${baseTrendScore >= 0 ? "+" : ""}${baseTrendScore.toFixed(2)} · Finviz not configured`,
+      reason: `Alpaca trend ${baseTrendScore >= 0 ? "+" : ""}${baseTrendScore.toFixed(2)} · Finviz not configured${tlNote}`,
+      details: { trendline: tl },
     };
   }
   if (fv.state !== "ok" || !fv.row) {
     return {
-      score: localScore,
+      score: clamp100(localScore + tl.adjustment),
       configured: true,
       source: "alpaca",
-      reason: `Alpaca-only (${fv.reason}${fv.detail ? `: ${fv.detail}` : ""})`,
-      details: { finviz_state: fv.state, fallback: "alpaca_only" },
+      reason: `Alpaca-only (${fv.reason}${fv.detail ? `: ${fv.detail}` : ""})${tlNote}`,
+      details: { finviz_state: fv.state, fallback: "alpaca_only", trendline: tl },
     };
   }
   const snap = fv.row;
@@ -1038,7 +1044,6 @@ async function scoreTechnicalWithSnap(
   const finvizScore = clamp100(finvizTrend * 0.7 + finvizVol * 0.3);
   let blended = clamp100(localScore * 0.5 + finvizScore * 0.5);
 
-  // Sub-signal: sector strength nudge (capped ±3)
   let sectorNudge = 0;
   let sectorNote = "";
   if (sectorPerf && direction) {
@@ -1048,19 +1053,24 @@ async function scoreTechnicalWithSnap(
     sectorNote = ` · ${sectorPerf.sector} ${sectorPerf.perf_week_pct >= 0 ? "+" : ""}${sectorPerf.perf_week_pct.toFixed(1)}%/wk`;
   }
 
+  // Trendline sub-signal (capped via clamp100). No weight change, no new component.
+  blended = clamp100(blended + tl.adjustment);
+
   return {
     score: blended,
     configured: true,
     source: sectorPerf ? "alpaca+finviz+sector" : "alpaca+finviz",
-    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}`,
+    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}${tlNote}`,
     details: {
       perf_week: perfWeek, sma50, sma200, rel_volume: relVol,
       sector: sectorPerf?.sector ?? null,
       sector_perf_week_pct: sectorPerf?.perf_week_pct ?? null,
       sector_nudge: sectorNudge,
+      trendline: tl,
     },
   };
 }
+
 
 export function tierFor(confidence: number): "elite" | "strong" | "watchlist" | "rejected" {
   if (confidence >= 90) return "elite";
