@@ -555,12 +555,23 @@ export async function scoreInstitutional(
 
   // Shared Finviz snapshot — single fetch powers technical + options flow + volatility.
   // finvizSnapshotChecked returns a typed state so we never parse HTML/upsell pages as CSV.
-  const fv = await finvizSnapshotChecked(ticker);
+  // Finviz "extras" (insider/news/sector) are fetched in parallel; each degrades independently.
+  const [fv, extras] = await Promise.all([
+    finvizSnapshotChecked(ticker),
+    fetchFinvizExtrasForTicker(ticker),
+  ]);
+
+  // Resolve sector context (best-effort: matches Finviz Sector field from the snapshot row)
+  const sectorName = (fv.row?.["Sector"] ?? "").trim().toLowerCase();
+  const sectorPerf: SectorPerf | null =
+    extras.sectors.state === "ok" && extras.sectors.data && sectorName
+      ? (extras.sectors.data[sectorName] ?? null)
+      : null;
 
   const [optionsFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
-    scoreOptionsFlowFinviz(ticker, direction, fv),
-    scoreTechnicalWithSnap(ticker, baseTrendScore, fv),
-    scoreNews(ticker, direction),
+    scoreOptionsFlowFinviz(ticker, direction, fv, extras.insider.data),
+    scoreTechnicalWithSnap(ticker, baseTrendScore, fv, sectorPerf, direction),
+    scoreNews(ticker, direction, extras.news.data),
     scoreSentiment(ticker, direction),
     scoreVolatilityFinviz(ticker, fv),
     getRegime(admin),
