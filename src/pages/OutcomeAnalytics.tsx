@@ -227,6 +227,13 @@ type PaperTradeLite = {
 type SignalLifecycleLite = {
   id: string;
   lifecycle_state: string | null;
+  confidence: number | null;
+  confidence_at_birth: number | null;
+  max_confidence_seen: number | null;
+  min_confidence_seen: number | null;
+  tier: string | null;
+  max_tier_seen: string | null;
+  min_tier_seen: string | null;
 };
 
 const PAPER_CLASS_ORDER = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
@@ -238,6 +245,35 @@ const PAPER_CLASS_LABEL: Record<string, string> = {
   elite: "Elite (90+)",
 };
 
+// Confidence Drift helpers (analytics only).
+const TIER_RANK_UI: Record<string, number> = {
+  rejected: 0, developing: 1, near_watchlist: 2, watchlist: 3, strong: 4, elite: 5,
+};
+function paperClassForConfidence(c: number | null | undefined): string | null {
+  if (c == null) return null;
+  if (c >= 90) return "elite";
+  if (c >= 80) return "strong";
+  if (c >= 70) return "watchlist";
+  if (c >= 65) return "near_watchlist";
+  if (c >= 50) return "developing";
+  return null;
+}
+const DRIFT_BUCKETS = ["gain_10", "gain_5_9", "flat", "loss_5_9", "loss_10"] as const;
+const DRIFT_LABEL: Record<string, string> = {
+  gain_10: "Gained 10+",
+  gain_5_9: "Gained 5–9",
+  flat: "Flat (−4 … +4)",
+  loss_5_9: "Lost 5–9",
+  loss_10: "Lost 10+",
+};
+function driftBucket(delta: number): typeof DRIFT_BUCKETS[number] {
+  if (delta >= 10) return "gain_10";
+  if (delta >= 5) return "gain_5_9";
+  if (delta <= -10) return "loss_10";
+  if (delta <= -5) return "loss_5_9";
+  return "flat";
+}
+
 const LIFECYCLE_ROW_ORDER = ["fresh", "active", "weakening", "expired", "invalidated"] as const;
 const LIFECYCLE_ROW_LABEL: Record<string, string> = {
   fresh: "Fresh",
@@ -246,6 +282,7 @@ const LIFECYCLE_ROW_LABEL: Record<string, string> = {
   expired: "Expired",
   invalidated: "Invalidated",
 };
+
 
 export default function OutcomeAnalytics() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
@@ -267,7 +304,8 @@ export default function OutcomeAnalytics() {
     const [{ data: outcomeData }, { data: tradeData }, { data: sigData }] = await Promise.all([
       supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
       supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval").limit(5000),
-      supabase.from("signals").select("id, lifecycle_state").limit(5000),
+      supabase.from("signals").select("id, lifecycle_state, confidence, confidence_at_birth, max_confidence_seen, min_confidence_seen, tier, max_tier_seen, min_tier_seen").limit(5000),
+
     ]);
     setRows((outcomeData ?? []) as unknown as Outcome[]);
     setPaperTrades((tradeData ?? []) as unknown as PaperTradeLite[]);
@@ -391,6 +429,92 @@ export default function OutcomeAnalytics() {
         };
       });
   }, [paperTrades, filtered]);
+
+  // ---------- Confidence Drift Analytics (signals-wide, analytics only) ----------
+  const driftByClass = useMemo(() => {
+    const agg: Record<string, { n: number; deltaSum: number; maxSum: number; minSum: number }> = {};
+    for (const s of signalLifecycle) {
+      if (s.confidence == null || s.confidence_at_birth == null) continue;
+      const cls = paperClassForConfidence(s.confidence_at_birth);
+      if (!cls) continue;
+      const delta = s.confidence - s.confidence_at_birth;
+      const max = s.max_confidence_seen ?? s.confidence;
+      const min = s.min_confidence_seen ?? s.confidence;
+      if (!agg[cls]) agg[cls] = { n: 0, deltaSum: 0, maxSum: 0, minSum: 0 };
+      agg[cls].n += 1;
+      agg[cls].deltaSum += delta;
+      agg[cls].maxSum += max;
+      agg[cls].minSum += min;
+    }
+    return PAPER_CLASS_ORDER.filter((k) => agg[k]).map((k) => ({
+      key: k,
+      label: PAPER_CLASS_LABEL[k] ?? k,
+      n: agg[k].n,
+      avgDelta: agg[k].deltaSum / agg[k].n,
+      avgMax: agg[k].maxSum / agg[k].n,
+      avgMin: agg[k].minSum / agg[k].n,
+    }));
+  }, [signalLifecycle]);
+
+  const driftTransitions = useMemo(() => {
+    const promo: Record<string, number> = {
+      "developing→near_watchlist": 0,
+      "near_watchlist→watchlist": 0,
+      "watchlist→strong": 0,
+      "strong→elite": 0,
+    };
+    const demo: Record<string, number> = {
+      "watchlist→near_watchlist": 0,
+      "near_watchlist→developing": 0,
+    };
+    let invalidated = 0;
+    for (const s of signalLifecycle) {
+      if (s.lifecycle_state === "invalidated") invalidated += 1;
+      const birth = s.confidence_at_birth ?? s.confidence;
+      const birthClass = paperClassForConfidence(birth);
+      const maxTier = s.max_tier_seen;
+      const minTier = s.min_tier_seen;
+      const birthRank = birthClass ? TIER_RANK_UI[birthClass] : null;
+      // Promotions: max_tier_seen strictly above birth band.
+      if (birthRank != null && maxTier && TIER_RANK_UI[maxTier] != null) {
+        const order = ["developing", "near_watchlist", "watchlist", "strong", "elite"];
+        const startIdx = order.indexOf(birthClass!);
+        const endIdx = order.indexOf(maxTier);
+        if (startIdx >= 0 && endIdx > startIdx) {
+          for (let i = startIdx; i < endIdx; i++) {
+            const key = `${order[i]}→${order[i + 1]}`;
+            if (key in promo) promo[key] += 1;
+          }
+        }
+      }
+      // Demotions: min_tier_seen strictly below birth band.
+      if (birthRank != null && minTier && TIER_RANK_UI[minTier] != null) {
+        const order = ["developing", "near_watchlist", "watchlist", "strong", "elite"];
+        const startIdx = order.indexOf(birthClass!);
+        const endIdx = order.indexOf(minTier);
+        if (startIdx >= 0 && endIdx >= 0 && endIdx < startIdx) {
+          for (let i = startIdx; i > endIdx; i--) {
+            const key = `${order[i]}→${order[i - 1]}`;
+            if (key in demo) demo[key] += 1;
+          }
+        }
+      }
+    }
+    return { promo, demo, invalidated };
+  }, [signalLifecycle]);
+
+  const driftHistogram = useMemo(() => {
+    const buckets: Record<string, number> = { gain_10: 0, gain_5_9: 0, flat: 0, loss_5_9: 0, loss_10: 0 };
+    let n = 0;
+    for (const s of signalLifecycle) {
+      if (s.confidence == null || s.confidence_at_birth == null) continue;
+      buckets[driftBucket(s.confidence - s.confidence_at_birth)] += 1;
+      n += 1;
+    }
+    return { buckets, n };
+  }, [signalLifecycle]);
+
+
 
   if (adminLoading) return <div className="p-6 text-muted-foreground text-sm">Checking permissions…</div>;
   if (!isAdmin) {
@@ -657,7 +781,108 @@ export default function OutcomeAnalytics() {
               Goal: determine whether 65–69 performs like 70–79 and whether 50–64 has any predictive value.
             </div>
           </Card>
+
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold">Confidence Drift Analytics</h2>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Tracks how each signal's confidence has moved since creation. Uses high/low watermarks
+              and the current vs. birth confidence delta. Analytics only — no scoring impact.
+            </p>
+
+            {/* Avg drift by paper_test_class */}
+            <div className="mt-2">
+              <h3 className="text-xs font-medium mb-1">Average drift by class</h3>
+              {driftByClass.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No signals with birth confidence yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1.5 px-2">Class</th>
+                        <th className="text-right py-1.5 px-2">n</th>
+                        <th className="text-right py-1.5 px-2">Avg Δ</th>
+                        <th className="text-right py-1.5 px-2">Avg max</th>
+                        <th className="text-right py-1.5 px-2">Avg min</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {driftByClass.map((d) => {
+                        const low = d.n > 0 && d.n < MIN_N;
+                        return (
+                          <tr key={d.key} className={cn("border-b border-border/50", low && "text-muted-foreground/60")}>
+                            <td className="py-1.5 px-2">{d.label}{low && <span className="ml-2 text-[10px] uppercase tracking-wide">low sample</span>}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.avgDelta >= 0 ? "+" : ""}{d.avgDelta.toFixed(1)}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.avgMax.toFixed(1)}</td>
+                            <td className="py-1.5 px-2 text-right ticker-mono">{d.avgMin.toFixed(1)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Promotions / demotions */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <h3 className="text-xs font-medium mb-1">Promotions</h3>
+                <table className="w-full text-xs">
+                  <tbody>
+                    {Object.entries(driftTransitions.promo).map(([k, v]) => (
+                      <tr key={k} className="border-b border-border/50">
+                        <td className="py-1 px-2">{k.replace("→", " → ")}</td>
+                        <td className="py-1 px-2 text-right ticker-mono">{v}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3 className="text-xs font-medium mb-1">Demotions</h3>
+                <table className="w-full text-xs">
+                  <tbody>
+                    {Object.entries(driftTransitions.demo).map(([k, v]) => (
+                      <tr key={k} className="border-b border-border/50">
+                        <td className="py-1 px-2">{k.replace("→", " → ")}</td>
+                        <td className="py-1 px-2 text-right ticker-mono">{v}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-b border-border/50">
+                      <td className="py-1 px-2">Invalidated</td>
+                      <td className="py-1 px-2 text-right ticker-mono">{driftTransitions.invalidated}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3 className="text-xs font-medium mb-1">Drift histogram</h3>
+                {driftHistogram.n === 0 ? (
+                  <div className="text-xs text-muted-foreground">No data yet.</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {DRIFT_BUCKETS.map((b) => (
+                        <tr key={b} className="border-b border-border/50">
+                          <td className="py-1 px-2">{DRIFT_LABEL[b]}</td>
+                          <td className="py-1 px-2 text-right ticker-mono">{driftHistogram.buckets[b]}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            <div className="text-[10px] text-muted-foreground mt-3">
+              Goal: learn whether signals strengthen or weaken after creation and whether confidence
+              is predictive over time.
+            </div>
+          </Card>
         </>
+
       )}
     </div>
   );
