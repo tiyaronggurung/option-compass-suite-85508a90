@@ -627,6 +627,17 @@ export async function scoreInstitutional(
         : "Finviz request did not return valid CSV — all 3 components fell back to neutral 50.",
     },
     {
+      provider: "finviz_extras",
+      role: "insider (options_flow sub) + news (news sub) + sectors (technical sub)",
+      state: (extras.insider.state === "ok" || extras.news.state === "ok" || extras.sectors.state === "ok")
+        ? "active"
+        : (extras.insider.state === "missing_key" ? "missing_key" :
+           extras.insider.state === "auth_failed" ? "auth_failed" :
+           extras.insider.state === "not_entitled" ? "not_entitled" : "degraded"),
+      detail: `insider:${extras.insider.state} · news:${extras.news.state} · sectors:${extras.sectors.state}`,
+      note: "Sub-signals only — weights remain 30/25/20/15/10. Each endpoint degrades independently.",
+    },
+    {
       provider: "finnhub",
       role: "news + sentiment",
       state: FINNHUB_KEY ? "active" : "missing_key",
