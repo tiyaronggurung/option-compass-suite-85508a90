@@ -490,14 +490,15 @@ export async function scoreInstitutional(
   const { ticker, direction, baseTrendScore } = args;
 
   // Shared Finviz snapshot — single fetch powers technical + options flow + volatility.
-  const snap = await finvizSnapshot(ticker);
+  // finvizSnapshotChecked returns a typed state so we never parse HTML/upsell pages as CSV.
+  const fv = await finvizSnapshotChecked(ticker);
 
   const [optionsFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
-    scoreOptionsFlowFinviz(ticker, direction, snap),
-    scoreTechnicalWithSnap(ticker, baseTrendScore, snap),
+    scoreOptionsFlowFinviz(ticker, direction, fv),
+    scoreTechnicalWithSnap(ticker, baseTrendScore, fv),
     scoreNews(ticker, direction),
     scoreSentiment(ticker, direction),
-    scoreVolatilityFinviz(ticker, snap),
+    scoreVolatilityFinviz(ticker, fv),
     getRegime(admin),
   ]);
 
