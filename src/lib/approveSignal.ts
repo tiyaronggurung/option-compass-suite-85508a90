@@ -43,45 +43,80 @@ export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<Ap
   if (!guard.ok) return { ok: false, reason: (guard as { reason: string }).reason };
 
   const s = input.signal;
-  const entryPremium = s.premium != null ? Number(s.premium) : null;
+  const confidenceSnapshot = Number(s.confidence ?? 0);
+  const testClass = paperTestClassFor(confidenceSnapshot);
+  const optionType = String(s.direction).toUpperCase() === "PUT" ? "PUT" : "CALL";
+  const multiplier = 100;
 
-  // Hard block: never fake P/L on missing premium.
-  if (entryPremium == null || !Number.isFinite(entryPremium) || entryPremium <= 0) {
+  // Contract Selection Engine — paper-only. Picks best contract (UW → Alpaca),
+  // returns rationale + snapshot id. If engine fails we fall back to whatever
+  // contract the signal already carries so we don't regress the existing path.
+  let snapshotId: string | null = null;
+  let bestContract: any = null;
+  let contractSource: string | null = null;
+  try {
+    const { data: sel, error: selErr } = await supabase.functions.invoke("select-contract", {
+      body: {
+        signal_id: s.id,
+        ticker: s.ticker,
+        option_type: optionType,
+        confidence: confidenceSnapshot,
+        persist: true,
+      },
+    });
+    if (!selErr && sel && (sel as any).ok) {
+      snapshotId = (sel as any).snapshot_id ?? null;
+      bestContract = (sel as any).best ?? null;
+      contractSource = (sel as any).contract_source ?? null;
+    } else if (sel && (sel as any).reason) {
+      console.warn("select-contract:", (sel as any).reason);
+    }
+  } catch (e) {
+    console.warn("select-contract invoke failed", e);
+  }
+
+  // Resolve final fields. Prefer engine, fall back to signal-provided values.
+  const finalPremium = bestContract?.premium != null
+    ? Number(bestContract.premium)
+    : (s.premium != null ? Number(s.premium) : null);
+
+  if (finalPremium == null || !Number.isFinite(finalPremium) || finalPremium <= 0) {
     return {
       ok: false,
-      reason: "No option premium available — cannot open paper option trade",
+      reason: contractSource == null && s.premium == null
+        ? "No option chain available right now — paper trade not created"
+        : "No option premium available — cannot open paper option trade",
     };
   }
 
-  const optionType = s.direction; // CALL | PUT
-  const multiplier = 100;
-  const totalCost = entryPremium * multiplier * contracts;
-
-  const confidenceSnapshot = Number(s.confidence ?? 0);
-  const testClass = paperTestClassFor(confidenceSnapshot);
+  const finalStrike = bestContract?.strike != null ? Number(bestContract.strike) : (s.strike ?? null);
+  const finalExpiry = bestContract?.expiry ?? s.expiry ?? null;
+  const finalSymbol = bestContract?.contract_symbol ?? s.contract_symbol ?? null;
+  const totalCost = finalPremium * multiplier * contracts;
 
   const { error } = await supabase.from("paper_trades").insert({
     user_id: input.userId,
     signal_id: s.id,
     ticker: s.ticker,
     direction: s.direction,
-    contract_idea: s.contract_symbol,
+    contract_idea: finalSymbol,
     // Legacy column kept in sync so existing UI/queries keep working.
-    entry_price: entryPremium,
-    stop_idea: entryPremium * 0.6,
-    target_idea: entryPremium * 1.8,
+    entry_price: finalPremium,
+    stop_idea: finalPremium * 0.6,
+    target_idea: finalPremium * 1.8,
     risk_amount: intendedRisk,
     paper_test_class: testClass,
     confidence_at_approval: confidenceSnapshot,
-    // New option-trade fields.
+    // Option-trade fields.
     is_option: true,
     option_type: optionType,
-    strike: s.strike ?? null,
-    expiry: s.expiry ?? null,
+    strike: finalStrike,
+    expiry: finalExpiry,
     contracts,
     multiplier,
-    entry_premium: entryPremium,
+    entry_premium: finalPremium,
     total_cost: totalCost,
+    contract_snapshot_id: snapshotId,
   } as any);
   if (error) return { ok: false, reason: error.message };
   return { ok: true };
