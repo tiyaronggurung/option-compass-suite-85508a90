@@ -152,6 +152,8 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
             )}
           </div>
 
+          <InstitutionalBreakdown sc={(s as any).score_components} tier={(s as any).tier} />
+
           <ComponentBreakdown tm={s.technical_metrics as any} />
 
           {rankBreakdown && <RankingBreakdown b={rankBreakdown} />}
