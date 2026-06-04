@@ -21,8 +21,9 @@ type Props = {
 
 export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none" }: Props) {
   const isCall = signal.direction === "CALL";
-  const ring =
-    signal.confidence >= 80 ? "ring-bull/40" : signal.confidence >= 65 ? "ring-primary/30" : "ring-border";
+  const tier = getTier(signal);
+  const tierMeta = TIER_META[tier];
+  const ring = tierMeta.ringClass;
   const tags: TagId[] = deriveTags(signal, watchlist ?? new Set());
   const freshness = getFreshness(signal);
   const freshClass =
