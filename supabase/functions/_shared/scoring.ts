@@ -421,8 +421,26 @@ async function scoreTechnical(
 }
 
 // ---------- Finnhub (news + analyst) ----------
-async function scoreNews(ticker: string, direction: "CALL" | "PUT"): Promise<ComponentScore> {
-  if (!FINNHUB_KEY) return neutral("finnhub", "Finnhub key not configured");
+async function scoreNews(
+  ticker: string,
+  direction: "CALL" | "PUT",
+  finvizNews?: FinvizNewsSummary | null,
+): Promise<ComponentScore> {
+  if (!FINNHUB_KEY) {
+    // Even without Finnhub, fall back to finviz news volume if available.
+    if (finvizNews && finvizNews.count_7d > 0) {
+      const volumeBoost = Math.min(20, finvizNews.count_7d);
+      const score = clamp100(50 + volumeBoost);
+      return {
+        score,
+        configured: true,
+        source: "finviz_news",
+        reason: `Finnhub missing · Finviz ${finvizNews.count_24h}/24h · ${finvizNews.count_7d}/7d`,
+        details: { finviz_news_24h: finvizNews.count_24h, finviz_news_7d: finvizNews.count_7d },
+      };
+    }
+    return neutral("finnhub", "Finnhub key not configured");
+  }
   try {
     const to = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
@@ -434,17 +452,38 @@ async function scoreNews(ticker: string, direction: "CALL" | "PUT"): Promise<Com
     const news = newsRes.ok ? await newsRes.json() : [];
     const bullish = Number(sent?.sentiment?.bullishPercent ?? 0);
     const bearish = Number(sent?.sentiment?.bearishPercent ?? 0);
-    const articles = Array.isArray(news) ? news.length : 0;
-    const directional = direction === "CALL" ? bullish - bearish : bearish - bullish; // -1..1
+    const finnhubArticles = Array.isArray(news) ? news.length : 0;
+
+    // Sub-signal: merge Finviz headlines (dedupe by lowercased first 40 chars vs Finnhub).
+    let extraCount = 0;
+    if (finvizNews && finvizNews.headlines.length > 0) {
+      const seen = new Set<string>(
+        (Array.isArray(news) ? news : [])
+          .map((n: any) => String(n?.headline ?? "").toLowerCase().slice(0, 40))
+          .filter(Boolean),
+      );
+      for (const h of finvizNews.headlines) {
+        const k = h.toLowerCase().slice(0, 40);
+        if (k && !seen.has(k)) { seen.add(k); extraCount++; }
+      }
+    }
+    const articles = finnhubArticles + extraCount;
+    const directional = direction === "CALL" ? bullish - bearish : bearish - bullish;
     const sentimentScore = clamp100(50 + directional * 50);
     const volumeBoost = Math.min(20, articles); // up to +20 for active coverage
     const score = clamp100(sentimentScore * 0.8 + (50 + volumeBoost) * 0.2);
     return {
       score,
       configured: true,
-      source: "finnhub",
-      reason: `${articles} articles · sentiment ${(bullish * 100).toFixed(0)}% bull / ${(bearish * 100).toFixed(0)}% bear`,
-      details: { bullish, bearish, article_count: articles },
+      source: extraCount > 0 ? "finnhub+finviz_news" : "finnhub",
+      reason: `${articles} articles${extraCount > 0 ? ` (+${extraCount} Finviz)` : ""} · sentiment ${(bullish * 100).toFixed(0)}% bull / ${(bearish * 100).toFixed(0)}% bear`,
+      details: {
+        bullish, bearish,
+        article_count: articles,
+        finnhub_articles: finnhubArticles,
+        finviz_extra_articles: extraCount,
+        finviz_news_24h: finvizNews?.count_24h ?? null,
+      },
     };
   } catch (e) {
     return { score: 50, configured: true, source: "finnhub", reason: `error: ${(e as Error).message.slice(0, 80)}` };
