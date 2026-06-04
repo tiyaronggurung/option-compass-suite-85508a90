@@ -16,6 +16,7 @@ import { isExpired } from "@/lib/signalFreshness";
 import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
+import MarketOverviewStrip from "@/components/MarketOverviewStrip";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
