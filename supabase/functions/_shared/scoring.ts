@@ -22,7 +22,14 @@ export type ComponentScore = {
 export type ProviderStatus = {
   provider: string;
   role: string;            // what this provider currently powers
-  state: "active" | "reserved" | "missing_key";
+  state:
+    | "active"
+    | "reserved"
+    | "missing_key"
+    | "auth_failed"
+    | "not_entitled"
+    | "degraded";
+  detail?: string;
   note?: string;
 };
 
@@ -156,32 +163,34 @@ async function scoreVolatility(ticker: string): Promise<ComponentScore> {
 async function scoreOptionsFlowFinviz(
   ticker: string,
   direction: "CALL" | "PUT",
-  snap: Record<string, string> | null,
+  fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
 ): Promise<ComponentScore> {
-  if (!FINVIZ_KEY) return neutral("finviz", "Finviz key not configured (options flow)");
-  if (!snap) return { score: 50, configured: true, source: "finviz", reason: "Finviz snapshot unavailable" };
+  if (fv.state !== "ok" || !fv.row) {
+    return {
+      score: 50,
+      configured: fv.state !== "missing_key",
+      source: "finviz",
+      reason: `${fv.reason}${fv.detail ? ` (${fv.detail})` : ""}`,
+      details: { finviz_state: fv.state, fallback: "neutral_50" },
+    };
+  }
+  const snap = fv.row;
   const optionable = (snap["Optionable"] ?? "").trim().toLowerCase() === "yes";
   if (!optionable) {
     return { score: 40, configured: true, source: "finviz", reason: "Underlying not optionable per Finviz" };
   }
   const relVol = parseFloat(snap["Rel Volume"] ?? "1") || 1;
-  const shortFloat = parsePct(snap["Short Float"]) ?? 0; // percent
-  const recom = parseFloat(snap["Recom"] ?? "3") || 3;   // 1 strong buy .. 5 strong sell
+  const shortFloat = parsePct(snap["Short Float"]) ?? 0;
+  const recom = parseFloat(snap["Recom"] ?? "3") || 3;
   const perfWeek = parsePct(snap["Perf Week"]) ?? 0;
 
-  // Analyst directional pressure: 1=buy → +1, 5=sell → -1
-  const analystDir = clamp100(((3 - recom) / 2 + 1) * 50); // 0..100, 100 = strong buy
-  // Short interest acts as fuel for the opposite side.
-  // High short + CALL = squeeze potential (bullish). High short + PUT = crowded short (bearish-confirming).
+  const analystDir = clamp100(((3 - recom) / 2 + 1) * 50);
   const shortBoost = direction === "CALL"
-    ? Math.min(20, shortFloat * 0.8)      // squeeze fuel for calls
-    : Math.min(15, shortFloat * 0.5);     // mild confirm for puts
-  // Volume surge = real positioning (institutional footprint proxy).
+    ? Math.min(20, shortFloat * 0.8)
+    : Math.min(15, shortFloat * 0.5);
   const volSurge = clamp100(50 + (relVol - 1) * 30);
-  // Direction-aligned price action (week %).
   const moveAligned = direction === "CALL" ? perfWeek : -perfWeek;
   const moveScore = clamp100(50 + moveAligned * 2);
-  // Analyst dir aligned with trade direction.
   const analystAligned = direction === "CALL" ? analystDir : (100 - analystDir);
 
   const raw = volSurge * 0.40 + analystAligned * 0.30 + moveScore * 0.20 + shortBoost;
@@ -203,24 +212,28 @@ async function scoreOptionsFlowFinviz(
 
 async function scoreVolatilityFinviz(
   ticker: string,
-  snap: Record<string, string> | null,
+  fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
 ): Promise<ComponentScore> {
-  if (!FINVIZ_KEY) return neutral("finviz", "Finviz key not configured (volatility)");
-  if (!snap) return { score: 50, configured: true, source: "finviz", reason: "Finviz snapshot unavailable" };
-  // Finviz "Volatility" field is "W% M%" (week% month%).
+  if (fv.state !== "ok" || !fv.row) {
+    return {
+      score: 50,
+      configured: fv.state !== "missing_key",
+      source: "finviz",
+      reason: `${fv.reason}${fv.detail ? ` (${fv.detail})` : ""}`,
+      details: { finviz_state: fv.state, fallback: "neutral_50" },
+    };
+  }
+  const snap = fv.row;
   const volStr = snap["Volatility"] ?? "";
   const matches = volStr.match(/-?\d+(\.\d+)?/g) ?? [];
-  const volWeek = matches[0] ? parseFloat(matches[0]) : 0; // % daily HV approx
+  const volWeek = matches[0] ? parseFloat(matches[0]) : 0;
   const volMonth = matches[1] ? parseFloat(matches[1]) : volWeek;
   const atr = parseFloat(snap["ATR"] ?? "0") || 0;
   const price = parseFloat(snap["Price"] ?? "0") || 0;
   const atrPct = price > 0 ? (atr / price) * 100 : 0;
 
-  // Sweet spot for options trades: ~2-4% daily HV (≈30-60% annualized).
-  // 1% → low premium, low movement (bad). 6%+ → expensive premium (bad).
   const hv = (volWeek + volMonth) / 2 || atrPct;
   const ivScore = hv > 0 ? clamp100(100 - Math.abs(hv - 3) * 25) : 50;
-  // ATR liquidity proxy — meaningful range = tradable.
   const atrScore = clamp100(50 + Math.min(30, atrPct * 8));
   const score = clamp100(ivScore * 0.7 + atrScore * 0.3);
   return {
@@ -240,15 +253,15 @@ async function scoreVolatilityFinviz(
 
 // ---------- Finviz (technical confirmation) ----------
 async function finvizSnapshot(ticker: string): Promise<any | null> {
+  // LEGACY — preserved for the dormant scoreTechnical() Tradier-era code path.
+  // Active code path uses finvizSnapshotChecked() below.
   if (!FINVIZ_KEY) return null;
   try {
-    // Finviz Elite "quote" endpoint
     const url = `https://elite.finviz.com/quote_export.ashx?t=${ticker}&auth=${FINVIZ_KEY}`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const text = await res.text();
     if (!text || text.length < 20) return null;
-    // CSV: header, data
     const lines = text.trim().split("\n");
     if (lines.length < 2) return null;
     const headers = lines[0].split(",").map((s) => s.replace(/^"|"$/g, ""));
@@ -257,6 +270,87 @@ async function finvizSnapshot(ticker: string): Promise<any | null> {
     headers.forEach((h, i) => { row[h] = values[i] ?? ""; });
     return row;
   } catch { return null; }
+}
+
+// ---------- Finviz defensive fetch (ACTIVE) ----------
+// Detects HTML/upsell/login/empty responses so scoring never parses garbage.
+export type FinvizState =
+  | "ok"
+  | "missing_key"
+  | "auth_failed"
+  | "not_entitled"
+  | "html_response"
+  | "empty"
+  | "missing_fields"
+  | "http_error"
+  | "fetch_error";
+
+const FINVIZ_REASONS: Record<FinvizState, string> = {
+  ok:              "finviz_ok",
+  missing_key:     "finviz_key_not_configured",
+  auth_failed:     "finviz_auth_failed_or_not_entitled",
+  not_entitled:    "finviz_export_endpoint_unavailable",
+  html_response:   "finviz_returned_html_instead_of_csv",
+  empty:           "finviz_empty_response",
+  missing_fields:  "finviz_csv_missing_expected_fields",
+  http_error:      "finviz_http_error",
+  fetch_error:     "finviz_fetch_error",
+};
+
+const EXPECTED_FIELDS = ["Ticker", "Price", "SMA50", "SMA200", "Rel Volume"];
+
+export type FinvizSnap = {
+  row: Record<string, string> | null;
+  state: FinvizState;
+  reason: string;
+  detail?: string;
+};
+
+async function finvizSnapshotChecked(ticker: string): Promise<FinvizSnap> {
+  if (!FINVIZ_KEY) return { row: null, state: "missing_key", reason: FINVIZ_REASONS.missing_key };
+  let res: Response;
+  const url = `https://elite.finviz.com/quote_export.ashx?t=${ticker}&auth=${FINVIZ_KEY}`;
+  try {
+    res = await fetch(url); // default redirect: follow
+  } catch (e) {
+    return { row: null, state: "fetch_error", reason: FINVIZ_REASONS.fetch_error, detail: (e as Error).message.slice(0, 120) };
+  }
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  const finalUrl = (res.url ?? "").toLowerCase();
+  if (!res.ok) {
+    return { row: null, state: "http_error", reason: FINVIZ_REASONS.http_error, detail: `HTTP ${res.status}` };
+  }
+  const text = await res.text();
+  if (!text || text.trim().length < 20) {
+    return { row: null, state: "empty", reason: FINVIZ_REASONS.empty };
+  }
+  const head = text.slice(0, 500).toLowerCase();
+
+  // Upsell / non-entitled redirect (confirmed by finviz-debug probe).
+  if (finalUrl.includes("utm_campaign=quote-export") || finalUrl.includes("finviz.com/elite")) {
+    return { row: null, state: "not_entitled", reason: FINVIZ_REASONS.not_entitled, detail: "redirected to Elite upsell page" };
+  }
+  if (head.includes("login") && contentType.includes("text/html")) {
+    return { row: null, state: "auth_failed", reason: FINVIZ_REASONS.auth_failed, detail: "login page returned" };
+  }
+  if (contentType.includes("text/html") || head.includes("<!doctype html") || head.includes("<html")) {
+    return { row: null, state: "html_response", reason: FINVIZ_REASONS.html_response, detail: `content-type: ${contentType || "unknown"}` };
+  }
+
+  const lines = text.trim().split("\n");
+  if (lines.length < 2) {
+    return { row: null, state: "empty", reason: FINVIZ_REASONS.empty, detail: "CSV header only" };
+  }
+  const headers = lines[0].split(",").map((s) => s.replace(/^"|"$/g, "").trim());
+  const values = lines[1].split(",").map((s) => s.replace(/^"|"$/g, "").trim());
+  const row: Record<string, string> = {};
+  headers.forEach((h, i) => { row[h] = values[i] ?? ""; });
+
+  const missing = EXPECTED_FIELDS.filter((f) => !(f in row));
+  if (missing.length > 0) {
+    return { row: null, state: "missing_fields", reason: FINVIZ_REASONS.missing_fields, detail: `missing: ${missing.join(", ")}` };
+  }
+  return { row, state: "ok", reason: FINVIZ_REASONS.ok };
 }
 
 function parsePct(s: string | undefined): number | null {
@@ -396,14 +490,15 @@ export async function scoreInstitutional(
   const { ticker, direction, baseTrendScore } = args;
 
   // Shared Finviz snapshot — single fetch powers technical + options flow + volatility.
-  const snap = await finvizSnapshot(ticker);
+  // finvizSnapshotChecked returns a typed state so we never parse HTML/upsell pages as CSV.
+  const fv = await finvizSnapshotChecked(ticker);
 
   const [optionsFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
-    scoreOptionsFlowFinviz(ticker, direction, snap),
-    scoreTechnicalWithSnap(ticker, baseTrendScore, snap),
+    scoreOptionsFlowFinviz(ticker, direction, fv),
+    scoreTechnicalWithSnap(ticker, baseTrendScore, fv),
     scoreNews(ticker, direction),
     scoreSentiment(ticker, direction),
-    scoreVolatilityFinviz(ticker, snap),
+    scoreVolatilityFinviz(ticker, fv),
     getRegime(admin),
   ]);
 
@@ -439,12 +534,22 @@ export async function scoreInstitutional(
   }
 
   // Provider lifecycle metadata — surfaced in score_components.provider_status
+  // Finviz state reflects the actual fetch result (active / auth_failed / not_entitled / etc.)
+  const finvizProviderState: ProviderStatus["state"] =
+    fv.state === "ok"            ? "active" :
+    fv.state === "missing_key"   ? "missing_key" :
+    fv.state === "auth_failed"   ? "auth_failed" :
+    fv.state === "not_entitled"  ? "not_entitled" :
+                                   "degraded";
   const provider_status: ProviderStatus[] = [
     {
       provider: "finviz",
       role: "options_flow + volatility + technical",
-      state: FINVIZ_KEY ? "active" : "missing_key",
-      note: "Aggregate-level options data only (no per-contract sweeps).",
+      state: finvizProviderState,
+      detail: fv.state !== "ok" ? `${fv.reason}${fv.detail ? ` — ${fv.detail}` : ""}` : undefined,
+      note: finvizProviderState === "active"
+        ? "Aggregate-level options data only (no per-contract sweeps)."
+        : "Finviz request did not return valid CSV — all 3 components fell back to neutral 50.",
     },
     {
       provider: "finnhub",
@@ -482,15 +587,15 @@ export async function scoreInstitutional(
   };
 }
 
-// Variant of scoreTechnical that accepts a pre-fetched Finviz snapshot
+// Variant of scoreTechnical that accepts the checked Finviz snapshot
 // to avoid double-fetching when called from scoreInstitutional.
 async function scoreTechnicalWithSnap(
   ticker: string,
   baseTrendScore: number,
-  snap: Record<string, string> | null,
+  fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
 ): Promise<ComponentScore> {
   const localScore = clamp100((baseTrendScore + 1) * 50);
-  if (!FINVIZ_KEY) {
+  if (fv.state === "missing_key") {
     return {
       score: localScore,
       configured: false,
@@ -498,9 +603,17 @@ async function scoreTechnicalWithSnap(
       reason: `Alpaca trend ${baseTrendScore >= 0 ? "+" : ""}${baseTrendScore.toFixed(2)} · Finviz not configured`,
     };
   }
-  if (!snap) {
-    return { score: localScore, configured: true, source: "alpaca+finviz", reason: "Finviz unreachable" };
+  if (fv.state !== "ok" || !fv.row) {
+    // Finviz returned HTML / upsell / login / empty — fall back to Alpaca-only.
+    return {
+      score: localScore,
+      configured: true,
+      source: "alpaca",
+      reason: `Alpaca-only (${fv.reason}${fv.detail ? `: ${fv.detail}` : ""})`,
+      details: { finviz_state: fv.state, fallback: "alpaca_only" },
+    };
   }
+  const snap = fv.row;
   const perfWeek = parsePct(snap["Perf Week"]) ?? 0;
   const sma50 = parsePct(snap["SMA50"]) ?? 0;
   const sma200 = parsePct(snap["SMA200"]) ?? 0;
