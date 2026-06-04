@@ -3,9 +3,35 @@
 // Lovable AI Gateway, with lexicon fallback. Safe-by-design: never throws
 // into scoring; missing/auth/no_data → neutral 50.
 
-import { fetchCashtagTweets, TAPI_CONFIGURED, type TAPITweet, type TAPIState } from "./twitterapi.ts";
+import {
+  fetchCashtagTweets,
+  fetchTrustedSourceTweets,
+  TAPI_CONFIGURED,
+  type TAPITweet,
+  type TAPIState,
+} from "./twitterapi.ts";
+import {
+  TRUSTED_ACCOUNTS,
+  findTrustedAccount,
+  tickerMatchesText,
+  tierStats,
+  type TrustedTier,
+} from "./trusted-sources.ts";
 
 const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY") ?? "";
+
+export type TrustedHit = {
+  account: string;
+  tier: TrustedTier;
+  weight: number;
+  headline: string;
+  sentiment: "bullish" | "bearish" | "neutral";
+  engagement: number;
+  followers: number;
+  url?: string;
+  created_at?: string;
+  age_minutes?: number;
+};
 
 export type SocialIntelResult = {
   score: number;            // 0..100 (direction-aware)
@@ -16,7 +42,13 @@ export type SocialIntelResult = {
     source: string;
     provider_status: TAPIState | "missing_key";
     score: number;
-    subscores: { polarity: number; velocity: number; kol: number; engagement: number };
+    subscores: {
+      polarity: number;
+      velocity: number;
+      kol: number;
+      engagement: number;
+      trusted_source: number;
+    };
     samples: {
       total_tweets: number;
       bullish_count: number;
@@ -37,6 +69,13 @@ export type SocialIntelResult = {
         sentiment?: "bullish" | "bearish" | "neutral";
       }>;
     };
+    trusted_source_score: number;
+    trusted_source_hits: number;
+    trusted_source_accounts: string[];
+    trusted_source_headlines: TrustedHit[];
+    trusted_source_summary: string;
+    trusted_tier_distribution: Record<string, number>;
+    monitored_account_count: number;
     reason_code: string;
     human_reason: string;
     classifier: "llm" | "lexicon" | "none";
