@@ -11,6 +11,8 @@ import {
   type SectorPerf,
 } from "./finviz-extras.ts";
 import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED } from "./unusual-whales.ts";
+import { scoreSocialIntelligence } from "./social-intel.ts";
+import { TAPI_CONFIGURED } from "./twitterapi.ts";
 
 export type ComponentKey =
   | "options_flow"
@@ -812,37 +814,28 @@ async function scoreNews(
 }
 
 
-// ---------- Apify (X/Twitter sentiment) ----------
+// ---------- Sentiment (TwitterAPI.io Social Intelligence — primary) ----------
+// Replaces prior Apify path. TwitterAPI.io powers a 4-subscore engine:
+// polarity (40), mention velocity (25), KOL activity (20), engagement momentum (15).
+// If TwitterAPI.io is unavailable → neutral 50 (preserves prior behavior).
 async function scoreSentiment(ticker: string, direction: "CALL" | "PUT"): Promise<ComponentScore> {
-  if (!APIFY_TOKEN) return neutral("apify", "Apify token not configured");
   try {
-    // Lightweight key-value check — assumes user has a saved dataset with $TICKER aggregates.
-    // Reads the most recent dataset item; if none exists, returns neutral.
-    const url = `https://api.apify.com/v2/key-value-stores/x_sentiment/records/${ticker}?token=${APIFY_TOKEN}`;
-    const res = await fetch(url);
-    if (res.status === 404) {
-      return { score: 50, configured: true, source: "apify", reason: "no sentiment data for ticker yet" };
-    }
-    if (!res.ok) {
-      return { score: 50, configured: true, source: "apify", reason: `HTTP ${res.status}` };
-    }
-    const data = await res.json();
-    const bullish = Number(data?.bullish_pct ?? 0);
-    const bearish = Number(data?.bearish_pct ?? 0);
-    const mentions = Number(data?.mentions ?? 0);
-    const directional = direction === "CALL" ? bullish - bearish : bearish - bullish;
-    const sentimentScore = clamp100(50 + directional * 50);
-    const velocityBoost = Math.min(20, Math.log10(mentions + 1) * 10);
-    const score = clamp100(sentimentScore * 0.7 + (50 + velocityBoost) * 0.3);
+    const si = await scoreSocialIntelligence(ticker, direction);
     return {
-      score,
-      configured: true,
-      source: "apify",
-      reason: `${mentions} mentions · ${(bullish * 100).toFixed(0)}% bull`,
-      details: { bullish, bearish, mentions },
+      score: si.score,
+      configured: si.configured,
+      source: si.source,
+      reason: si.reason,
+      details: si.details as unknown as Record<string, unknown>,
     };
   } catch (e) {
-    return { score: 50, configured: true, source: "apify", reason: `error: ${(e as Error).message.slice(0, 80)}` };
+    return {
+      score: 50,
+      configured: TAPI_CONFIGURED,
+      source: TAPI_CONFIGURED ? "twitterapi_io" : "neutral",
+      reason: `sentiment error: ${(e as Error).message.slice(0, 80)}`,
+      details: { source: "twitterapi_io", provider_status: "degraded", reason_code: "exception" },
+    };
   }
 }
 
@@ -1019,11 +1012,30 @@ export async function scoreInstitutional(
       }
       return { provider: "finnhub", role: "news + sentiment", state, detail };
     })(),
-    {
-      provider: "apify",
-      role: "x/twitter sentiment",
-      state: APIFY_TOKEN ? "active" : "missing_key",
-    },
+    (() => {
+      const sd = (sentiment.details ?? {}) as Record<string, unknown>;
+      const ps = String(sd.provider_status ?? "missing_key");
+      let state: ProviderStatus["state"];
+      let detail: string | undefined;
+      if (!TAPI_CONFIGURED) {
+        state = "missing_key";
+        detail = "TWITTERAPI_IO_API_KEY not configured — Sentiment neutral 50";
+      } else if (ps === "active") {
+        state = "active";
+        const samples = (sd.samples ?? {}) as Record<string, unknown>;
+        detail = `Powering Sentiment (tweets=${samples.total_tweets ?? 0}, score=${Math.round(Number(sd.score ?? 50))})`;
+      } else {
+        state = ps === "auth_failed" ? "auth_failed" : "degraded";
+        detail = `TwitterAPI.io ${ps} — Sentiment fell back to neutral 50`;
+      }
+      return {
+        provider: "twitterapi_io",
+        role: "sentiment (social intelligence — primary)",
+        state,
+        detail,
+        note: "TwitterAPI.io + AI classifier power Sentiment; neutral 50 on failure.",
+      };
+    })(),
     {
       provider: "tradier",
       role: "options_flow + volatility (per-contract)",
