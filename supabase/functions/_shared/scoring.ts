@@ -3,6 +3,13 @@
 // The final blended score is weighted, clamped 0..100, then optionally adjusted
 // by the market regime (capped at ±5 points). No live orders, paper-only.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import {
+  fetchFinvizExtrasForTicker,
+  type FinvizExtras,
+  type InsiderSummary,
+  type FinvizNewsSummary,
+  type SectorPerf,
+} from "./finviz-extras.ts";
 
 export type ComponentKey =
   | "options_flow"
