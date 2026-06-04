@@ -334,9 +334,12 @@ export type FinvizSnap = {
 async function finvizSnapshotChecked(ticker: string): Promise<FinvizSnap> {
   if (!FINVIZ_KEY) return { row: null, state: "missing_key", reason: FINVIZ_REASONS.missing_key };
   let res: Response;
-  // Screener export endpoint returns snapshot fields (Ticker, Price, SMA50, SMA200, etc.).
+  // Screener export endpoint returns snapshot fields. v=152 + explicit c= column list
+  // gives us all the fields scoring expects (Ticker, Price, SMA50, SMA200, Rel Volume, ATR,
+  // Volatility, Recom, Short Float, Perf Week, Sector, Optionable, etc.).
   // Previous URL (quote_export.ashx) was returning historical OHLCV bars on this plan.
-  const url = `https://elite.finviz.com/export.ashx?v=152&t=${ticker}&auth=${FINVIZ_KEY}`;
+  const FINVIZ_COLS = "0,1,2,3,4,5,6,7,30,42,43,44,45,46,47,48,49,50,51,52,53,54,59,62,63,64,65,66,67,68,69,87";
+  const url = `https://elite.finviz.com/export.ashx?v=152&t=${ticker}&c=${FINVIZ_COLS}&auth=${FINVIZ_KEY}`;
   try {
     res = await fetch(url); // default redirect: follow
   } catch (e) {
