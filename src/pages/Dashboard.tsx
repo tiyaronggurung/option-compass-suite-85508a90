@@ -72,7 +72,7 @@ export default function Dashboard() {
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
-        supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).eq("action", "dismissed"),
+        supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).in("action", ["dismissed", "approved"]),
         supabase.from("provider_configs").select("last_status").eq("provider", "alpaca").maybeSingle(),
         supabase.from("risk_settings").select("*").eq("user_id", user!.id).maybeSingle(),
       ]);
