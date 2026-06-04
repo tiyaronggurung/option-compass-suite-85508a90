@@ -152,15 +152,42 @@ function buildOcc(ticker: string, expiry: string, optionType: string, strike: nu
   return `${ticker}${yymmdd}${cp}${strikeInt}`;
 }
 
-// UW: pull chain of contracts for ticker. Endpoint shape may vary; we defensively
-// accept either { data: [...] } or array root and parse common fields.
+// Standard normal CDF (Abramowitz & Stegun 26.2.17, ε < 7.5e-8).
+function normCdf(x: number): number {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x) / Math.SQRT2;
+  const t = 1 / (1 + p * ax);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
+  return 0.5 * (1 + sign * y);
+}
+// Black-Scholes delta estimate. r=0.04 default, q=0. ivPct can be decimal (0.25) or percent (25).
+function estimateDelta(optionType: "CALL"|"PUT", spot: number, strike: number, dte: number, iv: number | null): number | null {
+  if (!Number.isFinite(spot) || spot <= 0 || !Number.isFinite(strike) || strike <= 0 || dte < 0) return null;
+  const ivDec = iv == null ? 0.25 : (iv > 5 ? iv / 100 : iv); // assume 25% if missing
+  if (!Number.isFinite(ivDec) || ivDec <= 0) return null;
+  const T = Math.max(1, dte) / 365;
+  const r = 0.04;
+  const d1 = (Math.log(spot / strike) + (r + (ivDec * ivDec) / 2) * T) / (ivDec * Math.sqrt(T));
+  const callDelta = normCdf(d1);
+  return optionType === "CALL" ? callDelta : callDelta - 1;
+}
+
+// Pulls last_price for the ticker so we can estimate delta when providers don't return greeks.
+async function fetchSpot(admin: any, ticker: string): Promise<number | null> {
+  const { data } = await admin.from("tradable_universe").select("last_price").eq("ticker", ticker).maybeSingle();
+  const lp = data?.last_price;
+  return lp != null && Number.isFinite(Number(lp)) ? Number(lp) : null;
+}
+
+// UW: chain by expiry. Endpoint returns flat array of contracts with nbbo bid/ask, OI, volume, IV.
+// Greeks are not returned by this endpoint; delta is estimated downstream from spot + strike + DTE + IV.
 async function fetchUnusualWhalesChain(ticker: string, optionType: string, profile: RiskProfile): Promise<Candidate[] | null> {
   const key = Deno.env.get("UNUSUAL_WHALES_API_KEY");
   if (!key) return null;
   const p = BAND_PREFS[profile];
   const today = new Date();
 
-  // Try expiries endpoint first
   let expiries: string[] = [];
   try {
     const r = await fetch(`https://api.unusualwhales.com/api/stock/${encodeURIComponent(ticker)}/expiry-breakdown`, {
@@ -170,22 +197,19 @@ async function fetchUnusualWhalesChain(ticker: string, optionType: string, profi
       const j = await r.json().catch(() => null) as any;
       const arr: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
       for (const row of arr) {
-        const e = row?.expiry ?? row?.expiration ?? row?.expires_at;
+        const e = row?.expires ?? row?.expiry ?? row?.expiration ?? row?.expires_at;
         if (typeof e === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e)) expiries.push(e);
       }
     }
   } catch (e) { console.warn("uw expiries err", e); }
-
   if (expiries.length === 0) return null;
-  // Filter expiries to band window with some slack
+
   expiries = Array.from(new Set(expiries))
     .filter(e => { const d = daysBetween(today, e); return d >= Math.max(MIN_DTE_FLOOR, p.dteMin - 7) && d <= p.dteMax + 7; })
     .sort();
-
   if (expiries.length === 0) return null;
 
   const candidates: Candidate[] = [];
-  // Fetch up to 3 expiries to limit calls
   for (const expiry of expiries.slice(0, 3)) {
     try {
       const r = await fetch(
@@ -196,29 +220,30 @@ async function fetchUnusualWhalesChain(ticker: string, optionType: string, profi
       const j = await r.json().catch(() => null) as any;
       const arr: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
       for (const c of arr) {
-        const sideRaw = String(c.option_type ?? c.type ?? c.side ?? "").toUpperCase();
-        const side = sideRaw.startsWith("C") ? "CALL" : sideRaw.startsWith("P") ? "PUT" : "";
+        const occ = String(c.option_symbol ?? "").trim();
+        // OCC encodes side: ...C########  / ...P########
+        const m = /^[A-Z]{1,6}\d{6}([CP])(\d{8})$/.exec(occ);
+        if (!m) continue;
+        const side = m[1] === "C" ? "CALL" : "PUT";
         if (side !== optionType) continue;
-        const strike = num(c.strike ?? c.strike_price);
-        if (strike == null) continue;
+        const strike = parseInt(m[2], 10) / 1000;
         const dte = daysBetween(today, expiry);
-        const bid = num(c.bid);
-        const ask = num(c.ask);
-        const last = num(c.last ?? c.last_price);
+        const bid = num(c.nbbo_bid ?? c.bid);
+        const ask = num(c.nbbo_ask ?? c.ask);
+        const last = num(c.last_price ?? c.last);
         const mid = bid != null && ask != null ? (bid + ask) / 2 : null;
         const premium = mid ?? last ?? bid ?? ask;
         candidates.push({
-          contract_symbol: typeof c.option_symbol === "string" ? c.option_symbol : buildOcc(ticker, expiry, optionType, strike),
+          contract_symbol: occ,
           strike, expiry, dte,
           delta: num(c.delta), gamma: num(c.gamma), theta: num(c.theta), vega: num(c.vega),
-          iv: num(c.iv ?? c.implied_volatility),
+          iv: num(c.implied_volatility ?? c.iv),
           bid, ask, mid, premium,
           volume: numInt(c.volume), open_interest: numInt(c.open_interest ?? c.oi),
         });
       }
     } catch (e) { console.warn("uw chain err", expiry, e); }
   }
-
   return candidates.length ? candidates : null;
 }
 
