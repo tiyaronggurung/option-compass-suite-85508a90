@@ -476,12 +476,23 @@ async function scoreNews(
     if (finvizNews && finvizNews.count_7d > 0) {
       const volumeBoost = Math.min(20, finvizNews.count_7d);
       const score = clamp100(50 + volumeBoost);
+      const headlines = (finvizNews.headlines ?? []).slice(0, 5).map((h) => ({
+        headline: h.slice(0, 200), source: "finviz" as const,
+      }));
       return {
         score,
         configured: true,
         source: "finviz_news",
         reason: `Finnhub missing · Finviz ${finvizNews.count_24h}/24h · ${finvizNews.count_7d}/7d`,
-        details: { finviz_news_24h: finvizNews.count_24h, finviz_news_7d: finvizNews.count_7d },
+        details: {
+          finviz_news_24h: finvizNews.count_24h,
+          finviz_news_7d: finvizNews.count_7d,
+          article_count: finvizNews.count_7d,
+          reason_code: finvizNews.count_7d >= 20 ? "volume_cap_hit_20_articles" : "volume_only_below_cap",
+          top_headlines: headlines,
+          finnhub_sentiment_403: false,
+          finviz_fallback_active: true,
+        },
       };
     }
     return neutral("finnhub", "Finnhub key not configured");
@@ -522,6 +533,33 @@ async function scoreNews(
     }
     const articles = finnhubArticles + extraCount;
 
+    // Build merged top-5 headlines (Finnhub first, then Finviz extras), with source tag.
+    // Transparency only — does NOT feed scoring math.
+    const topHeadlines: Array<{ headline: string; source: "finnhub" | "finviz"; url?: string; datetime?: number }> = [];
+    if (Array.isArray(news)) {
+      for (const n of news) {
+        if (topHeadlines.length >= 5) break;
+        const h = String((n as any)?.headline ?? "").trim();
+        if (!h) continue;
+        topHeadlines.push({
+          headline: h.slice(0, 200),
+          source: "finnhub",
+          url: typeof (n as any)?.url === "string" ? (n as any).url : undefined,
+          datetime: typeof (n as any)?.datetime === "number" ? (n as any).datetime : undefined,
+        });
+      }
+    }
+    if (topHeadlines.length < 5 && finvizNews?.headlines?.length) {
+      const seen = new Set(topHeadlines.map((t) => t.headline.toLowerCase().slice(0, 40)));
+      for (const h of finvizNews.headlines) {
+        if (topHeadlines.length >= 5) break;
+        const k = h.toLowerCase().slice(0, 40);
+        if (!k || seen.has(k)) continue;
+        seen.add(k);
+        topHeadlines.push({ headline: h.slice(0, 200), source: "finviz" });
+      }
+    }
+
     // Case A: full path — sentiment endpoint worked, use blended formula.
     if (sentimentOk && sent) {
       const bullish = Number(sent?.sentiment?.bullishPercent ?? 0);
@@ -542,6 +580,10 @@ async function scoreNews(
           finviz_extra_articles: extraCount,
           finviz_news_24h: finvizNews?.count_24h ?? null,
           news_sentiment_endpoint: "ok",
+          reason_code: articles >= 20 ? "blended_sentiment_volume_cap_hit" : "blended_sentiment_volume",
+          top_headlines: topHeadlines,
+          finnhub_sentiment_403: false,
+          finviz_fallback_active: false,
         },
       };
     }
@@ -551,6 +593,7 @@ async function scoreNews(
       const volumeBoost = Math.min(20, articles);
       const score = clamp100(50 + volumeBoost);
       const usingFinvizFallback = finnhubArticles === 0 && extraCount > 0;
+      const sentEndpoint403 = sentRes.status === 403;
       return {
         score,
         configured: true,
@@ -566,6 +609,10 @@ async function scoreNews(
           finviz_news_7d: finvizNews?.count_7d ?? null,
           news_sentiment_endpoint: `http_${sentRes.status}`,
           fallback_active: usingFinvizFallback ? "finnhub_403_finviz_news_fallback_active" : undefined,
+          reason_code: articles >= 20 ? "volume_cap_hit_20_articles" : "volume_only_below_cap",
+          top_headlines: topHeadlines,
+          finnhub_sentiment_403: sentEndpoint403,
+          finviz_fallback_active: extraCount > 0,
         },
       };
     }
@@ -579,6 +626,10 @@ async function scoreNews(
       details: {
         news_sentiment_endpoint: `http_${sentRes.status}`,
         company_news_endpoint: `http_${newsRes.status}`,
+        reason_code: "no_news_neutral",
+        top_headlines: [],
+        finnhub_sentiment_403: sentRes.status === 403,
+        finviz_fallback_active: false,
       },
     };
   } catch (e) {
