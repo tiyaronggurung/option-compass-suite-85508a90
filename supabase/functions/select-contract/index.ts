@@ -468,14 +468,24 @@ Deno.serve(async (req) => {
 
 
 
-  const { scored, best } = rankCandidates(candidates, profile);
-  if (!best) {
+  const { scored, best, rejectionCounts, bestEffort } = rankCandidates(candidates, profile);
+
+  // Select either normal or best-effort pick. Hard fail only if neither exists.
+  const pick: ScoredCandidate | null = best ?? bestEffort;
+  const selectionMode: "normal" | "best_effort" = best ? "normal" : "best_effort";
+  const belowBand = !best && !!bestEffort;
+  const warning = belowBand
+    ? "Contract selected using best-effort mode. Contract falls below preferred liquidity/spread standards."
+    : null;
+
+  if (!pick) {
     return json({
       ok: false,
       reason: "no_candidate_passed_guards",
       contract_source: source,
       profile,
       candidates_considered: candidates.length,
+      rejection_counts: rejectionCounts,
       latency_ms: Date.now() - t0,
     });
   }
@@ -489,29 +499,33 @@ Deno.serve(async (req) => {
         user_id: userId,
         underlying: ticker,
         option_type: optionType,
-        contract_symbol: best.contract_symbol ?? null,
-        strike: best.strike,
-        expiry: best.expiry,
-        dte: best.dte,
-        delta: best.delta,
-        gamma: best.gamma ?? null,
-        theta: best.theta ?? null,
-        vega: best.vega ?? null,
-        iv: best.iv ?? null,
-        bid: best.bid,
-        ask: best.ask,
-        mid: best.mid ?? null,
-        spread_pct: best.spread_pct,
-        volume: best.volume ?? null,
-        open_interest: best.open_interest ?? null,
-        premium: best.premium,
-        contract_score: best.contract_score,
-        liquidity_score: best.liquidity_score,
-        rationale: best.rationale,
-        rationale_factors: best.rationale_factors,
+        contract_symbol: pick.contract_symbol ?? null,
+        strike: pick.strike,
+        expiry: pick.expiry,
+        dte: pick.dte,
+        delta: pick.delta,
+        gamma: pick.gamma ?? null,
+        theta: pick.theta ?? null,
+        vega: pick.vega ?? null,
+        iv: pick.iv ?? null,
+        bid: pick.bid,
+        ask: pick.ask,
+        mid: pick.mid ?? null,
+        spread_pct: pick.spread_pct,
+        volume: pick.volume ?? null,
+        open_interest: pick.open_interest ?? null,
+        premium: pick.premium,
+        contract_score: pick.contract_score,
+        liquidity_score: pick.liquidity_score,
+        rationale: pick.rationale,
+        rationale_factors: pick.rationale_factors,
         contract_source: source,
         candidates_considered: candidates.length,
         risk_profile: profile,
+        selection_mode: selectionMode,
+        below_band: belowBand,
+        warning,
+        rejection_counts: rejectionCounts,
       })
       .select("id")
       .single();
@@ -525,9 +539,14 @@ Deno.serve(async (req) => {
     contract_source: source,
     profile,
     candidates_considered: candidates.length,
-    best,
+    rejection_counts: rejectionCounts,
+    selection_mode: selectionMode,
+    below_band: belowBand,
+    warning,
+    best: pick,
     alternates: scored.slice(1, 4),
     latency_ms: Date.now() - t0,
+
   });
 });
 
