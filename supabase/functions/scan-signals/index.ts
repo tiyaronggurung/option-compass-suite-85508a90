@@ -5,6 +5,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { pickBestContract } from "../_shared/pickContract.ts";
 import { getEarningsCatalyst, type CatalystResult } from "../_shared/earningsCatalyst.ts";
 import { buildConfirmations } from "../_shared/confirmations.ts";
+import { scoreInstitutional, tierFor as tierForScore } from "../_shared/scoring.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
