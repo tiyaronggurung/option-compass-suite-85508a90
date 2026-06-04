@@ -77,6 +77,9 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                 <Timer className="h-3 w-3" /> {freshLabel}
               </Badge>
             </div>
+            {subLabel && (
+              <div className="text-[11px] text-primary/80 font-medium mt-0.5">{subLabel}</div>
+            )}
             <div className="text-[11px] text-muted-foreground flex items-center gap-x-2 gap-y-0.5 mt-1 flex-wrap">
               <span className="inline-flex items-center gap-1">
                 <Clock className="h-3 w-3" />
