@@ -224,6 +224,11 @@ type PaperTradeLite = {
   confidence_at_approval: number | null;
 };
 
+type SignalLifecycleLite = {
+  id: string;
+  lifecycle_state: string | null;
+};
+
 const PAPER_CLASS_ORDER = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
 const PAPER_CLASS_LABEL: Record<string, string> = {
   developing: "Developing (50–64)",
@@ -233,10 +238,20 @@ const PAPER_CLASS_LABEL: Record<string, string> = {
   elite: "Elite (90+)",
 };
 
+const LIFECYCLE_ROW_ORDER = ["fresh", "active", "weakening", "expired", "invalidated"] as const;
+const LIFECYCLE_ROW_LABEL: Record<string, string> = {
+  fresh: "Fresh",
+  active: "Active",
+  weakening: "Weakening",
+  expired: "Expired",
+  invalidated: "Invalidated",
+};
+
 export default function OutcomeAnalytics() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [rows, setRows] = useState<Outcome[] | null>(null);
   const [paperTrades, setPaperTrades] = useState<PaperTradeLite[]>([]);
+  const [signalLifecycle, setSignalLifecycle] = useState<SignalLifecycleLite[]>([]);
   const [running, setRunning] = useState(false);
 
   // Filters
