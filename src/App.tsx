@@ -17,6 +17,7 @@ import Alerts from "@/pages/Alerts";
 import Performance from "@/pages/Performance";
 import SettingsPage from "@/pages/Settings";
 import Diagnostics from "@/pages/Diagnostics";
+import InsiderDiagnostics from "@/pages/InsiderDiagnostics";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
