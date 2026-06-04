@@ -877,6 +877,51 @@ export default function OutcomeAnalytics() {
             )}
           </Card>
           <Card className="p-4">
+            <h2 className="text-sm font-semibold">Paper Option P/L by Class</h2>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              Robinhood-style option P/L grouped by paper test class (confidence band at approval).
+              Open trades contribute unrealized %; closed trades contribute realized $ and win rate. Paper only — no real money.
+            </p>
+            {optionPnlByClass.length === 0 ? (
+              <div className="text-xs text-muted-foreground mt-2">No paper option trades yet.</div>
+            ) : (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2">Class</th>
+                      <th className="text-right py-1.5 px-2">Trades</th>
+                      <th className="text-right py-1.5 px-2">Open / Closed</th>
+                      <th className="text-right py-1.5 px-2">Avg unrealized %</th>
+                      <th className="text-right py-1.5 px-2">Realized P/L $</th>
+                      <th className="text-right py-1.5 px-2">Win rate (closed)</th>
+                      <th className="text-right py-1.5 px-2">Total cost $</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {optionPnlByClass.map((d) => (
+                      <tr key={d.key} className="border-b border-border/50">
+                        <td className="py-1.5 px-2">{d.label}</td>
+                        <td className="py-1.5 px-2 text-right ticker-mono">{d.n}</td>
+                        <td className="py-1.5 px-2 text-right ticker-mono">{d.open} / {d.closed}</td>
+                        <td className={cn("py-1.5 px-2 text-right ticker-mono", d.avgUnrealPct == null ? "text-muted-foreground/40" : d.avgUnrealPct >= 0 ? "text-bull" : "text-bear")}>
+                          {d.avgUnrealPct == null ? "—" : `${d.avgUnrealPct >= 0 ? "+" : ""}${d.avgUnrealPct.toFixed(2)}%`}
+                        </td>
+                        <td className={cn("py-1.5 px-2 text-right ticker-mono", d.totalRealized == null ? "text-muted-foreground/40" : d.totalRealized >= 0 ? "text-bull" : "text-bear")}>
+                          {d.totalRealized == null ? "—" : `${d.totalRealized >= 0 ? "+" : ""}$${d.totalRealized.toFixed(2)}`}
+                        </td>
+                        <td className={cn("py-1.5 px-2 text-right ticker-mono", d.winRate == null && "text-muted-foreground/40")}>
+                          {d.winRate == null ? "—" : `${d.winRate.toFixed(0)}%`}
+                        </td>
+                        <td className="py-1.5 px-2 text-right ticker-mono text-muted-foreground">${d.totalCost.toFixed(0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+          <Card className="p-4">
             <h2 className="text-sm font-semibold">Paper Trade Class Comparison</h2>
             <p className="text-[11px] text-muted-foreground mb-2">
               Approved paper trades bucketed by the confidence band at approval time.
