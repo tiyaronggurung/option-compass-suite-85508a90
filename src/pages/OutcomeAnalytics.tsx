@@ -240,6 +240,8 @@ type SignalLifecycleLite = {
   tier: string | null;
   max_tier_seen: string | null;
   min_tier_seen: string | null;
+  is_demo: boolean | null;
+  source: string | null;
 };
 
 const PAPER_CLASS_ORDER = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
@@ -310,12 +312,27 @@ export default function OutcomeAnalytics() {
     const [{ data: outcomeData }, { data: tradeData }, { data: sigData }] = await Promise.all([
       supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
       supabase.from("paper_trades").select("signal_id, paper_test_class, confidence_at_approval, status, is_option, unrealized_pl, unrealized_pl_pct, realized_pl, total_cost").limit(5000),
-      supabase.from("signals").select("id, lifecycle_state, confidence, confidence_at_birth, max_confidence_seen, min_confidence_seen, tier, max_tier_seen, min_tier_seen").limit(5000),
-
+      supabase.from("signals").select("id, lifecycle_state, confidence, confidence_at_birth, max_confidence_seen, min_confidence_seen, tier, max_tier_seen, min_tier_seen, is_demo, source").limit(5000),
     ]);
-    setRows((outcomeData ?? []) as unknown as Outcome[]);
-    setPaperTrades((tradeData ?? []) as unknown as PaperTradeLite[]);
-    setSignalLifecycle((sigData ?? []) as unknown as SignalLifecycleLite[]);
+
+    // Exclude demo / test signals from all analytics to prevent data contamination.
+    const excludedIds = new Set<string>();
+    for (const s of (sigData ?? [])) {
+      if (s.is_demo || (s.source && String(s.source).includes("TEST_ONLY_OPTION_PL_VALIDATION"))) {
+        excludedIds.add(s.id);
+      }
+    }
+
+    const cleanOutcomes = ((outcomeData ?? []) as unknown as Outcome[])
+      .filter((r) => !excludedIds.has(r.signal_id));
+    const cleanTrades = ((tradeData ?? []) as unknown as PaperTradeLite[])
+      .filter((t) => !t.signal_id || !excludedIds.has(t.signal_id));
+    const cleanSignals = ((sigData ?? []) as unknown as SignalLifecycleLite[])
+      .filter((s) => !s.is_demo && !(s.source && String(s.source).includes("TEST_ONLY_OPTION_PL_VALIDATION")));
+
+    setRows(cleanOutcomes);
+    setPaperTrades(cleanTrades);
+    setSignalLifecycle(cleanSignals);
   }
   useEffect(() => { if (isAdmin) refresh(); }, [isAdmin]);
 

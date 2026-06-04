@@ -138,12 +138,21 @@ export default function PerformanceDiagnostics() {
 
   async function refresh() {
     setRows(null);
-    const { data } = await supabase
-      .from("signal_outcomes")
-      .select("*")
-      .order("entry_at", { ascending: false })
-      .limit(5000);
-    setRows((data ?? []) as unknown as Outcome[]);
+    const [{ data }, { data: sigData }] = await Promise.all([
+      supabase.from("signal_outcomes").select("*").order("entry_at", { ascending: false }).limit(5000),
+      supabase.from("signals").select("id, is_demo, source").limit(5000),
+    ]);
+
+    // Exclude demo / test signals from analytics to prevent data contamination.
+    const excludedIds = new Set<string>();
+    for (const s of (sigData ?? [])) {
+      if (s.is_demo || (s.source && String(s.source).includes("TEST_ONLY_OPTION_PL_VALIDATION"))) {
+        excludedIds.add(s.id);
+      }
+    }
+    const clean = ((data ?? []) as unknown as Outcome[])
+      .filter((r) => !excludedIds.has(r.signal_id));
+    setRows(clean);
   }
 
   useEffect(() => { if (isAdmin) refresh(); }, [isAdmin]);
