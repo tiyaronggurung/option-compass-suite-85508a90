@@ -732,6 +732,8 @@ Deno.serve(async (req) => {
           regime_adjust: institutional.regime_adjust,
           components: institutional.components,
           sources_used: institutional.sources_used,
+          provider_status: institutional.provider_status,
+          reasons: institutional.reasons,
         } : {},
         ...contractFields,
       });
