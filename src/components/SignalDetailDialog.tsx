@@ -165,6 +165,9 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
             label={(s as any).confirmation_label ?? null}
           />
 
+          <InsiderActivity ticker={s.ticker} />
+
+
 
 
 
