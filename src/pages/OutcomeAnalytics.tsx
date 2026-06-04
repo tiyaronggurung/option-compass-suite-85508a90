@@ -227,6 +227,13 @@ type PaperTradeLite = {
 type SignalLifecycleLite = {
   id: string;
   lifecycle_state: string | null;
+  confidence: number | null;
+  confidence_at_birth: number | null;
+  max_confidence_seen: number | null;
+  min_confidence_seen: number | null;
+  tier: string | null;
+  max_tier_seen: string | null;
+  min_tier_seen: string | null;
 };
 
 const PAPER_CLASS_ORDER = ["developing", "near_watchlist", "watchlist", "strong", "elite"] as const;
@@ -238,6 +245,35 @@ const PAPER_CLASS_LABEL: Record<string, string> = {
   elite: "Elite (90+)",
 };
 
+// Confidence Drift helpers (analytics only).
+const TIER_RANK_UI: Record<string, number> = {
+  rejected: 0, developing: 1, near_watchlist: 2, watchlist: 3, strong: 4, elite: 5,
+};
+function paperClassForConfidence(c: number | null | undefined): string | null {
+  if (c == null) return null;
+  if (c >= 90) return "elite";
+  if (c >= 80) return "strong";
+  if (c >= 70) return "watchlist";
+  if (c >= 65) return "near_watchlist";
+  if (c >= 50) return "developing";
+  return null;
+}
+const DRIFT_BUCKETS = ["gain_10", "gain_5_9", "flat", "loss_5_9", "loss_10"] as const;
+const DRIFT_LABEL: Record<string, string> = {
+  gain_10: "Gained 10+",
+  gain_5_9: "Gained 5–9",
+  flat: "Flat (−4 … +4)",
+  loss_5_9: "Lost 5–9",
+  loss_10: "Lost 10+",
+};
+function driftBucket(delta: number): typeof DRIFT_BUCKETS[number] {
+  if (delta >= 10) return "gain_10";
+  if (delta >= 5) return "gain_5_9";
+  if (delta <= -10) return "loss_10";
+  if (delta <= -5) return "loss_5_9";
+  return "flat";
+}
+
 const LIFECYCLE_ROW_ORDER = ["fresh", "active", "weakening", "expired", "invalidated"] as const;
 const LIFECYCLE_ROW_LABEL: Record<string, string> = {
   fresh: "Fresh",
@@ -246,6 +282,7 @@ const LIFECYCLE_ROW_LABEL: Record<string, string> = {
   expired: "Expired",
   invalidated: "Invalidated",
 };
+
 
 export default function OutcomeAnalytics() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
