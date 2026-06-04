@@ -333,6 +333,11 @@ export default function Dashboard() {
                   onReject={dismiss}
                   onDetails={(sig) => setDetailSignal(sig)}
                   outcome={signalOutcome(s, trades, dismissedIds)}
+                  subLabel={
+                    (s.confidence ?? 0) >= 65
+                      ? "Near Watchlist — Needs one more confirmation"
+                      : "Developing — Below Threshold"
+                  }
                 />
               ))}
             </div>
