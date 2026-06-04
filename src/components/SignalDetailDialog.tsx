@@ -377,6 +377,7 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
                   ↳ {(c.details as any).trendline.human_reason}
                 </div>
               )}
+              {row.key === "options_flow" && configured && <OptionsFlowTransparency details={c.details} source={c.source} />}
             </div>
           );
         })}
@@ -384,6 +385,65 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
       {sourcesUsed.length > 0 && (
         <div className="text-[10px] text-muted-foreground mt-2">
           Sources: {sourcesUsed.join(" · ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OptionsFlowTransparency({ details, source }: { details: any; source?: string }) {
+  if (!details || typeof details !== "object") return null;
+  const provider = String(details.provider ?? source ?? "");
+  const usingUW = provider === "unusual_whales";
+  if (!usingUW) {
+    const ps = String(details.provider_status ?? "");
+    if (!ps || ps === "uw_missing_key") return null;
+    return (
+      <div className="mt-1.5 ml-24 pl-2 border-l border-border/60 text-[10px] text-muted-foreground">
+        Unusual Whales unavailable ({ps}) — using Finviz aggregate proxy
+        {typeof details.finviz_fallback_score === "number" && (
+          <span className="ml-1 opacity-70">· proxy score {Math.round(details.finviz_fallback_score)}</span>
+        )}
+      </div>
+    );
+  }
+  const fmt = (n: number) =>
+    n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
+    : n >= 1_000 ? `$${(n / 1_000).toFixed(0)}K`
+    : `$${Math.round(n)}`;
+  const bull = Number(details.bullish_premium ?? 0);
+  const bear = Number(details.bearish_premium ?? 0);
+  const cp = Number(details.call_put_bias ?? 1);
+  const sweeps = Number(details.sweep_count ?? 0);
+  const blocks = Number(details.block_count ?? 0);
+  const largest: any[] = Array.isArray(details.largest_flows) ? details.largest_flows : [];
+  return (
+    <div className="mt-1.5 ml-24 pl-2 border-l border-border/60 space-y-1">
+      <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5">
+        <span className="text-bull/90">UW active</span>
+        <span>Bullish <span className="text-bull ticker-mono">{fmt(bull)}</span></span>
+        <span>Bearish <span className="text-bear ticker-mono">{fmt(bear)}</span></span>
+        <span>C/P <span className="ticker-mono text-foreground/80">{cp.toFixed(2)}x</span></span>
+        <span>{sweeps} sweeps · {blocks} blocks</span>
+      </div>
+      {largest.length > 0 && (
+        <ul className="text-[10px] text-foreground/70 space-y-0.5">
+          {largest.slice(0, 3).map((f, i) => (
+            <li key={i} className="truncate">
+              <span className="ticker-mono">{String(f.type ?? "").toUpperCase()}</span>
+              {f.strike != null && <span className="ml-1 ticker-mono">${f.strike}</span>}
+              {f.expiry && <span className="ml-1 opacity-70">{String(f.expiry).slice(0, 10)}</span>}
+              <span className="ml-1 opacity-70">{f.side}</span>
+              <span className="ml-2 ticker-mono">{fmt(Number(f.premium ?? 0))}</span>
+              {f.is_sweep && <span className="ml-1 text-amber-400">sweep</span>}
+              {f.is_block && <span className="ml-1 text-amber-400">block</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {typeof details.finviz_fallback_score === "number" && (
+        <div className="text-[10px] text-muted-foreground/80">
+          Finviz fallback proxy: {Math.round(details.finviz_fallback_score)}
         </div>
       )}
     </div>

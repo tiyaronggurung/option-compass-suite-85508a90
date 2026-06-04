@@ -14,6 +14,7 @@ const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") ?? "";
 const APIFY_TOKEN = Deno.env.get("APIFY_API_TOKEN") ?? "";
 const ALPACA_KEY = Deno.env.get("ALPACA_API_KEY_ID") ?? "";
 const ALPACA_SECRET = Deno.env.get("ALPACA_API_SECRET_KEY") ?? "";
+const UW_KEY = Deno.env.get("UNUSUAL_WHALES_API_KEY") ?? "";
 
 function classify(text: string, contentType: string, finalUrl: string) {
   const head = text.slice(0, 200).toLowerCase();
@@ -118,6 +119,13 @@ Deno.serve(async (req) => {
       return probeUrl(`https://data.alpaca.markets/v2/stocks/${ticker}/bars/latest`, {
         "APCA-API-KEY-ID": ALPACA_KEY,
         "APCA-API-SECRET-KEY": ALPACA_SECRET,
+      });
+    },
+    unusual_whales: async () => {
+      if (!UW_KEY) return { skipped: true, reason: "UNUSUAL_WHALES_API_KEY not configured" };
+      return probeUrl(`https://api.unusualwhales.com/api/stock/${ticker}/flow-alerts?limit=5`, {
+        Authorization: `Bearer ${UW_KEY}`,
+        Accept: "application/json",
       });
     },
   };
