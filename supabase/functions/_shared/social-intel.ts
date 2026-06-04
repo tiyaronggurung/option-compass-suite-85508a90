@@ -214,6 +214,117 @@ function engagementMomentumScore(tweets: TAPITweet[]): number {
   return 88;
 }
 
+// ---------- Trusted Source scoring ----------
+async function computeTrustedSource(
+  ticker: string,
+  direction: "CALL" | "PUT",
+  cashtagTweets: TAPITweet[],
+  cashtagLabels: Array<"bullish" | "bearish" | "neutral">,
+): Promise<{ score: number; hits: TrustedHit[] }> {
+  // Step 1: harvest any trusted-account tweets already present in the
+  // cashtag pull (cheap — no extra API call).
+  const hits: TrustedHit[] = [];
+  const seen = new Set<string>();
+
+  function addHit(t: TaPITweetLike, sentiment: "bullish" | "bearish" | "neutral") {
+    const acct = findTrustedAccount(t.author?.userName);
+    if (!acct) return;
+    if (!tickerMatchesText(ticker, t.text)) return;
+    const id = String((t as any).id ?? `${acct.handle}:${t.text.slice(0, 40)}`);
+    if (seen.has(id)) return;
+    seen.add(id);
+    const eng = (t.engagement.likes ?? 0) + (t.engagement.retweets ?? 0) * 2 +
+                (t.engagement.replies ?? 0) + (t.engagement.views ?? 0) / 100;
+    const created = (t as any).createdAt as string | undefined;
+    const ageMin = created ? Math.max(0, Math.round((Date.now() - Date.parse(created)) / 60000)) : undefined;
+    hits.push({
+      account: acct.handle,
+      tier: acct.tier,
+      weight: acct.weight,
+      headline: t.text.replace(/\s+/g, " ").slice(0, 220),
+      sentiment,
+      engagement: Math.round(eng),
+      followers: t.author?.followers ?? 0,
+      url: (t as any).url,
+      created_at: created,
+      age_minutes: ageMin,
+    });
+  }
+
+  for (let i = 0; i < cashtagTweets.length; i++) {
+    addHit(cashtagTweets[i] as TaPITweetLike, cashtagLabels[i] ?? "neutral");
+  }
+
+  // Step 2: dedicated trusted-source query (covers handles that didn't post a
+  // cashtag but mentioned the ticker by name/symbol).
+  const handles = TRUSTED_ACCOUNTS.map((a) => a.handle);
+  const tsFetch = await fetchTrustedSourceTweets(ticker, handles, { hours: 4, limit: 60 });
+  if (tsFetch.state === "active" && tsFetch.tweets && tsFetch.tweets.length) {
+    // Classify these trusted tweets (lexicon — small set, no extra LLM cost).
+    for (const t of tsFetch.tweets) {
+      const s = classifyLexicon(t.text);
+      addHit(t as TaPITweetLike, s);
+    }
+  }
+
+  if (hits.length === 0) {
+    return { score: 50, hits: [] }; // neutral when no trusted coverage
+  }
+
+  // Step 3: aggregate. Each hit contributes:
+  //   contribution = (weight/100) * directional_alignment * recency * engagement_boost
+  // Aggregate via diminishing returns: 1 - exp(-k * sum).
+  let bullContrib = 0;
+  let bearContrib = 0;
+  for (const h of hits) {
+    const recency = h.age_minutes == null ? 0.7 : Math.max(0.4, 1 - h.age_minutes / 240);
+    const engBoost = 1 + Math.min(1.5, Math.log10((h.engagement || 0) + 10) / 4);
+    const base = (h.weight / 100) * recency * engBoost;
+    if (h.sentiment === "bullish") bullContrib += base;
+    else if (h.sentiment === "bearish") bearContrib += base;
+    else { bullContrib += base * 0.15; bearContrib += base * 0.15; } // neutral = mild coverage credit both ways
+  }
+
+  // Direction-aware: CALL rewards bullish, PUT rewards bearish.
+  const aligned = direction === "CALL" ? bullContrib : bearContrib;
+  const opposed = direction === "CALL" ? bearContrib : bullContrib;
+  const net = aligned - opposed * 0.6;
+
+  // Saturating curve: 1 hit ≈ 60-70, 3 strong aligned hits ≈ 85-92, 5+ ≈ 95+.
+  // Floor at 50 (neutral) when net is non-positive but we still have coverage.
+  let score: number;
+  if (net <= 0) {
+    score = clamp100(45 - Math.min(20, opposed * 8));
+  } else {
+    score = clamp100(55 + (1 - Math.exp(-0.55 * net)) * 45);
+  }
+  return { score: Math.round(score), hits };
+}
+
+type TaPITweetLike = TAPITweet;
+
+function buildTrustedSummary(
+  ticker: string,
+  hits: TrustedHit[],
+  direction: "CALL" | "PUT",
+): string {
+  if (hits.length === 0) return `No trusted institutional sources have posted on ${ticker} in the last 4 hours.`;
+  const accounts = Array.from(new Set(hits.map((h) => h.account)));
+  const bull = hits.filter((h) => h.sentiment === "bullish").length;
+  const bear = hits.filter((h) => h.sentiment === "bearish").length;
+  const tone =
+    bull > bear * 1.5 ? "bullish" :
+    bear > bull * 1.5 ? "bearish" :
+    "mixed";
+  const top = accounts.slice(0, 3).join(", ");
+  const tail = accounts.length > 3 ? `, +${accounts.length - 3} more` : "";
+  const dirNote =
+    (direction === "CALL" && tone === "bullish") || (direction === "PUT" && tone === "bearish")
+      ? ` aligned with the ${direction} bias`
+      : tone === "mixed" ? "" : ` (counter to the ${direction} bias)`;
+  return `${hits.length} trusted-source post${hits.length === 1 ? "" : "s"} on ${ticker} — ${top}${tail} — leaning ${tone}${dirNote}.`;
+}
+
 // ---------- Main entry ----------
 export async function scoreSocialIntelligence(
   ticker: string,
@@ -229,7 +340,9 @@ export async function scoreSocialIntelligence(
       fetched.state === "rate_limited" ? "rate limited" :
       fetched.state === "no_data" ? "no recent cashtag tweets" :
       fetched.error ?? "degraded";
-    return neutral(ticker, fetched.state as any, reason);
+    // Even if the cashtag pull is empty, trusted sources may still cover the ticker.
+    const ts = await computeTrustedSource(ticker, direction, [], []);
+    return neutral(ticker, fetched.state as any, reason, ts);
   }
   const tweets = fetched.tweets;
 
@@ -250,15 +363,19 @@ export async function scoreSocialIntelligence(
 
   // Sub-scores
   const polarity = polarityScore(bullPct, bearPct, direction);
-  // Baseline heuristic: assume ~50 tweets/4h is normal cashtag baseline for major tickers.
-  // (When we add a baseline table later, swap this for the rolling 7-day median.)
   const baseline = 50;
   const velocity = velocityScore(total, baseline);
   const kol = kolScore(tweets);
   const engagement = engagementMomentumScore(tweets);
+  const trusted = await computeTrustedSource(ticker, direction, tweets, labels);
 
+  // New v3 weights: Polarity 35 / Velocity 20 / KOL 15 / Engagement 10 / Trusted 20
   const finalScore = clamp100(
-    polarity * 0.40 + velocity * 0.25 + kol.score * 0.20 + engagement * 0.15,
+    polarity * 0.35 +
+    velocity * 0.20 +
+    kol.score * 0.15 +
+    engagement * 0.10 +
+    trusted.score * 0.20,
   );
 
   // Top KOL tweets (by followers × engagement)
@@ -278,20 +395,29 @@ export async function scoreSocialIntelligence(
   }));
 
   const velocityRatio = total / baseline;
+  const trustedAccounts = Array.from(new Set(trusted.hits.map((h) => h.account)));
+  const trustedSummary = buildTrustedSummary(ticker, trusted.hits, direction);
   const human_reason = buildHumanReason(ticker, direction, {
     bullPct, bearPct, velocityRatio, kolCount: kol.count, total,
+    trustedHits: trusted.hits.length, trustedAccounts,
   });
   const reason_code =
+    trusted.score >= 80 && trusted.hits.length >= 2 ? "trusted_source_confirmation" :
     polarity >= 70 && velocity >= 60 ? "strong_aligned_sentiment" :
     polarity <= 30 ? "sentiment_misaligned" :
     velocity >= 70 ? "high_velocity" :
     "moderate_signal";
 
+  // Sort trusted hits: tier asc (1 best) then engagement desc; keep top 6 for UI.
+  const headlinesForUI = [...trusted.hits]
+    .sort((a, b) => (a.tier - b.tier) || (b.engagement - a.engagement))
+    .slice(0, 6);
+
   return {
     score: finalScore,
     configured: true,
     source: "twitterapi_io",
-    reason: `${total} tweets · ${(bullPct * 100).toFixed(0)}% bull / ${(bearPct * 100).toFixed(0)}% bear · ${velocityRatio.toFixed(1)}x velocity · ${kol.count} KOLs`,
+    reason: `${total} tweets · ${(bullPct * 100).toFixed(0)}% bull / ${(bearPct * 100).toFixed(0)}% bear · ${velocityRatio.toFixed(1)}x velocity · ${kol.count} KOLs · ${trusted.hits.length} trusted`,
     details: {
       source: "twitterapi_io",
       provider_status: "active",
@@ -301,6 +427,7 @@ export async function scoreSocialIntelligence(
         velocity: Math.round(velocity),
         kol: Math.round(kol.score),
         engagement: Math.round(engagement),
+        trusted_source: Math.round(trusted.score),
       },
       samples: {
         total_tweets: total,
@@ -314,11 +441,17 @@ export async function scoreSocialIntelligence(
         kol_count: kol.count,
         top_kol_tweets: topKolTweets,
       },
+      trusted_source_score: Math.round(trusted.score),
+      trusted_source_hits: trusted.hits.length,
+      trusted_source_accounts: trustedAccounts,
+      trusted_source_headlines: headlinesForUI,
+      trusted_source_summary: trustedSummary,
+      trusted_tier_distribution: tierStats(trusted.hits) as unknown as Record<string, number>,
+      monitored_account_count: TRUSTED_ACCOUNTS.length,
       reason_code,
       human_reason,
       classifier,
-      // TwitterAPI.io ~ $0.00015/tweet (advanced search). Rough estimate.
-      cost_estimate_usd: Math.round(total * 0.00015 * 100000) / 100000,
+      cost_estimate_usd: Math.round((total + trusted.hits.length) * 0.00015 * 100000) / 100000,
     },
   };
 }
@@ -326,7 +459,11 @@ export async function scoreSocialIntelligence(
 function buildHumanReason(
   ticker: string,
   direction: "CALL" | "PUT",
-  s: { bullPct: number; bearPct: number; velocityRatio: number; kolCount: number; total: number },
+  s: {
+    bullPct: number; bearPct: number; velocityRatio: number;
+    kolCount: number; total: number;
+    trustedHits: number; trustedAccounts: string[];
+  },
 ): string {
   const bullStr = `${Math.round(s.bullPct * 100)}% bullish`;
   const bearStr = `${Math.round(s.bearPct * 100)}% bearish`;
@@ -339,12 +476,22 @@ function buildHumanReason(
   const velStr = s.velocityRatio >= 1.5 ? `Mention velocity is ${s.velocityRatio.toFixed(1)}x normal.` :
                  s.velocityRatio <= 0.7 ? `Mention velocity is below normal (${s.velocityRatio.toFixed(1)}x).` : "";
   const kolStr = s.kolCount > 0 ? `${s.kolCount} verified KOL account${s.kolCount === 1 ? "" : "s"} actively discussing ${ticker}.` : "";
+  const trustedStr = s.trustedHits > 0
+    ? ` ${s.trustedAccounts.slice(0, 3).join(", ")}${s.trustedAccounts.length > 3 ? " and others" : ""} (trusted institutional sources) posted on ${ticker} in the last 4 hours.`
+    : "";
   const aligned = direction === "CALL" ? s.bullPct >= s.bearPct : s.bearPct >= s.bullPct;
   const alignNote = aligned ? "" : ` Sentiment is misaligned with the ${direction} bias.`;
-  return `Twitter/X sentiment is ${tone}. ${bullStr} vs ${bearStr}. ${velStr} ${kolStr}${alignNote}`.replace(/\s+/g, " ").trim();
+  return `Twitter/X sentiment is ${tone}. ${bullStr} vs ${bearStr}. ${velStr} ${kolStr}${trustedStr}${alignNote}`.replace(/\s+/g, " ").trim();
 }
 
-function neutral(_ticker: string, status: TAPIState | "missing_key", reason: string): SocialIntelResult {
+function neutral(
+  _ticker: string,
+  status: TAPIState | "missing_key",
+  reason: string,
+  trusted?: { score: number; hits: TrustedHit[] },
+): SocialIntelResult {
+  const ts = trusted ?? { score: 50, hits: [] };
+  const trustedAccounts = Array.from(new Set(ts.hits.map((h) => h.account)));
   return {
     score: 50,
     configured: status !== "missing_key",
@@ -354,12 +501,19 @@ function neutral(_ticker: string, status: TAPIState | "missing_key", reason: str
       source: status === "missing_key" ? "neutral" : "twitterapi_io",
       provider_status: status,
       score: 50,
-      subscores: { polarity: 50, velocity: 50, kol: 50, engagement: 50 },
+      subscores: { polarity: 50, velocity: 50, kol: 50, engagement: 50, trusted_source: Math.round(ts.score) },
       samples: {
         total_tweets: 0, bullish_count: 0, bearish_count: 0, neutral_count: 0,
         bullish_pct: 0, bearish_pct: 0, neutral_pct: 0,
         mention_velocity_ratio: 0, kol_count: 0, top_kol_tweets: [],
       },
+      trusted_source_score: Math.round(ts.score),
+      trusted_source_hits: ts.hits.length,
+      trusted_source_accounts: trustedAccounts,
+      trusted_source_headlines: ts.hits.slice(0, 6),
+      trusted_source_summary: buildTrustedSummary(_ticker, ts.hits, "CALL"),
+      trusted_tier_distribution: tierStats(ts.hits) as unknown as Record<string, number>,
+      monitored_account_count: TRUSTED_ACCOUNTS.length,
       reason_code: status === "missing_key" ? "missing_key" : `tapi_${status}`,
       human_reason: `Social Intelligence neutral — ${reason}.`,
       classifier: "none",
