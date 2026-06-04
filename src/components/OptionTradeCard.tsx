@@ -2,11 +2,16 @@
 // Renders a single option trade with entry/current/market value, P/L $ and %,
 // Greeks line, and clear "Paper · Simulation Only" safety badges.
 //
-// Pure presentation — no data fetching, no mutations.
+// When a contract_snapshot_id is present, a collapsible "Why this contract"
+// section lazily fetches and renders the Contract Selection Engine rationale.
+//
+// Pure presentation — no mutations.
 
-import { Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import { fmtPrice, fmtPL, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
 
@@ -143,6 +148,11 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
         </>
       )}
 
+      {/* Why this contract — Contract Selection Engine rationale */}
+      {t.contract_snapshot_id && <RationalePanel snapshotId={t.contract_snapshot_id as string} />}
+
+
+
       {/* Footer meta */}
       <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
         <span>
@@ -179,5 +189,106 @@ function Row({ k, v }: { k: string; v: string }) {
       <div className="text-muted-foreground">{k}</div>
       <div className="text-right ticker-mono">{v}</div>
     </>
+  );
+}
+
+type Snapshot = {
+  contract_symbol: string | null;
+  strike: number | null;
+  expiry: string | null;
+  dte: number | null;
+  delta: number | null;
+  spread_pct: number | null;
+  open_interest: number | null;
+  volume: number | null;
+  iv: number | null;
+  contract_score: number | null;
+  liquidity_score: number | null;
+  rationale: string | null;
+  rationale_factors: Record<string, number> | null;
+  contract_source: string | null;
+  risk_profile: string | null;
+  candidates_considered: number | null;
+};
+
+function RationalePanel({ snapshotId }: { snapshotId: string }) {
+  const [open, setOpen] = useState(false);
+  const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await (supabase as any)
+        .from("contract_selection_snapshots")
+        .select("contract_symbol,strike,expiry,dte,delta,spread_pct,open_interest,volume,iv,contract_score,liquidity_score,rationale,rationale_factors,contract_source,risk_profile,candidates_considered")
+        .eq("id", snapshotId)
+        .maybeSingle();
+      if (!cancelled) {
+        setSnap((data ?? null) as Snapshot | null);
+        setLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, loaded, snapshotId]);
+
+  return (
+    <div className="border-t border-border/50 pt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span className="uppercase tracking-wider">Why this contract</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {!loaded && <div className="text-[11px] text-muted-foreground">Loading…</div>}
+          {loaded && !snap && <div className="text-[11px] text-muted-foreground">No rationale stored.</div>}
+          {snap && (
+            <>
+              <div className="text-[11px] text-foreground/90 leading-relaxed">{snap.rationale ?? "—"}</div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] ticker-mono text-muted-foreground">
+                <span>Score {snap.contract_score ?? "—"}/100</span>
+                <span className="text-right">Liquidity {snap.liquidity_score ?? "—"}/100</span>
+                {snap.spread_pct != null && <span>Spread {Number(snap.spread_pct).toFixed(1)}%</span>}
+                {snap.dte != null && <span className="text-right">DTE {snap.dte}</span>}
+                {snap.delta != null && <span>Δ {Number(snap.delta).toFixed(2)}</span>}
+                {snap.iv != null && <span className="text-right">IV {((Number(snap.iv) <= 5 ? Number(snap.iv) * 100 : Number(snap.iv))).toFixed(1)}%</span>}
+                {snap.open_interest != null && <span>OI {Number(snap.open_interest).toLocaleString()}</span>}
+                {snap.volume != null && <span className="text-right">Vol {Number(snap.volume).toLocaleString()}</span>}
+              </div>
+              {snap.rationale_factors && Object.keys(snap.rationale_factors).length > 0 && (
+                <div className="space-y-1 pt-1">
+                  {Object.entries(snap.rationale_factors).map(([k, v]) => (
+                    <FactorBar key={k} label={k.replace(/_/g, " ")} value={Number(v)} />
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
+                <span>Source: {snap.contract_source ?? "—"}</span>
+                {snap.risk_profile && <span>Profile: {snap.risk_profile}</span>}
+                {snap.candidates_considered != null && <span>{snap.candidates_considered} candidates</span>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FactorBar({ label, value }: { label: string; value: number }) {
+  const pct = Math.max(0, Math.min(1, value)) * 100;
+  return (
+    <div className="flex items-center gap-2 text-[10px]">
+      <span className="w-24 capitalize text-muted-foreground">{label}</span>
+      <div className="flex-1 h-1.5 bg-card-elevated rounded overflow-hidden">
+        <div className="h-full bg-primary/70" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="w-8 text-right ticker-mono text-muted-foreground">{Math.round(pct)}</span>
+    </div>
   );
 }
