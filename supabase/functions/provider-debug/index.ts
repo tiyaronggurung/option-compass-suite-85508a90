@@ -44,7 +44,7 @@ async function probeUrl(url: string, headers: Record<string, string> = {}) {
       final_url: res.url,
       classified: cls,
       bytes: text.length,
-      preview: text.slice(0, 400),
+      preview: text.slice(0, 2500),
       ms: Date.now() - start,
     };
   } catch (e) {
