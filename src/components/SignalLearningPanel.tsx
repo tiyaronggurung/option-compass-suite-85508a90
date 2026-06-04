@@ -25,10 +25,21 @@ export default function SignalLearningPanel() {
       const { data: s } = ids.length
         ? await supabase.from("signals").select("*").in("id", ids)
         : { data: [] as Signal[] };
+
+      // Exclude demo / test signals from analytics to prevent data contamination.
+      const excludedIds = new Set<string>();
+      for (const sig of (s ?? []) as Signal[]) {
+        if (sig.is_demo || (sig.source && String(sig.source).includes("TEST_ONLY_OPTION_PL_VALIDATION"))) {
+          excludedIds.add(sig.id);
+        }
+      }
+      const cleanSignals = ((s ?? []) as Signal[]).filter((sig) => !excludedIds.has(sig.id));
+      const cleanTrades = (t ?? []).filter((trade) => !trade.signal_id || !excludedIds.has(trade.signal_id));
+
       const m: Record<string, Signal> = {};
-      (s ?? []).forEach((x) => { m[x.id] = x; });
+      cleanSignals.forEach((x) => { m[x.id] = x; });
       setSignals(m);
-      setTrades(t ?? []);
+      setTrades(cleanTrades);
     })();
   }, [isAdmin]);
 
