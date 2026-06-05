@@ -54,9 +54,10 @@ export function checkRiskGuards(input: GuardInput): GuardResult {
   if (input.openTradesCount >= e.max_open_trades) {
     return { ok: false, reason: "Max open trades reached", effective: e };
   }
-  if (input.intendedRisk > e.max_risk_per_trade) {
-    return { ok: false, reason: "Trade risk exceeds max risk per trade", effective: e };
-  }
+  // Per-trade cap intentionally removed — buyOption enforces buying power
+  // against the paper account cash balance instead, so any size is allowed
+  // up to (but not exceeding) what the account can actually pay for.
+
   // Daily loss cap: realized loss today (positive number) reaches/exceeds cap → block
   const realizedLoss = Math.max(0, -input.todayRealizedPL);
   if (realizedLoss >= e.daily_loss_cap) {
