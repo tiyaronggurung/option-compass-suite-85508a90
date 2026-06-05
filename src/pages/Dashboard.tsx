@@ -67,6 +67,9 @@ export default function Dashboard() {
   const [risk, setRisk] = useState<RiskSettingsLike>(null);
   const [showDeveloping, setShowDeveloping] = useState(true);
   const [alerts, setAlerts] = useState<TradeAlert[]>([]);
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [buySignal, setBuySignal] = useState<Signal | null>(null);
+  const [cashBalance, setCashBalance] = useState<number>(0);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   const reloadAlerts = async () => {
