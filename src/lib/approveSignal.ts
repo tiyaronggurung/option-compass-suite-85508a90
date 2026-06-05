@@ -93,6 +93,7 @@ export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<Ap
   const finalExpiry = bestContract?.expiry ?? s.expiry ?? null;
   const finalSymbol = bestContract?.contract_symbol ?? s.contract_symbol ?? null;
   const totalCost = finalPremium * multiplier * contracts;
+  const openedAt = new Date().toISOString();
 
   const { data: inserted, error } = await supabase.from("paper_trades").insert({
     user_id: input.userId,
@@ -116,6 +117,14 @@ export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<Ap
     multiplier,
     entry_premium: finalPremium,
     total_cost: totalCost,
+    current_premium: finalPremium,
+    current_value: totalCost,
+    unrealized_pl: 0,
+    unrealized_pl_pct: 0,
+    current_pl: 0,
+    current_pl_pct: 0,
+    last_mark_price: finalPremium,
+    last_mark_at: openedAt,
     contract_snapshot_id: snapshotId,
   } as any).select("id").single();
   if (error) return { ok: false, reason: error.message };

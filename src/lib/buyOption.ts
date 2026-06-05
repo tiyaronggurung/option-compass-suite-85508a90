@@ -69,6 +69,7 @@ export async function buyOptionAsPaperTrade(input: BuyOptionInput): Promise<BuyO
   const c = input.contract;
   const confidenceSnapshot = Number(s.confidence ?? 0);
   const optionTypeUpper = c.type === "put" ? "PUT" : "CALL";
+  const openedAt = new Date().toISOString();
 
   const { data: inserted, error } = await supabase.from("paper_trades").insert({
     user_id: input.userId,
@@ -100,6 +101,14 @@ export async function buyOptionAsPaperTrade(input: BuyOptionInput): Promise<BuyO
     iv: c.iv,
     open_interest: c.open_interest,
     option_volume: c.volume,
+    current_premium: premium,
+    current_value: totalCost,
+    unrealized_pl: 0,
+    unrealized_pl_pct: 0,
+    current_pl: 0,
+    current_pl_pct: 0,
+    last_mark_price: premium,
+    last_mark_at: openedAt,
   } as any).select("id").single();
   if (error) return { ok: false, reason: error.message };
 

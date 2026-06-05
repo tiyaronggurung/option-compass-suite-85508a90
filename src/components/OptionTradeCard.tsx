@@ -45,10 +45,6 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
   const t = trade as any;
   const closedTrade = trade.status !== "OPEN";
   const hasClosedPricing = closedTrade && (t.exit_premium != null || t.realized_pl != null);
-  const unavailable = !hasClosedPricing && (
-    t.quote_source === "unavailable" ||
-    (live && t.current_premium == null && t.exit_premium == null)
-  );
   const contracts = Number(t.contracts ?? 1);
   const multiplier = Number(t.multiplier ?? 100);
   const entryPremium = Number(t.entry_premium ?? trade.entry_price ?? 0);
@@ -56,9 +52,10 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
 
   const closed = trade.status !== "OPEN";
   const exitPremium = t.exit_premium != null ? Number(t.exit_premium) : null;
-  const currentPremium = closed && exitPremium != null
+  const livePremium = closed && exitPremium != null
     ? exitPremium
     : (t.current_premium != null ? Number(t.current_premium) : null);
+  const currentPremium = !closed && livePremium == null ? entryPremium : livePremium;
 
   const currentValue = currentPremium != null ? currentPremium * multiplier * contracts : null;
   const pl = closed
@@ -67,6 +64,8 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
     : (t.unrealized_pl != null ? Number(t.unrealized_pl)
        : currentValue != null ? currentValue - totalCost : null);
   const plPct = pl != null && totalCost > 0 ? (pl / totalCost) * 100 : null;
+  const quoteUnavailable = !closed && t.quote_source === "unavailable" && livePremium == null;
+  const waitingForFirstQuote = !closed && livePremium == null && !quoteUnavailable;
 
   const dayPl = !closed && t.day_pl != null ? Number(t.day_pl) : null;
   const dayPlPct = !closed && t.day_pl_pct != null ? Number(t.day_pl_pct) : null;
@@ -182,15 +181,7 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
       )}
 
 
-      {unavailable ? (
-        <div className="rounded-md border border-dashed border-border bg-card-elevated/40 p-3 text-center">
-          <div className="text-sm font-medium text-muted-foreground">Pricing unavailable</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">
-            No option quote source returned a premium. P/L not computed.
-          </div>
-        </div>
-      ) : (
-        <>
+      <>
           {/* Robinhood-style headline */}
           <div className="pt-1">
             <div className={cn(
@@ -228,6 +219,14 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
             <Row k="Total Cost" v={`$${fmtPL(totalCost)}`} />
           </div>
 
+          {!closed && (quoteUnavailable || waitingForFirstQuote) && (
+            <div className="rounded-md border border-dashed border-border bg-card-elevated/40 p-2.5 text-[11px] text-muted-foreground">
+              {quoteUnavailable
+                ? "Live quote unavailable right now — showing entry premium until UW returns a mark."
+                : "Waiting for the first live quote — current P/L is seeded from your entry premium."}
+            </div>
+          )}
+
           {/* Quote / Greeks line */}
           {(t.bid != null || t.ask != null || t.iv != null || t.delta != null) && !closed && (
             <div className="text-[11px] text-muted-foreground border-t border-border/50 pt-2 flex flex-wrap gap-x-3 gap-y-0.5 ticker-mono">
@@ -242,8 +241,7 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
               {t.option_volume != null && <span>Vol {Number(t.option_volume).toLocaleString()}</span>}
             </div>
           )}
-        </>
-      )}
+      </>
 
       {/* Why this contract — Contract Selection Engine rationale */}
       {t.contract_snapshot_id && <RationalePanel snapshotId={t.contract_snapshot_id as string} />}
@@ -259,6 +257,10 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
         <span>
           {closed
             ? `Closed ${trade.closed_at ? timeAgo(trade.closed_at as string) : "—"}`
+            : quoteUnavailable
+              ? "Live quote unavailable · showing entry premium"
+              : waitingForFirstQuote
+                ? "Waiting for first live quote"
             : t.quote_updated_at
               ? `Quote ${timeAgo(t.quote_updated_at as string)} · ${t.quote_source ?? "—"}`
               : "No mark yet"}

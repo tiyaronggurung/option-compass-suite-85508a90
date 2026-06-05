@@ -2,10 +2,9 @@
 // Updates marks for open paper option trades.
 //
 // Quote source priority (per approved plan):
-//   1. Tradier        (if TRADIER_API_KEY secret exists)
-//   2. Unusual Whales (option contract endpoint)
-//   3. Alpaca         (option snapshot)
-//   4. unavailable    — pricing skipped, no P/L written, never faked.
+//   1. Unusual Whales chain quote for the exact contract / expiry
+//   2. Unusual Whales contract endpoints (best-effort fallback)
+//   3. unavailable    — keep existing entry-based display until a live quote arrives.
 //
 // Computes Robinhood-style option P/L:
 //   total_cost      = entry_premium × 100 × contracts
@@ -92,15 +91,18 @@ Deno.serve(async (req) => {
   }
 
   try {
+    let requestUserId: string | null = null;
+    let isAdminUser = false;
     if (!isServiceRole && trigger !== "cron") {
       if (!authHeader) return json({ error: "Unauthorized" }, 401);
       const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
       const { data: ud } = await userClient.auth.getUser();
       const user = ud?.user;
       if (!user) return json({ error: "Unauthorized" }, 401);
+      requestUserId = user.id;
       const { data: roleRow } = await admin
         .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
-      if (!roleRow) return json({ error: "Admin only" }, 403);
+      isAdminUser = !!roleRow;
     }
 
     const { data: cfg } = await admin
@@ -115,8 +117,11 @@ Deno.serve(async (req) => {
       return json({ ok: true, status: "outside_hours" });
     }
 
-    const { data: open, error: oErr } = await admin
-      .from("paper_trades").select("*").eq("status", "OPEN");
+    let openQuery = admin.from("paper_trades").select("*").eq("status", "OPEN");
+    if (!isServiceRole && trigger !== "cron" && requestUserId && !isAdminUser) {
+      openQuery = openQuery.eq("user_id", requestUserId);
+    }
+    const { data: open, error: oErr } = await openQuery;
     if (oErr) {
       await logRun("error", { error: oErr.message });
       return json({ error: oErr.message }, 500);
@@ -288,13 +293,84 @@ function resolveOccSymbol(trade: any): string | null {
 // ---------- Provider fetchers ----------
 
 async function fetchOptionQuote(occ: string, underlying: string): Promise<OptionQuote> {
-  // Unusual Whales is the sole real-time source. Tradier/Alpaca have been
-  // removed per product decision — UW NBBO snapshot (sub-second) with an
-  // intraday-minute fallback covers our needs and avoids "delayed" tags.
-  const uw = await fetchUnusualWhalesQuote(occ, underlying).catch((e) => { console.warn("uw err", occ, e); return null; });
+  // Primary path: use the same UW chain endpoint the contract picker already
+  // trusts, then filter to the exact OCC symbol. This avoids false 404s from
+  // the contract-specific endpoints while still giving us live-ish NBBO values.
+  const chain = await fetchUnusualWhalesChainQuote(occ, underlying).catch((e) => {
+    console.warn("uw chain err", occ, e);
+    return null;
+  });
+  if (chain && chain.premium != null) return chain;
+
+  const uw = await fetchUnusualWhalesQuote(occ, underlying).catch((e) => {
+    console.warn("uw err", occ, e);
+    return null;
+  });
   if (uw && uw.premium != null) return uw;
-  console.log("quote unavailable", { occ, reason: uw ? "no_premium_in_response" : "uw_returned_null" });
+  console.log("quote unavailable", {
+    occ,
+    reason: chain ? "chain_no_premium_in_response" : uw ? "no_premium_in_response" : "uw_returned_null",
+  });
   return EMPTY_QUOTE;
+}
+
+async function fetchUnusualWhalesChainQuote(occ: string, underlying: string): Promise<OptionQuote | null> {
+  const key = Deno.env.get("UNUSUAL_WHALES_API_KEY");
+  if (!key) return null;
+  const parsed = parseOccSymbol(occ);
+  if (!parsed) {
+    console.log("uw chain parse failed", { occ });
+    return null;
+  }
+
+  const headers = { Authorization: `Bearer ${key}`, Accept: "application/json" };
+  const url = `https://api.unusualwhales.com/api/stock/${encodeURIComponent(underlying)}/option-contracts?expiry=${parsed.expiry}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    console.log("uw chain non-ok", { occ, underlying, expiry: parsed.expiry, status: res.status });
+    return null;
+  }
+
+  const json = await res.json().catch(() => null) as any;
+  const rows: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+  if (!rows.length) {
+    console.log("uw chain empty", { occ, underlying, expiry: parsed.expiry });
+    return null;
+  }
+
+  const row = rows.find((r) => String(r.option_symbol ?? "").trim().toUpperCase() === occ);
+  if (!row) {
+    console.log("uw chain no match", { occ, underlying, expiry: parsed.expiry, contracts: rows.length });
+    return null;
+  }
+
+  const bid = num(row.nbbo_bid ?? row.bid);
+  const ask = num(row.nbbo_ask ?? row.ask);
+  const lastPx = num(row.last_price ?? row.last ?? row.mark);
+  const mid = bid != null && ask != null ? (bid + ask) / 2 : num(row.mid);
+  const premium = mid ?? lastPx ?? bid ?? ask;
+  if (premium == null) {
+    console.log("uw chain no premium", { occ, bid, ask, lastPx });
+    return null;
+  }
+
+  return {
+    premium, bid, ask, mid,
+    iv: num(row.implied_volatility ?? row.iv),
+    delta: num(row.delta),
+    gamma: num(row.gamma),
+    theta: num(row.theta),
+    vega: num(row.vega),
+    open_interest: numInt(row.open_interest ?? row.oi),
+    option_volume: numInt(row.volume),
+    source: "unusual_whales",
+  };
+}
+
+function parseOccSymbol(occ: string): { expiry: string } | null {
+  const m = /^([A-Z]{1,6})(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/.exec(String(occ).trim().toUpperCase());
+  if (!m) return null;
+  return { expiry: `20${m[2]}-${m[3]}-${m[4]}` };
 }
 
 async function fetchTradierQuote(occ: string): Promise<OptionQuote | null> {
