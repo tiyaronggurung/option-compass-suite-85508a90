@@ -327,17 +327,21 @@ async function fetchTradierQuote(occ: string): Promise<OptionQuote | null> {
 
 async function fetchUnusualWhalesQuote(occ: string, _underlying: string): Promise<OptionQuote | null> {
   const key = Deno.env.get("UNUSUAL_WHALES_API_KEY");
-  if (!key) return null;
+  if (!key) { console.warn("uw key missing"); return null; }
   const headers = { Authorization: `Bearer ${key}`, Accept: "application/json" };
 
   // 1) Try the live NBBO snapshot first — freshest tick UW exposes (sub-second).
   try {
     const snapUrl = `https://api.unusualwhales.com/api/option-contract/${encodeURIComponent(occ)}/nbbo`;
     const r = await fetch(snapUrl, { headers });
-    if (r.ok) {
+    if (!r.ok) {
+      console.log("uw nbbo non-ok", { occ, status: r.status });
+    } else {
       const j = await r.json().catch(() => null) as any;
       const row = Array.isArray(j?.data) ? j.data[j.data.length - 1] : (j?.data ?? null);
-      if (row) {
+      if (!row) {
+        console.log("uw nbbo empty", { occ });
+      } else {
         const bid = num(row.bid);
         const ask = num(row.ask);
         const lastPx = num(row.last ?? row.price);
@@ -354,24 +358,25 @@ async function fetchUnusualWhalesQuote(occ: string, _underlying: string): Promis
             source: "unusual_whales",
           };
         }
+        console.log("uw nbbo no premium", { occ, bid, ask, lastPx });
       }
     }
-  } catch (e) { console.warn("uw nbbo err", e); }
+  } catch (e) { console.warn("uw nbbo err", occ, e); }
 
   // 2) Fallback to intraday minute aggregates — last entry = most recent minute.
   const url = `https://api.unusualwhales.com/api/option-contract/${encodeURIComponent(occ)}/intraday`;
   const res = await fetch(url, { headers });
-  if (!res.ok) return null;
+  if (!res.ok) { console.log("uw intraday non-ok", { occ, status: res.status }); return null; }
   const json = await res.json().catch(() => null) as any;
   const arr: any[] = Array.isArray(json?.data) ? json.data : [];
   const last = arr.length ? arr[arr.length - 1] : null;
-  if (!last) return null;
+  if (!last) { console.log("uw intraday empty", { occ }); return null; }
   const bid = num(last.bid);
   const ask = num(last.ask);
   const lastPx = num(last.last ?? last.price);
   const mid = bid != null && ask != null ? (bid + ask) / 2 : null;
   const premium = lastPx ?? mid ?? bid ?? ask;
-  if (premium == null) return null;
+  if (premium == null) { console.log("uw intraday no premium", { occ, bid, ask, lastPx }); return null; }
   return {
     premium, bid, ask, mid,
     iv: num(last.iv ?? last.implied_volatility),
