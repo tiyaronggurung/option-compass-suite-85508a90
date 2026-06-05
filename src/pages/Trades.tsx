@@ -193,21 +193,50 @@ function CloseTradeDialog({
   const contracts = Math.max(1, Number(t?.contracts ?? 1));
   const multiplier = Number(t?.multiplier ?? 100);
   const entryPremium = Number(t?.entry_premium ?? trade?.entry_price ?? 0);
-  const currentPremium = t?.current_premium != null ? Number(t.current_premium) : null;
 
+  const [livePremium, setLivePremium] = useState<number | null>(null);
+  const [liveMarkAt, setLiveMarkAt] = useState<string | null>(null);
+  const [fetchingMark, setFetchingMark] = useState(false);
   const [exitPremiumStr, setExitPremiumStr] = useState("");
   const [reason, setReason] = useState<CloseReason>("manual_close");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (trade) {
-      // Default exit premium to the latest mark, falling back to entry premium.
-      const seed = currentPremium ?? entryPremium;
+      const seedLive = t?.current_premium != null ? Number(t.current_premium) : null;
+      setLivePremium(seedLive);
+      setLiveMarkAt(t?.last_mark_at ?? null);
+      const seed = seedLive ?? entryPremium;
       setExitPremiumStr(seed ? String(seed) : "");
       setReason("manual_close");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade]);
+
+  async function useLiveMark() {
+    if (!trade) return;
+    setFetchingMark(true);
+    const { error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
+    if (error) {
+      setFetchingMark(false);
+      return toast.error(error.message);
+    }
+    const { data: fresh } = await supabase
+      .from("paper_trades")
+      .select("current_premium,last_mark_at")
+      .eq("id", trade.id)
+      .maybeSingle();
+    setFetchingMark(false);
+    const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
+    if (mark == null) {
+      toast.error("No live mark available for this contract");
+      return;
+    }
+    setLivePremium(mark);
+    setLiveMarkAt((fresh as any)?.last_mark_at ?? new Date().toISOString());
+    setExitPremiumStr(String(mark));
+    toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+  }
 
   if (!trade) return null;
 
@@ -270,7 +299,20 @@ function CloseTradeDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="exit-premium">Exit option premium ($ per share)</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="exit-premium">Exit option premium ($ per share)</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={useLiveMark}
+                disabled={fetchingMark}
+              >
+                <RefreshCw className={cn("h-3 w-3 mr-1", fetchingMark && "animate-spin")} />
+                {fetchingMark ? "Fetching…" : "Use live mark"}
+              </Button>
+            </div>
             <Input
               id="exit-premium"
               type="number"
@@ -281,9 +323,15 @@ function CloseTradeDialog({
               className="ticker-mono"
               placeholder="e.g. 5.10"
             />
-            <p className="text-[10px] text-muted-foreground">
-              Realized P/L = (exit − entry) × 100 × contracts
-            </p>
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Realized P/L = (exit − entry) × 100 × contracts</span>
+              {livePremium != null && (
+                <span className="ticker-mono">
+                  Live mark ${fmtPrice(livePremium)}
+                  {liveMarkAt && <> · {timeAgo(liveMarkAt)}</>}
+                </span>
+              )}
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Close reason</Label>
