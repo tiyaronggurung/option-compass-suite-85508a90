@@ -473,9 +473,11 @@ Deno.serve(async (req) => {
   // Fallback: UW chain often lacks two-sided NBBO quotes outside RTH. If nothing
   // passed guards (and we haven't tried Alpaca yet), retry with Alpaca's chain
   // which carries real market quotes — same path the original Alpaca picker used.
+  let alpacaFallbackDebug: any = null;
   if (!best && !bestEffort && source === "unusual_whales") {
     try {
       const alpacaCands = await fetchAlpacaChain(ticker, optionType, profile);
+      alpacaFallbackDebug = { tried: true, candidates: alpacaCands?.length ?? 0 };
       if (alpacaCands && alpacaCands.length) {
         if (spot != null) {
           for (const c of alpacaCands) {
@@ -486,6 +488,11 @@ Deno.serve(async (req) => {
           }
         }
         const reranked = rankCandidates(alpacaCands, profile);
+        alpacaFallbackDebug.reranked = {
+          best: !!reranked.best,
+          bestEffort: !!reranked.bestEffort,
+          rejection_counts: reranked.rejectionCounts,
+        };
         if (reranked.best || reranked.bestEffort) {
           candidates = alpacaCands;
           scored = reranked.scored;
@@ -495,8 +502,12 @@ Deno.serve(async (req) => {
           source = "alpaca";
         }
       }
-    } catch (e) { console.warn("alpaca rerank err", e); }
+    } catch (e) {
+      alpacaFallbackDebug = { tried: true, error: String(e) };
+      console.warn("alpaca rerank err", e);
+    }
   }
+
 
   // Select either normal or best-effort pick. Hard fail only if neither exists.
   const pick: ScoredCandidate | null = best ?? bestEffort;
