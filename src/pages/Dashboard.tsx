@@ -106,6 +106,7 @@ export default function Dashboard() {
       if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
       setAlpacaStatus(pc?.last_status ?? null);
       setRisk(rs as RiskSettingsLike);
+      setCashBalance(Number((pa as any)?.cash_balance ?? 0));
       reloadAlerts();
     })();
 
