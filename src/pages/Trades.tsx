@@ -58,14 +58,50 @@ export default function Trades() {
 
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user]);
 
-  // Auto-refresh every 60s while page is mounted, only if there are open trades and tab visible.
+  // Trigger a live mark recompute on mount and every 30s while visible,
+  // but only if there are open trades. Then re-read from DB.
   useEffect(() => {
-    const id = setInterval(() => {
+    if (!user) return;
+    let cancelled = false;
+    async function tick() {
+      if (cancelled) return;
       if (document.visibilityState !== "visible") return;
-      refreshRef.current?.();
-    }, 60_000);
-    return () => clearInterval(id);
-  }, []);
+      const hasOpen = (trades ?? []).some((t) => t.status === "OPEN");
+      if (!hasOpen) return;
+      try {
+        await supabase.functions.invoke("update-paper-marks", { body: {} });
+      } catch { /* swallow — UI will retry next tick */ }
+      if (!cancelled) refreshRef.current?.();
+    }
+    // Kick once shortly after mount so the user sees fresh prices fast.
+    const kickoff = setTimeout(tick, 1500);
+    const id = setInterval(tick, 30_000);
+    return () => { cancelled = true; clearTimeout(kickoff); clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, trades?.length]);
+
+  // Realtime: patch rows in place when paper_trades changes for this user.
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`paper_trades_${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "paper_trades", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const next = payload.new as PaperTrade;
+          setTrades((prev) => prev ? prev.map((t) => t.id === next.id ? { ...t, ...next } : t) : prev);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "paper_trades", filter: `user_id=eq.${user.id}` },
+        () => { refreshRef.current?.(); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
 
   async function refreshMarks() {
     setRefreshingMarks(true);
