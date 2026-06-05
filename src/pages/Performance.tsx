@@ -49,12 +49,11 @@ export default function Performance() {
     })();
   }, [user]);
 
-  const closed = useMemo(() => (trades ?? []).filter((t) => t.status !== "OPEN"), [trades]);
-  const hasReal = closed.length >= 3;
   const metrics = useMemo(
-    () => hasReal ? computeReal(trades ?? [], signals) : demoMetrics(trades?.length ?? 0),
-    [trades, signals, hasReal],
+    () => computeReal(trades ?? [], signals),
+    [trades, signals],
   );
+  const hasAny = (trades?.length ?? 0) > 0;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -62,14 +61,10 @@ export default function Performance() {
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Performance</h1>
           <p className="text-sm text-muted-foreground">
-            {hasReal
-              ? "Real closed paper trades."
-              : "Demo data shown until you've closed at least 3 paper trades."}
+            {hasAny ? "Real paper trades." : "No paper trades yet. Approve a signal to get started."}
           </p>
         </div>
-        <Badge className={cn("border-0", hasReal ? "bg-emerald-500/15 text-emerald-400" : "bg-warn/15 text-warn")}>
-          {hasReal ? "Real paper data" : "Simulated · paper trading only"}
-        </Badge>
+        <Badge className="border-0 bg-emerald-500/15 text-emerald-400">Real paper data</Badge>
       </header>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
