@@ -497,6 +497,36 @@ export type Database = {
         }
         Relationships: []
       }
+      paper_accounts: {
+        Row: {
+          cash_balance: number
+          created_at: string
+          day_start_date: string
+          day_start_equity: number
+          starting_balance: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cash_balance?: number
+          created_at?: string
+          day_start_date?: string
+          day_start_equity?: number
+          starting_balance?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cash_balance?: number
+          created_at?: string
+          day_start_date?: string
+          day_start_equity?: number
+          starting_balance?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       paper_trades: {
         Row: {
           ask: number | null
@@ -1474,6 +1504,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      reset_paper_account: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "user"
