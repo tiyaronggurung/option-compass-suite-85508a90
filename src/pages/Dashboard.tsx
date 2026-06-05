@@ -311,9 +311,6 @@ export default function Dashboard() {
         todayRealizedPL={todayRealizedPL}
       />
 
-      const closedTradeIds = useMemo(() => new Set(trades.filter(t => t.status === "CLOSED").map(t => t.id)), [trades]);
-      const activeAlerts = useMemo(() => alerts.filter(a => !["cancelled"].includes(a.alert_status) && !closedTradeIds.has(a.paper_trade_id ?? "")), [alerts, closedTradeIds]);
-
       {activeAlerts.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-baseline justify-between">
