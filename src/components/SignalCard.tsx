@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CheckCircle2, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
 import { getTier, TIER_META } from "@/lib/signalTiers";
 import { getLifecycleState, LIFECYCLE_META } from "@/lib/signalLifecycle";
+import { classifySignalSource } from "@/lib/signalSource";
 
 type Props = {
   signal: Signal;
@@ -66,6 +67,14 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
               {signal.is_demo ? (
                 <Badge variant="outline" className="border-border text-muted-foreground gap-1 text-[10px] px-1.5 py-0" title="Seeded demo signal">
                   <TestTube className="h-3 w-3" /> Demo
+                </Badge>
+              ) : (signal as any).confirmed_by_both ? (
+                <Badge className="bg-emerald-500/20 text-emerald-300 border-0 gap-1 text-[10px] px-1.5 py-0 font-semibold" title="Confirmed by both Alpaca scanner and Unusual Whales flow">
+                  <CheckCircle2 className="h-3 w-3" /> Confirmed by both
+                </Badge>
+              ) : classifySignalSource(signal.source) === "unusual_whales" ? (
+                <Badge className="bg-amber-500/20 text-amber-300 border-0 gap-1 text-[10px] px-1.5 py-0 font-semibold" title={`Unusual Whales ${(signal as any).flow_type ?? "flow"} alert`}>
+                  <Zap className="h-3 w-3" /> UW {(signal as any).flow_type ?? "Flow"}
                 </Badge>
               ) : (
                 <Badge className="bg-emerald-500/15 text-emerald-400 border-0 gap-1 text-[10px] px-1.5 py-0" title={signal.source ?? "Live"}>

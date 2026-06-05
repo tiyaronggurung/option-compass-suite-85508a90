@@ -1118,6 +1118,8 @@ export type Database = {
           confidence_at_birth: number | null
           confirmation_label: string | null
           confirmation_score: number | null
+          confirmed_by_both: boolean
+          confirmed_with_signal_id: string | null
           contract_symbol: string | null
           created_at: string
           direction: Database["public"]["Enums"]["signal_direction"]
@@ -1127,6 +1129,7 @@ export type Database = {
           external_id: string | null
           flow_at_birth: Json
           flow_metrics: Json
+          flow_type: string | null
           hidden: boolean
           id: string
           is_demo: boolean
@@ -1141,6 +1144,7 @@ export type Database = {
           min_tier_seen: string | null
           premium: number | null
           price: number | null
+          raw_provider_payload: Json
           reasons: Json
           risk_level: Database["public"]["Enums"]["risk_level"]
           score_components: Json
@@ -1160,6 +1164,8 @@ export type Database = {
           confidence_at_birth?: number | null
           confirmation_label?: string | null
           confirmation_score?: number | null
+          confirmed_by_both?: boolean
+          confirmed_with_signal_id?: string | null
           contract_symbol?: string | null
           created_at?: string
           direction: Database["public"]["Enums"]["signal_direction"]
@@ -1169,6 +1175,7 @@ export type Database = {
           external_id?: string | null
           flow_at_birth?: Json
           flow_metrics?: Json
+          flow_type?: string | null
           hidden?: boolean
           id?: string
           is_demo?: boolean
@@ -1183,6 +1190,7 @@ export type Database = {
           min_tier_seen?: string | null
           premium?: number | null
           price?: number | null
+          raw_provider_payload?: Json
           reasons?: Json
           risk_level?: Database["public"]["Enums"]["risk_level"]
           score_components?: Json
@@ -1202,6 +1210,8 @@ export type Database = {
           confidence_at_birth?: number | null
           confirmation_label?: string | null
           confirmation_score?: number | null
+          confirmed_by_both?: boolean
+          confirmed_with_signal_id?: string | null
           contract_symbol?: string | null
           created_at?: string
           direction?: Database["public"]["Enums"]["signal_direction"]
@@ -1211,6 +1221,7 @@ export type Database = {
           external_id?: string | null
           flow_at_birth?: Json
           flow_metrics?: Json
+          flow_type?: string | null
           hidden?: boolean
           id?: string
           is_demo?: boolean
@@ -1225,6 +1236,7 @@ export type Database = {
           min_tier_seen?: string | null
           premium?: number | null
           price?: number | null
+          raw_provider_payload?: Json
           reasons?: Json
           risk_level?: Database["public"]["Enums"]["risk_level"]
           score_components?: Json

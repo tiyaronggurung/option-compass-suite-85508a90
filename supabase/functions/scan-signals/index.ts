@@ -14,6 +14,7 @@ import {
   type FlowSnapshot,
   type TechnicalSnapshot,
 } from "../_shared/lifecycle.ts";
+import { runConfirmationSweep } from "../_shared/crossSourceMatch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -961,6 +962,10 @@ Deno.serve(async (req) => {
   } finally {
     await releaseScanLock();
   }
+
+  // Cross-source confirmation sweep — tags Alpaca + UW rows agreeing within 2 min.
+  // Safe: read-only failure path, idempotent, never throws.
+  try { await runConfirmationSweep(admin, { windowMinutes: 2 }); } catch { /* swallow */ }
 
   // ---------- Lifecycle pass ----------
   // Re-evaluate every non-terminal signal using either the fresh scoring
