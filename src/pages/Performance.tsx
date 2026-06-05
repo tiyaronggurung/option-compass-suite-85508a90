@@ -266,7 +266,12 @@ function computeReal(trades: PaperTrade[], signals: Record<string, Signal>) {
   });
   const bySource = bucketBy(closed, (t) => {
     const s = t.signal_id ? signals[t.signal_id] : undefined;
-    return s?.source ?? "unknown";
+    if (!s) return "unknown";
+    if ((s as any).confirmed_by_both) return "Confirmed by both";
+    const src = String(s.source ?? "").toLowerCase();
+    if (src.includes("unusual") && src.includes("whales")) return "Unusual Whales";
+    if (src.includes("alpaca")) return "Alpaca";
+    return s.source ?? "unknown";
   });
   const byConfidence = bucketBy(closed, (t) => {
     const s = t.signal_id ? signals[t.signal_id] : undefined;
