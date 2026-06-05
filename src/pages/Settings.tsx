@@ -87,7 +87,10 @@ export default function Settings() {
         )}
       </section>
 
+      <ResetPaperAccountPanel />
+
       <SignalModePanel />
+
 
       <ProviderEnginesPanel />
 
