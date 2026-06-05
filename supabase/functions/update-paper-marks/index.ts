@@ -137,11 +137,38 @@ Deno.serve(async (req) => {
     let skipped = 0;
     const unavailable: string[] = [];
 
+    // ── Batch chain fetch ──
+    // Collapse one UW chain call per (ticker, expiry) group instead of 3–4 calls per trade.
+    // This is the #1 source of 429s. Each call returns the whole chain; we map each OCC to its row.
+    const occByTrade = new Map<string, string>(); // tradeId -> occ
+    const groupKeys = new Set<string>();           // "TICKER|YYYY-MM-DD"
     for (const trade of open) {
-      // Only handle option trades here; non-option rows (none today) get skipped.
+      if (trade.is_option === false) continue;
+      const occ = resolveOccSymbol(trade);
+      if (!occ) continue;
+      occByTrade.set(trade.id, occ);
+      const parsed = parseOccSymbol(occ);
+      if (parsed) groupKeys.add(`${String(trade.ticker).toUpperCase()}|${parsed.expiry}`);
+    }
+    const chainQuoteByOcc = new Map<string, OptionQuote>();
+    await Promise.all(
+      Array.from(groupKeys).map(async (key) => {
+        const [ticker, expiry] = key.split("|");
+        const rows = await fetchUnusualWhalesChainRows(ticker, expiry);
+        if (!rows) return;
+        for (const row of rows) {
+          const sym = String(row.option_symbol ?? "").trim().toUpperCase();
+          if (!sym) continue;
+          const q = chainRowToQuote(row);
+          if (q) chainQuoteByOcc.set(sym, q);
+        }
+      }),
+    );
+
+    for (const trade of open) {
       if (trade.is_option === false) { skipped++; continue; }
 
-      const occ = resolveOccSymbol(trade);
+      const occ = occByTrade.get(trade.id) ?? resolveOccSymbol(trade);
       if (!occ) {
         unavailable.push(`${trade.ticker} (no contract symbol)`);
         await admin.from("paper_trades").update({
@@ -152,7 +179,9 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const quote = await fetchOptionQuote(occ, trade.ticker);
+      // Prefer the batched chain quote; only fall back to per-OCC endpoints if missing.
+      const batched = chainQuoteByOcc.get(occ);
+      const quote: OptionQuote = batched ?? await fetchOptionQuote(occ, trade.ticker);
       if (quote.source === "unavailable" || quote.premium == null || !Number.isFinite(quote.premium)) {
         unavailable.push(`${trade.ticker} ${occ}`);
         await admin.from("paper_trades").update({
