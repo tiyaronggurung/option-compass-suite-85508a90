@@ -21,6 +21,7 @@ import MarketOverviewStrip from "@/components/MarketOverviewStrip";
 import { PaperAccountCard } from "@/components/PaperAccountCard";
 import ProviderStatusBanner from "@/components/ProviderStatusBanner";
 import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
+import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
