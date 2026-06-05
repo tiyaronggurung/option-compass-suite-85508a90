@@ -144,7 +144,7 @@ export function BuyOptionDialog(props: Props) {
         toast.error(`Chain load failed: ${error.message}`);
         return;
       }
-      const rows = (data ?? []) as ChainRow[];
+      const rows = ((data ?? []) as ChainRow[]).filter((r) => daysToExpiry(r.expiry) < 30);
       setChain(rows);
       // Pick initial expiry: signal.expiry if present in chain, else earliest
       const expiries = Array.from(new Set(rows.map((r) => r.expiry))).sort();
