@@ -312,8 +312,9 @@ export function BuyOptionDialog(props: Props) {
     setSubmitting(false);
     if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Bought ${qty}× ${signal.ticker} ${selected.strike} ${selected.type.toUpperCase()} ${selected.expiry}`);
+    setReceipt(res.receipt);
     onSuccess();
-    onOpenChange(false);
+    // NOTE: keep dialog open so the user sees the receipt; they close it manually.
   }
 
   if (!signal) return null;
