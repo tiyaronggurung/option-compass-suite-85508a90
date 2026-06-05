@@ -86,7 +86,7 @@ export default function Dashboard() {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }] = await Promise.all([
+      const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }, { data: pa }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
         supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 50).order("created_at", { ascending: false }).limit(30),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
@@ -95,6 +95,7 @@ export default function Dashboard() {
         supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).in("action", ["dismissed", "approved"]),
         supabase.from("provider_configs").select("last_status").eq("provider", "alpaca").maybeSingle(),
         supabase.from("risk_settings").select("*").eq("user_id", user!.id).maybeSingle(),
+        supabase.from("paper_accounts").select("cash_balance").eq("user_id", user!.id).maybeSingle(),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
