@@ -468,7 +468,46 @@ Deno.serve(async (req) => {
 
 
 
-  const { scored, best, rejectionCounts, bestEffort } = rankCandidates(candidates, profile);
+  let { scored, best, rejectionCounts, bestEffort } = rankCandidates(candidates, profile);
+
+  // Fallback: UW chain often lacks two-sided NBBO quotes outside RTH. If nothing
+  // passed guards (and we haven't tried Alpaca yet), retry with Alpaca's chain
+  // which carries real market quotes — same path the original Alpaca picker used.
+  let alpacaFallbackDebug: any = null;
+  if (!best && !bestEffort && source === "unusual_whales") {
+    try {
+      const alpacaCands = await fetchAlpacaChain(ticker, optionType, profile);
+      alpacaFallbackDebug = { tried: true, candidates: alpacaCands?.length ?? 0 };
+      if (alpacaCands && alpacaCands.length) {
+        if (spot != null) {
+          for (const c of alpacaCands) {
+            if (c.delta == null) {
+              const est = estimateDelta(optionType as "CALL"|"PUT", spot, c.strike, c.dte, c.iv ?? null);
+              if (est != null) c.delta = est;
+            }
+          }
+        }
+        const reranked = rankCandidates(alpacaCands, profile);
+        alpacaFallbackDebug.reranked = {
+          best: !!reranked.best,
+          bestEffort: !!reranked.bestEffort,
+          rejection_counts: reranked.rejectionCounts,
+        };
+        if (reranked.best || reranked.bestEffort) {
+          candidates = alpacaCands;
+          scored = reranked.scored;
+          best = reranked.best;
+          rejectionCounts = reranked.rejectionCounts;
+          bestEffort = reranked.bestEffort;
+          source = "alpaca";
+        }
+      }
+    } catch (e) {
+      alpacaFallbackDebug = { tried: true, error: String(e) };
+      console.warn("alpaca rerank err", e);
+    }
+  }
+
 
   // Select either normal or best-effort pick. Hard fail only if neither exists.
   const pick: ScoredCandidate | null = best ?? bestEffort;
@@ -486,6 +525,7 @@ Deno.serve(async (req) => {
       profile,
       candidates_considered: candidates.length,
       rejection_counts: rejectionCounts,
+      alpaca_fallback: alpacaFallbackDebug,
       latency_ms: Date.now() - t0,
     });
   }
