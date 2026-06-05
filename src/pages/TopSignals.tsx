@@ -214,6 +214,19 @@ export default function TopSignals() {
         onOpenChange={(v) => !v && setDetail(null)}
         rankBreakdown={detail?.breakdown}
       />
+
+      <BuyOptionDialog
+        open={buyOpen}
+        signal={buySignal}
+        userId={user?.id ?? ""}
+        risk={risk}
+        openTradesCount={openTrades.length}
+        todayRealizedPL={todayRealizedPL}
+        cashBalance={cashBalance}
+        onOpenChange={setBuyOpen}
+        onSuccess={refreshAfterTrade}
+        onFallbackApprove={fallbackApprove}
+      />
     </div>
   );
 }
