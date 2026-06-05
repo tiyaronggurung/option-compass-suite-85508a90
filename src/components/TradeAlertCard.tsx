@@ -15,6 +15,9 @@ import { toast } from "sonner";
 export type TradeAlert = {
   id: string;
   user_id: string;
+  signal_id: string;
+  paper_trade_id: string | null;
+  contract_snapshot_id: string | null;
   ticker: string;
   option_side: "call" | "put";
   strike: number | null;
