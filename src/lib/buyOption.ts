@@ -39,7 +39,23 @@ export type BuyOptionInput = {
   cashBalance: number;     // for buying-power check
 };
 
-export type BuyOptionResult = { ok: true } | { ok: false; reason: string };
+export type BuyOptionReceipt = {
+  tradeId: string | null;
+  ticker: string;
+  optionType: "CALL" | "PUT";
+  strike: number;
+  expiry: string;
+  contracts: number;
+  fillPremium: number;
+  totalCost: number;
+  remainingCash: number;
+  status: string;
+  filledAt: string;
+};
+
+export type BuyOptionResult =
+  | { ok: true; receipt: BuyOptionReceipt }
+  | { ok: false; reason: string };
 
 export async function buyOptionAsPaperTrade(input: BuyOptionInput): Promise<BuyOptionResult> {
   const qty = Math.max(1, Math.floor(input.contracts));
