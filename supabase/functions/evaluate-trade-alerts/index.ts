@@ -34,7 +34,14 @@ type Alert = {
   alert_status: string;
   expires_at: string | null;
   last_notified_status: string | null;
+  entered_at: string | null;
+  created_at: string | null;
 };
+
+// Grace period after entry during which we ignore stop-loss hits.
+// Prevents the first contract mid (which can sit inside a wide bid/ask spread
+// right after entry) from triggering an instant fake stop.
+const STOP_GRACE_MS = 60_000;
 
 const n = (v: unknown): number | null => {
   const x = Number(v);
@@ -54,7 +61,7 @@ Deno.serve(async (req) => {
   const ACTIVE = ["watching", "triggered", "entered"];
   const { data: alertsRaw, error: aErr } = await admin
     .from("trade_alerts")
-    .select("id,user_id,ticker,option_side,paper_trade_id,underlying_trigger_price,trigger_direction,entry_contract_price_min,entry_contract_price_max,stop_loss_contract_price,target_1_contract_price,target_2_contract_price,target_3_contract_price,invalidation_underlying_price,alert_status,expires_at,last_notified_status")
+    .select("id,user_id,ticker,option_side,paper_trade_id,underlying_trigger_price,trigger_direction,entry_contract_price_min,entry_contract_price_max,stop_loss_contract_price,target_1_contract_price,target_2_contract_price,target_3_contract_price,invalidation_underlying_price,alert_status,expires_at,last_notified_status,entered_at,created_at")
     .in("alert_status", ACTIVE)
     .limit(500);
 
@@ -127,8 +134,13 @@ Deno.serve(async (req) => {
       }
       // Active contract-level transitions (entered or beyond)
       if ((["triggered", "entered", "hit_t1", "hit_t2"].includes(next) || ["triggered","entered","hit_t1","hit_t2"].includes(a.alert_status)) && contractMid != null) {
-        // Stop loss takes precedence.
-        if (a.stop_loss_contract_price != null && contractMid <= a.stop_loss_contract_price) {
+        // Stop loss takes precedence — but skip during the post-entry grace window
+        // so a wide-spread first mid can't fake an instant stop.
+        const entryRef = a.entered_at ?? a.created_at;
+        const inGrace = entryRef
+          ? (now.getTime() - new Date(entryRef).getTime()) < STOP_GRACE_MS
+          : false;
+        if (!inGrace && a.stop_loss_contract_price != null && contractMid <= a.stop_loss_contract_price) {
           next = "stopped";
           patch.stopped_at = now.toISOString();
         } else {
