@@ -49,17 +49,19 @@ export default function TopSignals() {
     if (!user) return;
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }, { data: rs }] = await Promise.all([
+      const [{ data: s }, { data: t }, { data: w }, { data: rs }, { data: pa }] = await Promise.all([
         supabase.from("signals").select("*").order("created_at", { ascending: false }).limit(200),
         supabase.from("paper_trades").select("*").eq("user_id", user.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user.id),
         supabase.from("risk_settings").select("*").eq("user_id", user.id).maybeSingle(),
+        supabase.from("paper_accounts").select("cash_balance").eq("user_id", user.id).maybeSingle(),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
       setRisk(rs as RiskSettingsLike);
+      setCashBalance(Number((pa as any)?.cash_balance ?? 0));
     })();
     return () => { cancel = true; };
   }, [user]);
