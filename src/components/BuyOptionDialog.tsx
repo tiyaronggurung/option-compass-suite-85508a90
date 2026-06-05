@@ -282,6 +282,9 @@ export function BuyOptionDialog(props: Props) {
             <span className="text-muted-foreground">
               Live spot{" "}
               <span className="ticker-mono text-foreground">{fmtMoney(liveSpot)}</span>
+              {uwSpot != null && (
+                <span className="ml-1 text-[10px] text-bull">● UW live</span>
+              )}
               {signalSpot > 0 && liveSpot > 0 && (
                 <span
                   className={cn(
