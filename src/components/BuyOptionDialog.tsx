@@ -75,7 +75,46 @@ export function BuyOptionDialog(props: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [chainTried, setChainTried] = useState(false);
 
-  const spot = useMemo(() => Number(signal?.price ?? 0) || 0, [signal]);
+  const signalSpot = useMemo(() => Number(signal?.price ?? 0) || 0, [signal]);
+
+  // Derive live underlying price from the loaded chain using put-call parity:
+  //   S ≈ K + (Call_mid - Put_mid)   (ignoring r, q for short-dated options)
+  // We use the median across strikes near the signal price for robustness.
+  const liveSpot = useMemo(() => {
+    if (!chain.length) return signalSpot;
+    // Use the nearest expiry only — most liquid and least parity drift.
+    const expiries = Array.from(new Set(chain.map((r) => r.expiry))).sort();
+    const targetExp = expiries[0];
+    if (!targetExp) return signalSpot;
+    const callsByStrike = new Map<number, ChainRow>();
+    const putsByStrike = new Map<number, ChainRow>();
+    for (const r of chain) {
+      if (r.expiry !== targetExp) continue;
+      const mid =
+        r.bid != null && r.ask != null && r.bid > 0 && r.ask > 0
+          ? (Number(r.bid) + Number(r.ask)) / 2
+          : Number(r.ask ?? r.last ?? r.bid ?? 0);
+      if (!mid || !Number.isFinite(mid)) continue;
+      const slot = r.type === "call" ? callsByStrike : putsByStrike;
+      slot.set(Number(r.strike), { ...r, bid: mid, ask: mid } as ChainRow);
+    }
+    const estimates: number[] = [];
+    for (const [strike, call] of callsByStrike) {
+      const put = putsByStrike.get(strike);
+      if (!put) continue;
+      const cMid = Number(call.bid);
+      const pMid = Number(put.bid);
+      const s = strike + cMid - pMid;
+      if (Number.isFinite(s) && s > 0) estimates.push(s);
+    }
+    if (!estimates.length) return signalSpot;
+    estimates.sort((a, b) => a - b);
+    return estimates[Math.floor(estimates.length / 2)];
+  }, [chain, signalSpot]);
+
+  // `spot` is the LIVE price used everywhere (ATM picker, projections, divider).
+  const spot = liveSpot;
+  const spotDeltaPct = signalSpot > 0 ? ((liveSpot - signalSpot) / signalSpot) * 100 : 0;
 
   // Load chain when dialog opens
   useEffect(() => {
