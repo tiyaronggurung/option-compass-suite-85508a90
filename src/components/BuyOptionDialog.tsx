@@ -19,8 +19,29 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Signal } from "@/lib/signalHelpers";
 import type { RiskSettingsLike } from "@/lib/riskGuard";
-import { buyOptionAsPaperTrade, type SelectedContract } from "@/lib/buyOption";
+import { buyOptionAsPaperTrade, type SelectedContract, type BuyOptionReceipt } from "@/lib/buyOption";
 import { buildProjection, breakeven, daysToExpiry } from "@/lib/blackScholes";
+
+// Per-signal last selection memory (side/expiry/strike/qty), kept in localStorage.
+type SavedSelection = { side: "call" | "put"; expiry: string; strike: number | null; qty: number };
+const SAVED_KEY = (signalId: string) => `buyOptionDialog:lastSelection:${signalId}`;
+function loadSavedSelection(signalId: string): SavedSelection | null {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY(signalId));
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || (v.side !== "call" && v.side !== "put")) return null;
+    return {
+      side: v.side,
+      expiry: typeof v.expiry === "string" ? v.expiry : "",
+      strike: v.strike == null ? null : Number(v.strike),
+      qty: Math.max(1, Math.floor(Number(v.qty) || 1)),
+    };
+  } catch { return null; }
+}
+function saveSelection(signalId: string, sel: SavedSelection) {
+  try { localStorage.setItem(SAVED_KEY(signalId), JSON.stringify(sel)); } catch { /* ignore */ }
+}
 
 type ChainRow = {
   symbol: string;
