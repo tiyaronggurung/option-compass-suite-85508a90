@@ -62,11 +62,18 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Per-isolate in-memory cache. Multiple concurrent polls within CACHE_TTL_MS
-// share the same response, drastically cutting UW API calls and avoiding 429s.
+// Per-isolate in-memory caches.
+// - responseCache: short TTL for the full payload (rows). Coalesces polls.
+// - metaCache: long TTL for spot + expiries (these change rarely; survives 429 storms).
+// - lastGoodCache: last successful full payload per cacheKey; served as stale-on-error.
 const CACHE_TTL_MS = 8_000;
+const META_TTL_MS = 120_000; // 2 min
+const LAST_GOOD_TTL_MS = 600_000; // 10 min — better stale than empty
 type CacheEntry = { at: number; payload: any };
+type MetaEntry = { at: number; spot: number | null; expiries: string[] };
 const responseCache = new Map<string, CacheEntry>();
+const metaCache = new Map<string, MetaEntry>();
+const lastGoodCache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<any>>();
 
 Deno.serve(async (req) => {
@@ -89,7 +96,7 @@ Deno.serve(async (req) => {
     const cacheKey = `${ticker}|${requestedExpiry ?? ""}`;
     const now = Date.now();
 
-    // Serve from cache if fresh.
+    // Serve fresh full payload from cache.
     const cached = responseCache.get(cacheKey);
     if (cached && now - cached.at < CACHE_TTL_MS) {
       return new Response(JSON.stringify({ ...cached.payload, cached: true }), {
@@ -101,32 +108,56 @@ Deno.serve(async (req) => {
     let work = inflight.get(cacheKey);
     if (!work) {
       work = (async () => {
-        const [stateRes, expiryRes] = await Promise.allSettled([
-          uw(`/stock/${encodeURIComponent(ticker)}/stock-state`),
-          uw(`/stock/${encodeURIComponent(ticker)}/expiry-breakdown`),
-        ]);
+        // Use long-TTL meta cache when fresh to avoid burning UW quota on spot+expiries.
+        const metaKey = ticker;
+        const meta = metaCache.get(metaKey);
+        const metaFresh = meta && now - meta.at < META_TTL_MS;
 
-        let spot: number | null = null;
-        if (stateRes.status === "fulfilled") {
-          const d = stateRes.value?.data ?? stateRes.value ?? {};
-          spot = numOrNull(d.close ?? d.last ?? d.price);
-        }
+        let spot: number | null = metaFresh ? meta!.spot : null;
+        let expiries: string[] = metaFresh ? meta!.expiries : [];
+        let stateErr: string | null = null;
+        let expiryErr: string | null = null;
 
-        const today = new Date();
-        today.setUTCHours(0, 0, 0, 0);
-        const expirySet = new Set<string>();
-        if (expiryRes.status === "fulfilled") {
-          const j = expiryRes.value;
-          const arr: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-          for (const row of arr) {
-            const e = row?.expires ?? row?.expiry ?? row?.expiration ?? row?.expires_at;
-            if (typeof e !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e)) continue;
-            const d = new Date(e + "T00:00:00Z");
-            const dte = Math.round((d.getTime() - today.getTime()) / 86_400_000);
-            if (dte >= 0 && dte <= 60) expirySet.add(e);
+        if (!metaFresh) {
+          const [stateRes, expiryRes] = await Promise.allSettled([
+            uw(`/stock/${encodeURIComponent(ticker)}/stock-state`),
+            uw(`/stock/${encodeURIComponent(ticker)}/expiry-breakdown`),
+          ]);
+
+          if (stateRes.status === "fulfilled") {
+            const d = stateRes.value?.data ?? stateRes.value ?? {};
+            spot = numOrNull(d.close ?? d.last ?? d.price);
+          } else {
+            stateErr = (stateRes.reason as Error)?.message ?? String(stateRes.reason);
+            console.warn("uw-chain stock-state failed", ticker, stateErr);
+            if (meta) spot = meta.spot; // fall back to last known
+          }
+
+          const today = new Date();
+          today.setUTCHours(0, 0, 0, 0);
+          const expirySet = new Set<string>();
+          if (expiryRes.status === "fulfilled") {
+            const j = expiryRes.value;
+            const arr: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+            for (const row of arr) {
+              const e = row?.expires ?? row?.expiry ?? row?.expiration ?? row?.expires_at;
+              if (typeof e !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e)) continue;
+              const d = new Date(e + "T00:00:00Z");
+              const dte = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+              if (dte >= 0 && dte <= 60) expirySet.add(e);
+            }
+            expiries = Array.from(expirySet).sort();
+          } else {
+            expiryErr = (expiryRes.reason as Error)?.message ?? String(expiryRes.reason);
+            console.warn("uw-chain expiry-breakdown failed", ticker, expiryErr);
+            if (meta) expiries = meta.expiries; // fall back to last known
+          }
+
+          // Update meta cache only when we got at least expiries.
+          if (expiries.length > 0) {
+            metaCache.set(metaKey, { at: Date.now(), spot, expiries });
           }
         }
-        const expiries = Array.from(expirySet).sort();
 
         let expiry = requestedExpiry && expiries.includes(requestedExpiry) ? requestedExpiry : expiries[0] ?? "";
         if (!expiry && requestedExpiry) expiry = requestedExpiry;
@@ -166,18 +197,33 @@ Deno.serve(async (req) => {
             rows.sort((a, b) => a.strike - b.strike);
           } catch (e) {
             contractsError = (e as Error).message;
-            console.error("uw-chain contracts error", contractsError);
+            console.warn("uw-chain contracts error", ticker, expiry, contractsError);
           }
         }
 
-        const payload = {
+        const payload: any = {
           ticker, spot, expiries, expiry, rows,
           fetched_at: new Date().toISOString(),
           contracts_error: contractsError,
+          state_error: stateErr,
+          expiry_error: expiryErr,
+          stale: false,
         };
 
-        // Only cache if we got contracts; otherwise let the next poll retry sooner.
-        if (rows.length > 0) {
+        // Stale-on-error: if contracts failed or were empty, prefer last-good rows.
+        if (rows.length === 0) {
+          const lg = lastGoodCache.get(cacheKey);
+          if (lg && now - lg.at < LAST_GOOD_TTL_MS) {
+            payload.rows = lg.payload.rows;
+            payload.expiry = lg.payload.expiry || payload.expiry;
+            if (payload.spot == null) payload.spot = lg.payload.spot ?? null;
+            if (!payload.expiries.length) payload.expiries = lg.payload.expiries ?? [];
+            payload.stale = true;
+            payload.stale_age_ms = now - lg.at;
+          }
+        } else {
+          // Save successful payload as last-good.
+          lastGoodCache.set(cacheKey, { at: Date.now(), payload });
           responseCache.set(cacheKey, { at: Date.now(), payload });
         }
         return payload;
