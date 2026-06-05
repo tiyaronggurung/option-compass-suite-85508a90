@@ -134,8 +134,13 @@ Deno.serve(async (req) => {
       }
       // Active contract-level transitions (entered or beyond)
       if ((["triggered", "entered", "hit_t1", "hit_t2"].includes(next) || ["triggered","entered","hit_t1","hit_t2"].includes(a.alert_status)) && contractMid != null) {
-        // Stop loss takes precedence.
-        if (a.stop_loss_contract_price != null && contractMid <= a.stop_loss_contract_price) {
+        // Stop loss takes precedence — but skip during the post-entry grace window
+        // so a wide-spread first mid can't fake an instant stop.
+        const entryRef = a.entered_at ?? a.created_at;
+        const inGrace = entryRef
+          ? (now.getTime() - new Date(entryRef).getTime()) < STOP_GRACE_MS
+          : false;
+        if (!inGrace && a.stop_loss_contract_price != null && contractMid <= a.stop_loss_contract_price) {
           next = "stopped";
           patch.stopped_at = now.toISOString();
         } else {
