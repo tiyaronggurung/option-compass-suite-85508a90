@@ -309,18 +309,19 @@ export default function Dashboard() {
         todayRealizedPL={todayRealizedPL}
       />
 
-      {alerts.filter(a => !["cancelled"].includes(a.alert_status)).length > 0 && (
+      const closedTradeIds = useMemo(() => new Set(trades.filter(t => t.status === "CLOSED").map(t => t.id)), [trades]);
+      const activeAlerts = useMemo(() => alerts.filter(a => !["cancelled"].includes(a.alert_status) && !closedTradeIds.has(a.paper_trade_id ?? "")), [alerts, closedTradeIds]);
+
+      {activeAlerts.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold tracking-tight uppercase text-muted-foreground">
               Active Trade Plans
             </h2>
-            <span className="text-[11px] text-muted-foreground">{alerts.filter(a => !["cancelled"].includes(a.alert_status)).length} active</span>
+            <span className="text-[11px] text-muted-foreground">{activeAlerts.length} active</span>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {alerts
-              .filter(a => !["cancelled"].includes(a.alert_status))
-              .map(a => <TradeAlertCard key={a.id} alert={a} onChanged={reloadAlerts} />)}
+            {activeAlerts.map(a => <TradeAlertCard key={a.id} alert={a} onChanged={reloadAlerts} />)}
           </div>
         </section>
       )}
