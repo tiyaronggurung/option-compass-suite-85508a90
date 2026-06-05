@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtPrice, fmtPL, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
+import { TradeTimelinePanel } from "@/components/TradeTimelinePanel";
 
 type Props = {
   trade: PaperTrade;
@@ -155,6 +156,10 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
 
       {/* Why this contract — Contract Selection Engine rationale */}
       {t.contract_snapshot_id && <RationalePanel snapshotId={t.contract_snapshot_id as string} />}
+
+      {/* Status timeline — lifecycle events from trade_alerts */}
+      <TradeTimelinePanel trade={trade} />
+
 
 
 
