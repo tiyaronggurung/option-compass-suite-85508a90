@@ -337,12 +337,41 @@ async function fetchTradierQuote(occ: string): Promise<OptionQuote | null> {
 async function fetchUnusualWhalesQuote(occ: string, _underlying: string): Promise<OptionQuote | null> {
   const key = Deno.env.get("UNUSUAL_WHALES_API_KEY");
   if (!key) return null;
-  // UW exposes per-contract intraday data; we want latest premium + greeks.
+  const headers = { Authorization: `Bearer ${key}`, Accept: "application/json" };
+
+  // 1) Try the live NBBO snapshot first — freshest tick UW exposes (sub-second).
+  try {
+    const snapUrl = `https://api.unusualwhales.com/api/option-contract/${encodeURIComponent(occ)}/nbbo`;
+    const r = await fetch(snapUrl, { headers });
+    if (r.ok) {
+      const j = await r.json().catch(() => null) as any;
+      const row = Array.isArray(j?.data) ? j.data[j.data.length - 1] : (j?.data ?? null);
+      if (row) {
+        const bid = num(row.bid);
+        const ask = num(row.ask);
+        const lastPx = num(row.last ?? row.price);
+        const mid = bid != null && ask != null ? (bid + ask) / 2 : null;
+        const premium = mid ?? lastPx ?? bid ?? ask;
+        if (premium != null) {
+          return {
+            premium, bid, ask, mid,
+            iv: num(row.iv ?? row.implied_volatility),
+            delta: num(row.delta), gamma: num(row.gamma),
+            theta: num(row.theta), vega: num(row.vega),
+            open_interest: numInt(row.open_interest ?? row.oi),
+            option_volume: numInt(row.volume),
+            source: "unusual_whales",
+          };
+        }
+      }
+    }
+  } catch (e) { console.warn("uw nbbo err", e); }
+
+  // 2) Fallback to intraday minute aggregates — last entry = most recent minute.
   const url = `https://api.unusualwhales.com/api/option-contract/${encodeURIComponent(occ)}/intraday`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
+  const res = await fetch(url, { headers });
   if (!res.ok) return null;
   const json = await res.json().catch(() => null) as any;
-  // Endpoint returns { data: [...] } with most recent last. Take the last entry.
   const arr: any[] = Array.isArray(json?.data) ? json.data : [];
   const last = arr.length ? arr[arr.length - 1] : null;
   if (!last) return null;
