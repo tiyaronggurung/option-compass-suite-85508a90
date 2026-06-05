@@ -205,7 +205,11 @@ Deno.serve(async (req) => {
         contract_symbol: null,
         strike: n.strike ?? null,
         expiry: n.expiry ?? null,
-        premium: n.totalPrem,
+        // IMPORTANT: do NOT store total notional flow here. signals.premium is a
+        // per-share contract price used by approveSignal as the entry premium
+        // fallback. Storing total flow ($) caused 100%-loss paper trades.
+        // Leave null so the contract picker must resolve a real mid before approval.
+        premium: null,
       });
       if (ins.error) {
         if ((ins.error as any).code === "23505") { result.duplicates++; continue; }
