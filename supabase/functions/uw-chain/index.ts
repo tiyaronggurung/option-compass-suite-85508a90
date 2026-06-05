@@ -62,6 +62,13 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Per-isolate in-memory cache. Multiple concurrent polls within CACHE_TTL_MS
+// share the same response, drastically cutting UW API calls and avoiding 429s.
+const CACHE_TTL_MS = 8_000;
+type CacheEntry = { at: number; payload: any };
+const responseCache = new Map<string, CacheEntry>();
+const inflight = new Map<string, Promise<any>>();
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (!UW_KEY) {
@@ -79,86 +86,112 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 1. Spot price + 2. all option symbols in parallel.
-    const [stateRes, chainsRes] = await Promise.allSettled([
-      uw(`/stock/${encodeURIComponent(ticker)}/stock-state`),
-      uw(`/stock/${encodeURIComponent(ticker)}/option-chains`),
-    ]);
+    const cacheKey = `${ticker}|${requestedExpiry ?? ""}`;
+    const now = Date.now();
 
-    let spot: number | null = null;
-    if (stateRes.status === "fulfilled") {
-      const d = stateRes.value?.data ?? stateRes.value ?? {};
-      const p = numOrNull(d.close ?? d.last ?? d.price);
-      spot = p;
+    // Serve from cache if fresh.
+    const cached = responseCache.get(cacheKey);
+    if (cached && now - cached.at < CACHE_TTL_MS) {
+      return new Response(JSON.stringify({ ...cached.payload, cached: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    let allSymbols: string[] = [];
-    if (chainsRes.status === "fulfilled") {
-      const c = chainsRes.value;
-      allSymbols = Array.isArray(c?.data) ? c.data : Array.isArray(c) ? c : [];
+    // Coalesce concurrent identical requests so only one hits UW.
+    let work = inflight.get(cacheKey);
+    if (!work) {
+      work = (async () => {
+        const [stateRes, chainsRes] = await Promise.allSettled([
+          uw(`/stock/${encodeURIComponent(ticker)}/stock-state`),
+          uw(`/stock/${encodeURIComponent(ticker)}/option-chains`),
+        ]);
+
+        let spot: number | null = null;
+        if (stateRes.status === "fulfilled") {
+          const d = stateRes.value?.data ?? stateRes.value ?? {};
+          spot = numOrNull(d.close ?? d.last ?? d.price);
+        }
+
+        let allSymbols: string[] = [];
+        if (chainsRes.status === "fulfilled") {
+          const c = chainsRes.value;
+          allSymbols = Array.isArray(c?.data) ? c.data : Array.isArray(c) ? c : [];
+        }
+
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        const expirySet = new Set<string>();
+        for (const sym of allSymbols) {
+          const p = parseOcc(sym);
+          if (!p) continue;
+          const d = new Date(p.expiry + "T00:00:00Z");
+          const dte = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+          if (dte >= 0 && dte <= 45) expirySet.add(p.expiry);
+        }
+        const expiries = Array.from(expirySet).sort();
+
+        let expiry = requestedExpiry && expiries.includes(requestedExpiry) ? requestedExpiry : expiries[0] ?? "";
+        if (!expiry && requestedExpiry) expiry = requestedExpiry;
+
+        let rows: ChainRow[] = [];
+        let contractsError: string | null = null;
+        if (expiry) {
+          try {
+            const contractsJson = await uw(
+              `/stock/${encodeURIComponent(ticker)}/option-contracts?expiry=${encodeURIComponent(expiry)}&limit=500`,
+            );
+            const data: any[] = Array.isArray(contractsJson?.data) ? contractsJson.data : [];
+            rows = data.flatMap((c) => {
+              const sym = c.option_symbol ?? c.symbol;
+              if (!sym) return [];
+              const parsed = parseOcc(sym);
+              if (!parsed) return [];
+              const row: ChainRow = {
+                symbol: sym,
+                underlying: parsed.underlying,
+                expiry: parsed.expiry,
+                strike: parsed.strike,
+                type: parsed.type,
+                bid: numOrNull(c.nbbo_bid),
+                ask: numOrNull(c.nbbo_ask),
+                last: numOrNull(c.last_price),
+                volume: numOrNull(c.volume),
+                open_interest: numOrNull(c.open_interest),
+                delta: null,
+                gamma: null,
+                theta: null,
+                vega: null,
+                iv: numOrNull(c.implied_volatility),
+              };
+              return [row];
+            });
+            rows.sort((a, b) => a.strike - b.strike);
+          } catch (e) {
+            contractsError = (e as Error).message;
+            console.error("uw-chain contracts error", contractsError);
+          }
+        }
+
+        const payload = {
+          ticker, spot, expiries, expiry, rows,
+          fetched_at: new Date().toISOString(),
+          contracts_error: contractsError,
+        };
+
+        // Only cache if we got contracts; otherwise let the next poll retry sooner.
+        if (rows.length > 0) {
+          responseCache.set(cacheKey, { at: Date.now(), payload });
+        }
+        return payload;
+      })();
+      inflight.set(cacheKey, work);
+      work.finally(() => inflight.delete(cacheKey));
     }
 
-    // Derive upcoming expiries (<= 45 DTE) from symbols.
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    const expirySet = new Set<string>();
-    for (const sym of allSymbols) {
-      const p = parseOcc(sym);
-      if (!p) continue;
-      const d = new Date(p.expiry + "T00:00:00Z");
-      const dte = Math.round((d.getTime() - today.getTime()) / 86_400_000);
-      if (dte >= 0 && dte <= 45) expirySet.add(p.expiry);
-    }
-    const expiries = Array.from(expirySet).sort();
-
-    // Pick target expiry: requested if valid, else signal-nearest, else first.
-    let expiry = requestedExpiry && expiries.includes(requestedExpiry) ? requestedExpiry : expiries[0] ?? "";
-    if (!expiry && requestedExpiry) expiry = requestedExpiry; // still try
-
-    // 3. Fetch contracts for that expiry.
-    let rows: ChainRow[] = [];
-    if (expiry) {
-      try {
-        const contractsJson = await uw(
-          `/stock/${encodeURIComponent(ticker)}/option-contracts?expiry=${encodeURIComponent(expiry)}&limit=500`,
-        );
-        const data: any[] = Array.isArray(contractsJson?.data) ? contractsJson.data : [];
-        rows = data.flatMap((c) => {
-          const sym = c.option_symbol ?? c.symbol;
-          if (!sym) return [];
-          const parsed = parseOcc(sym);
-          if (!parsed) return [];
-          const row: ChainRow = {
-            symbol: sym,
-            underlying: parsed.underlying,
-            expiry: parsed.expiry,
-            strike: parsed.strike,
-            type: parsed.type,
-            bid: numOrNull(c.nbbo_bid),
-            ask: numOrNull(c.nbbo_ask),
-            last: numOrNull(c.last_price),
-            volume: numOrNull(c.volume),
-            open_interest: numOrNull(c.open_interest),
-            delta: null,
-            gamma: null,
-            theta: null,
-            vega: null,
-            iv: numOrNull(c.implied_volatility),
-          };
-          return [row];
-        });
-        rows.sort((a, b) => a.strike - b.strike);
-      } catch (e) {
-        console.error("uw-chain contracts error", (e as Error).message);
-      }
-    }
-
-    return new Response(
-      JSON.stringify({
-        ticker, spot, expiries, expiry, rows, fetched_at: new Date().toISOString(),
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    const payload = await work;
+    return new Response(JSON.stringify(payload), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (e) {
     return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -19,8 +19,29 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Signal } from "@/lib/signalHelpers";
 import type { RiskSettingsLike } from "@/lib/riskGuard";
-import { buyOptionAsPaperTrade, type SelectedContract } from "@/lib/buyOption";
+import { buyOptionAsPaperTrade, type SelectedContract, type BuyOptionReceipt } from "@/lib/buyOption";
 import { buildProjection, breakeven, daysToExpiry } from "@/lib/blackScholes";
+
+// Per-signal last selection memory (side/expiry/strike/qty), kept in localStorage.
+type SavedSelection = { side: "call" | "put"; expiry: string; strike: number | null; qty: number };
+const SAVED_KEY = (signalId: string) => `buyOptionDialog:lastSelection:${signalId}`;
+function loadSavedSelection(signalId: string): SavedSelection | null {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY(signalId));
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || (v.side !== "call" && v.side !== "put")) return null;
+    return {
+      side: v.side,
+      expiry: typeof v.expiry === "string" ? v.expiry : "",
+      strike: v.strike == null ? null : Number(v.strike),
+      qty: Math.max(1, Math.floor(Number(v.qty) || 1)),
+    };
+  } catch { return null; }
+}
+function saveSelection(signalId: string, sel: SavedSelection) {
+  try { localStorage.setItem(SAVED_KEY(signalId), JSON.stringify(sel)); } catch { /* ignore */ }
+}
 
 type ChainRow = {
   symbol: string;
@@ -77,6 +98,11 @@ export function BuyOptionDialog(props: Props) {
   const [chainTried, setChainTried] = useState(false);
   const [uwSpot, setUwSpot] = useState<number | null>(null);
 
+  const [chainStale, setChainStale] = useState(false);
+  const [chainLastUpdated, setChainLastUpdated] = useState<number | null>(null);
+  const [receipt, setReceipt] = useState<BuyOptionReceipt | null>(null);
+  const [restoredStrike, setRestoredStrike] = useState<number | null>(null);
+
   const signalSpot = useMemo(() => Number(signal?.price ?? 0) || 0, [signal]);
 
   // `spot` is the LIVE price used everywhere (ATM picker, projections, divider).
@@ -85,22 +111,29 @@ export function BuyOptionDialog(props: Props) {
   const spot = liveSpot;
   const spotDeltaPct = signalSpot > 0 ? ((liveSpot - signalSpot) / signalSpot) * 100 : 0;
 
-  // Reset state when dialog opens for a new signal.
+  // Reset state when dialog opens for a new signal — and restore any saved selection.
   useEffect(() => {
     if (!open || !signal) return;
     setChainTried(false);
     setSelectedSymbol(null);
-    setQty(1);
     setChain([]);
     setAvailableExpiries([]);
     setUwSpot(null);
-    const initialSide = String(signal.direction).toUpperCase() === "PUT" ? "put" : "call";
+    setChainStale(false);
+    setChainLastUpdated(null);
+    setReceipt(null);
+
+    const saved = loadSavedSelection(String(signal.id));
+    const initialSide = saved?.side ?? (String(signal.direction).toUpperCase() === "PUT" ? "put" : "call");
     setSide(initialSide);
+    setQty(saved?.qty ?? 1);
+    setRestoredStrike(saved?.strike ?? null);
     const sigExp = (signal as any).expiry as string | null;
-    setExpiry(sigExp ?? "");
+    setExpiry(saved?.expiry || sigExp || "");
   }, [open, signal]);
 
-  // Poll the live UW chain every 5s while open. Refetch immediately when expiry changes.
+  // Poll the live UW chain every 10s while open. Refetch immediately when expiry changes.
+  // On error or empty response we KEEP the last-good rows and flag the chain as stale.
   useEffect(() => {
     if (!open || !signal) return;
     let cancelled = false;
@@ -114,15 +147,27 @@ export function BuyOptionDialog(props: Props) {
         });
         if (cancelled) return;
         if (error) {
+          setChainStale(true);
           if (firstLoad) toast.error(`Live chain failed: ${error.message}`);
           return;
         }
-        const payload = data as { spot: number | null; expiries: string[]; expiry: string; rows: ChainRow[] };
-        setUwSpot(payload.spot ?? null);
-        setAvailableExpiries(payload.expiries ?? []);
-        setChain(payload.rows ?? []);
+        const payload = data as {
+          spot: number | null; expiries: string[]; expiry: string; rows: ChainRow[];
+          contracts_error?: string | null;
+        };
+        if (payload.spot != null) setUwSpot(payload.spot);
+        if (payload.expiries?.length) setAvailableExpiries(payload.expiries);
+        if (payload.rows && payload.rows.length > 0) {
+          setChain(payload.rows);
+          setChainStale(false);
+          setChainLastUpdated(Date.now());
+        } else {
+          // Empty (likely rate-limited or no contracts) — preserve last-good rows.
+          setChainStale(true);
+        }
         if (!expiry && payload.expiry) setExpiry(payload.expiry);
       } catch (e) {
+        if (!cancelled) setChainStale(true);
         if (firstLoad) toast.error(`Live chain error: ${(e as Error).message}`);
       } finally {
         if (firstLoad && !cancelled) {
@@ -134,11 +179,11 @@ export function BuyOptionDialog(props: Props) {
     };
 
     void fetchChain();
-    const id = setInterval(fetchChain, 5000);
+    const id = setInterval(fetchChain, 10_000);
     return () => { cancelled = true; clearInterval(id); };
   }, [open, signal, expiry]);
 
-  // If chain came back empty after first load, surface an error.
+  // If chain came back empty after first load AND we still have nothing, surface an error.
   useEffect(() => {
     if (!chainTried || loading) return;
     if (chain.length === 0 && signal) {
@@ -158,9 +203,17 @@ export function BuyOptionDialog(props: Props) {
   }, [chain, side, expiry]);
 
   // Auto-pick a sensible default strike when expiry/side changes.
-  // Prefer the signal's exact strike if it's in the current rows; else ATM-ish.
+  // Priority: restored-from-localStorage strike > signal's exact strike > ATM-ish.
   useEffect(() => {
     if (!rows.length || !spot) { setSelectedSymbol(null); return; }
+    if (restoredStrike != null) {
+      const exact = rows.find((r) => Number(r.strike) === Number(restoredStrike));
+      if (exact) {
+        setSelectedSymbol(exact.symbol);
+        setRestoredStrike(null); // consume once so later side/expiry changes use defaults
+        return;
+      }
+    }
     const sigStrike = signal?.strike != null ? Number(signal.strike) : null;
     const sigSide = String(signal?.direction ?? "").toUpperCase() === "PUT" ? "put" : "call";
     if (sigStrike != null && side === sigSide) {
@@ -170,7 +223,8 @@ export function BuyOptionDialog(props: Props) {
     // Fallback: ATM-ish (smallest |strike - spot|)
     const best = [...rows].sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
     setSelectedSymbol(best.symbol);
-  }, [rows, spot, signal, side]);
+  }, [rows, spot, signal, side, restoredStrike]);
+
 
   // Scroll the selected row into view when it changes.
   useEffect(() => {
@@ -182,6 +236,14 @@ export function BuyOptionDialog(props: Props) {
   }, [selectedSymbol]);
 
   const selected = useMemo(() => rows.find((r) => r.symbol === selectedSymbol) ?? null, [rows, selectedSymbol]);
+
+  // Persist the current selection per signal so reopening restores it.
+  useEffect(() => {
+    if (!open || !signal || !selected) return;
+    saveSelection(String(signal.id), {
+      side, expiry, strike: Number(selected.strike), qty,
+    });
+  }, [open, signal, side, expiry, selected, qty]);
 
   // Find the share-price divider index (strike just above spot)
   const dividerIndex = useMemo(() => {
@@ -250,8 +312,9 @@ export function BuyOptionDialog(props: Props) {
     setSubmitting(false);
     if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Bought ${qty}× ${signal.ticker} ${selected.strike} ${selected.type.toUpperCase()} ${selected.expiry}`);
+    setReceipt(res.receipt);
     onSuccess();
-    onOpenChange(false);
+    // NOTE: keep dialog open so the user sees the receipt; they close it manually.
   }
 
   if (!signal) return null;
@@ -306,6 +369,37 @@ export function BuyOptionDialog(props: Props) {
         <ScrollArea className="max-h-[80vh]">
           <div className="px-6 pb-6 space-y-4">
 
+            {receipt && (
+              <div className="rounded-md border border-bull/40 bg-bull/5 p-4 space-y-3 mt-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold flex items-center gap-2">
+                    <span className="inline-block h-2 w-2 rounded-full bg-bull" />
+                    Paper trade filled
+                  </div>
+                  <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                    {receipt.status}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <Stat label="Ticker" value={receipt.ticker} />
+                  <Stat label="Type" value={receipt.optionType} />
+                  <Stat label="Strike" value={fmtMoney(receipt.strike)} />
+                  <Stat label="Expiration" value={receipt.expiry} />
+                  <Stat label="Quantity" value={`${receipt.contracts}× contract${receipt.contracts > 1 ? "s" : ""}`} />
+                  <Stat label="Fill premium" value={fmtMoney(receipt.fillPremium)} />
+                  <Stat label="Total cost" value={fmtMoney(receipt.totalCost)} />
+                  <Stat label="Remaining cash" value={fmtMoney(receipt.remainingCash)} />
+                </div>
+                <div className="flex justify-end gap-2 pt-1 border-t">
+                  <Button variant="outline" onClick={() => setReceipt(null)}>
+                    Buy another
+                  </Button>
+                  <Button onClick={() => onOpenChange(false)}>Done</Button>
+                </div>
+              </div>
+            )}
+
+
             {/* Side + expiry controls */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <div className="inline-flex rounded-md border bg-muted/30 p-0.5">
@@ -342,7 +436,14 @@ export function BuyOptionDialog(props: Props) {
               </Select>
 
               {loading && <span className="text-xs text-muted-foreground">Loading chain…</span>}
+              {!loading && chainStale && chain.length > 0 && (
+                <span className="text-xs text-amber-500">
+                  Using last updated chain data
+                  {chainLastUpdated && ` · ${Math.max(1, Math.round((Date.now() - chainLastUpdated) / 1000))}s ago`}
+                </span>
+              )}
             </div>
+
 
             {/* Chain table */}
             <div className="rounded-md border overflow-hidden">
