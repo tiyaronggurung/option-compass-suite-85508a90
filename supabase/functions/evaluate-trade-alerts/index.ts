@@ -34,7 +34,14 @@ type Alert = {
   alert_status: string;
   expires_at: string | null;
   last_notified_status: string | null;
+  entered_at: string | null;
+  created_at: string | null;
 };
+
+// Grace period after entry during which we ignore stop-loss hits.
+// Prevents the first contract mid (which can sit inside a wide bid/ask spread
+// right after entry) from triggering an instant fake stop.
+const STOP_GRACE_MS = 60_000;
 
 const n = (v: unknown): number | null => {
   const x = Number(v);
