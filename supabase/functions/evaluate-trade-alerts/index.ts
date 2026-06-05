@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   const ACTIVE = ["watching", "triggered", "entered"];
   const { data: alertsRaw, error: aErr } = await admin
     .from("trade_alerts")
-    .select("id,user_id,ticker,option_side,paper_trade_id,underlying_trigger_price,trigger_direction,entry_contract_price_min,entry_contract_price_max,stop_loss_contract_price,target_1_contract_price,target_2_contract_price,target_3_contract_price,invalidation_underlying_price,alert_status,expires_at,last_notified_status")
+    .select("id,user_id,ticker,option_side,paper_trade_id,underlying_trigger_price,trigger_direction,entry_contract_price_min,entry_contract_price_max,stop_loss_contract_price,target_1_contract_price,target_2_contract_price,target_3_contract_price,invalidation_underlying_price,alert_status,expires_at,last_notified_status,entered_at,created_at")
     .in("alert_status", ACTIVE)
     .limit(500);
 
