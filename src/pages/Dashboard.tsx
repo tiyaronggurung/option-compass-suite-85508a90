@@ -309,17 +309,17 @@ export default function Dashboard() {
         todayRealizedPL={todayRealizedPL}
       />
 
-      {alerts.filter(a => !["expired","cancelled","stopped","hit_t3"].includes(a.alert_status)).length > 0 && (
+      {alerts.filter(a => !["cancelled"].includes(a.alert_status)).length > 0 && (
         <section className="space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold tracking-tight uppercase text-muted-foreground">
               Active Trade Plans
             </h2>
-            <span className="text-[11px] text-muted-foreground">{alerts.filter(a => !["expired","cancelled","stopped","hit_t3"].includes(a.alert_status)).length} active</span>
+            <span className="text-[11px] text-muted-foreground">{alerts.filter(a => !["cancelled"].includes(a.alert_status)).length} active</span>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {alerts
-              .filter(a => !["expired","cancelled","stopped","hit_t3"].includes(a.alert_status))
+              .filter(a => !["cancelled"].includes(a.alert_status))
               .map(a => <TradeAlertCard key={a.id} alert={a} onChanged={reloadAlerts} />)}
           </div>
         </section>

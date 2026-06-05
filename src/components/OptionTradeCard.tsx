@@ -90,6 +90,50 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
     prevPremiumRef.current = currentPremium;
   }, [currentPremium, closed]);
 
+  // Watch linked trade_alert for terminal lifecycle hints (target/stop/expire).
+  // Auto-close is OFF — we only surface a "consider closing" banner so the user
+  // can decide when to manually exit.
+  const [alertHint, setAlertHint] = useState<
+    | { kind: "target" | "stop" | "expired"; label: string }
+    | null
+  >(null);
+  useEffect(() => {
+    if (closed) { setAlertHint(null); return; }
+    let cancelled = false;
+    async function load() {
+      const { data } = await (supabase as any)
+        .from("trade_alerts")
+        .select("alert_status")
+        .eq("paper_trade_id", trade.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      const s = data?.alert_status as string | undefined;
+      if (s === "hit_t3" || s === "hit_t2" || s === "hit_t1") {
+        setAlertHint({ kind: "target", label: s === "hit_t3" ? "Target 3 hit" : s === "hit_t2" ? "Target 2 hit" : "Target 1 hit" });
+      } else if (s === "stopped") {
+        setAlertHint({ kind: "stop", label: "Stop level breached" });
+      } else if (s === "expired") {
+        setAlertHint({ kind: "expired", label: "Plan expired" });
+      } else {
+        setAlertHint(null);
+      }
+    }
+    load();
+    // Realtime: react to alert updates for this paper_trade.
+    const ch = supabase
+      .channel(`alert_for_trade_${trade.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "trade_alerts", filter: `paper_trade_id=eq.${trade.id}` },
+        () => { load(); },
+      )
+      .subscribe();
+    return () => { cancelled = true; supabase.removeChannel(ch); };
+  }, [trade.id, closed]);
+
+
   return (
     <div className={cn("glass-card border p-4 space-y-3 transition-colors", tint)}>
       <div className="flex items-start justify-between gap-2">
@@ -121,6 +165,22 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
         <Badge variant="outline" className="bg-transparent text-muted-foreground">Simulation Only</Badge>
         <Badge variant="outline" className="bg-transparent text-muted-foreground">No real money executed</Badge>
       </div>
+
+      {/* Consider-closing hint when linked alert hits terminal state. Manual close only. */}
+      {!closed && alertHint && (
+        <div
+          className={cn(
+            "rounded-md border p-2.5 flex items-start gap-2 text-xs",
+            alertHint.kind === "target" && "border-bull/40 bg-bull/10 text-bull",
+            alertHint.kind === "stop" && "border-bear/40 bg-bear/10 text-bear",
+            alertHint.kind === "expired" && "border-warn/40 bg-warn/10 text-warn",
+          )}
+        >
+          <span className="font-semibold">{alertHint.label}</span>
+          <span className="opacity-80">— consider closing manually.</span>
+        </div>
+      )}
+
 
       {unavailable ? (
         <div className="rounded-md border border-dashed border-border bg-card-elevated/40 p-3 text-center">
