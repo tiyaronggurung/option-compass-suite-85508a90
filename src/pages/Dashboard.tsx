@@ -194,7 +194,8 @@ export default function Dashboard() {
   const todayRealizedPL = useMemo(() => sumTodayRealizedPL(trades as any), [trades]);
   const effective = useMemo(() => effectiveRisk(risk), [risk]);
 
-  async function approve(s: Signal) {
+  // Fallback: 1-click approve (used when option chain is unavailable).
+  async function fallbackApprove(s: Signal) {
     const res = await approveSignalAsPaperTrade({
       userId: user!.id,
       signal: s,
@@ -204,16 +205,40 @@ export default function Dashboard() {
     });
     if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Paper trade opened on ${s.ticker}`);
-    // Mark as actioned so it disappears from this user's dashboard and doesn't reappear on reload.
     await supabase.from("signal_actions").insert({
       user_id: user!.id,
       signal_id: s.id,
       action: "approved",
     });
     setDismissedIds((prev) => new Set(prev).add(s.id));
-    const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
-    setTrades(data ?? []);
+    await refreshAfterTrade();
+  }
+
+  async function refreshAfterTrade() {
+    const [{ data: t }, { data: pa }] = await Promise.all([
+      supabase.from("paper_trades").select("*").eq("user_id", user!.id),
+      supabase.from("paper_accounts").select("cash_balance").eq("user_id", user!.id).maybeSingle(),
+    ]);
+    setTrades(t ?? []);
+    setCashBalance(Number((pa as any)?.cash_balance ?? 0));
     reloadAlerts();
+  }
+
+  // New primary action: open the Robinhood-style Buy Option modal.
+  function approve(s: Signal) {
+    setBuySignal(s);
+    setBuyOpen(true);
+  }
+
+  async function onBuySuccess() {
+    if (!buySignal) return;
+    await supabase.from("signal_actions").insert({
+      user_id: user!.id,
+      signal_id: buySignal.id,
+      action: "approved",
+    });
+    setDismissedIds((prev) => new Set(prev).add(buySignal.id));
+    await refreshAfterTrade();
   }
 
 
