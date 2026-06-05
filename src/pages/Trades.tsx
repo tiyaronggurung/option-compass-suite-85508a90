@@ -193,21 +193,50 @@ function CloseTradeDialog({
   const contracts = Math.max(1, Number(t?.contracts ?? 1));
   const multiplier = Number(t?.multiplier ?? 100);
   const entryPremium = Number(t?.entry_premium ?? trade?.entry_price ?? 0);
-  const currentPremium = t?.current_premium != null ? Number(t.current_premium) : null;
 
+  const [livePremium, setLivePremium] = useState<number | null>(null);
+  const [liveMarkAt, setLiveMarkAt] = useState<string | null>(null);
+  const [fetchingMark, setFetchingMark] = useState(false);
   const [exitPremiumStr, setExitPremiumStr] = useState("");
   const [reason, setReason] = useState<CloseReason>("manual_close");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (trade) {
-      // Default exit premium to the latest mark, falling back to entry premium.
-      const seed = currentPremium ?? entryPremium;
+      const seedLive = t?.current_premium != null ? Number(t.current_premium) : null;
+      setLivePremium(seedLive);
+      setLiveMarkAt(t?.last_mark_at ?? null);
+      const seed = seedLive ?? entryPremium;
       setExitPremiumStr(seed ? String(seed) : "");
       setReason("manual_close");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade]);
+
+  async function useLiveMark() {
+    if (!trade) return;
+    setFetchingMark(true);
+    const { error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
+    if (error) {
+      setFetchingMark(false);
+      return toast.error(error.message);
+    }
+    const { data: fresh } = await supabase
+      .from("paper_trades")
+      .select("current_premium,last_mark_at")
+      .eq("id", trade.id)
+      .maybeSingle();
+    setFetchingMark(false);
+    const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
+    if (mark == null) {
+      toast.error("No live mark available for this contract");
+      return;
+    }
+    setLivePremium(mark);
+    setLiveMarkAt((fresh as any)?.last_mark_at ?? new Date().toISOString());
+    setExitPremiumStr(String(mark));
+    toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+  }
 
   if (!trade) return null;
 
