@@ -128,3 +128,40 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
+
+function ResetPaperAccountPanel() {
+  const [resetting, setResetting] = useState(false);
+
+  async function onReset() {
+    const ok = window.confirm(
+      "This will clear/reset your paper balance and paper performance history. Continue?"
+    );
+    if (!ok) return;
+    setResetting(true);
+    const { error } = await (supabase as any).rpc("reset_paper_account");
+    setResetting(false);
+    if (error) return toast.error(error.message);
+    toast.success("Paper account reset to $100,000");
+  }
+
+  return (
+    <section className="glass-card p-5 space-y-3">
+      <h2 className="font-semibold flex items-center gap-2">
+        <ShieldAlert className="h-4 w-4 text-warn" /> Paper account
+      </h2>
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        Reset your paper trading account back to the $100,000 starting balance. This deletes
+        all open and closed paper trades and their related alerts. Real money is never involved.
+      </p>
+      <button
+        type="button"
+        onClick={onReset}
+        disabled={resetting}
+        className="inline-flex h-9 items-center justify-center rounded-md border border-bear/40 bg-bear/10 px-4 text-sm font-medium text-bear hover:bg-bear/20 disabled:opacity-50"
+      >
+        {resetting ? "Resetting…" : "Reset Paper Account"}
+      </button>
+    </section>
+  );
+}
+
