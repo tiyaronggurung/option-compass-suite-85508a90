@@ -288,21 +288,12 @@ function resolveOccSymbol(trade: any): string | null {
 // ---------- Provider fetchers ----------
 
 async function fetchOptionQuote(occ: string, underlying: string): Promise<OptionQuote> {
-  // Priority is REAL-TIME first. Order:
-  //   1. Tradier   — true real-time NBBO when a paid market-data key is set.
-  //   2. Unusual Whales — sub-second intraday contract feed (our most real-time
-  //      provider with a live key today). Primary in practice.
-  //   3. Alpaca options snapshot — last-resort fallback; can be 15-min delayed
-  //      on the free OPRA feed. Tagged as such so the UI can show "delayed".
-  const tradier = await fetchTradierQuote(occ).catch((e) => { console.warn("tradier err", e); return null; });
-  if (tradier && tradier.premium != null) return tradier;
-
-  const uw = await fetchUnusualWhalesQuote(occ, underlying).catch((e) => { console.warn("uw err", e); return null; });
+  // Unusual Whales is the sole real-time source. Tradier/Alpaca have been
+  // removed per product decision — UW NBBO snapshot (sub-second) with an
+  // intraday-minute fallback covers our needs and avoids "delayed" tags.
+  const uw = await fetchUnusualWhalesQuote(occ, underlying).catch((e) => { console.warn("uw err", occ, e); return null; });
   if (uw && uw.premium != null) return uw;
-
-  const alp = await fetchAlpacaOptionSnapshot(occ).catch((e) => { console.warn("alpaca opt err", e); return null; });
-  if (alp && alp.premium != null) return alp;
-
+  console.log("quote unavailable", { occ, reason: uw ? "no_premium_in_response" : "uw_returned_null" });
   return EMPTY_QUOTE;
 }
 
