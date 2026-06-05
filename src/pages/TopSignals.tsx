@@ -16,6 +16,7 @@ import { sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { TopSignalRow } from "@/components/TopSignalRow";
 import { SignalDetailDialog } from "@/components/SignalDetailDialog";
+import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 import { DisclaimerBar } from "@/components/Disclaimer";
 
 type Tab = "calls" | "puts" | "all";
