@@ -259,7 +259,10 @@ export default function Dashboard() {
 
       <MarketOverviewStrip />
 
+      <PaperAccountCard />
+
       <ProviderStatusBanner signals={signals} />
+
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat icon={Radio} label="Live signals" value={String(totalLive)} accent="text-primary" />
