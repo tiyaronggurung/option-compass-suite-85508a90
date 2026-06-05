@@ -478,6 +478,19 @@ export default function Dashboard() {
         onOpenChange={(v) => !v && setDetailSignal(null)}
         outcome={detailSignal ? signalOutcome(detailSignal, trades, dismissedIds) : undefined}
       />
+
+      <BuyOptionDialog
+        open={buyOpen}
+        signal={buySignal}
+        userId={user?.id ?? ""}
+        risk={risk}
+        openTradesCount={openTrades.length}
+        todayRealizedPL={todayRealizedPL}
+        cashBalance={cashBalance}
+        onOpenChange={setBuyOpen}
+        onSuccess={onBuySuccess}
+        onFallbackApprove={fallbackApprove}
+      />
     </div>
   );
 }
