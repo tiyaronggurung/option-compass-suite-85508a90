@@ -39,6 +39,9 @@ export default function TopSignals() {
   const [includeDebug, setIncludeDebug] = useState(false);
 
   const [detail, setDetail] = useState<{ signal: Signal; breakdown: RankBreakdown } | null>(null);
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [buySignal, setBuySignal] = useState<Signal | null>(null);
+  const [cashBalance, setCashBalance] = useState<number>(0);
 
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
