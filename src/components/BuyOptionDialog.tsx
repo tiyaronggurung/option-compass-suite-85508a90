@@ -264,10 +264,41 @@ export function BuyOptionDialog(props: Props) {
           <DialogTitle className="text-xl font-semibold flex items-center gap-3">
             <span>{signal.ticker}</span>
             <span className="text-base font-normal text-muted-foreground">
-              Buy {sideUpper === "PUT" ? "Put" : "Call"} · Spot {fmtMoney(spot)}
+              Buy {sideUpper === "PUT" ? "Put" : "Call"}
             </span>
           </DialogTitle>
+          {/* Signal vs Live banner */}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <Badge
+              className={cn(
+                "border-0 uppercase tracking-wider",
+                String(signal.direction).toUpperCase() === "PUT"
+                  ? "bg-bear/15 text-bear"
+                  : "bg-bull/15 text-bull",
+              )}
+            >
+              Signal · {String(signal.direction).toUpperCase()} @ {fmtMoney(signalSpot)}
+            </Badge>
+            <span className="text-muted-foreground">
+              Live spot{" "}
+              <span className="ticker-mono text-foreground">{fmtMoney(liveSpot)}</span>
+              {signalSpot > 0 && liveSpot > 0 && (
+                <span
+                  className={cn(
+                    "ml-1.5 ticker-mono",
+                    spotDeltaPct > 0 ? "text-bull" : spotDeltaPct < 0 ? "text-bear" : "text-muted-foreground",
+                  )}
+                >
+                  ({spotDeltaPct >= 0 ? "+" : ""}{spotDeltaPct.toFixed(2)}%)
+                </span>
+              )}
+            </span>
+            {signal.confidence != null && (
+              <span className="text-muted-foreground">· Confidence {signal.confidence}</span>
+            )}
+          </div>
         </DialogHeader>
+
 
         <ScrollArea className="max-h-[80vh]">
           <div className="px-6 pb-6 space-y-4">
