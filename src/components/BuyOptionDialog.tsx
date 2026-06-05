@@ -174,12 +174,28 @@ export function BuyOptionDialog(props: Props) {
   }, [chain, side, expiry]);
 
   // Auto-pick a sensible default strike when expiry/side changes.
+  // Prefer the signal's exact strike if it's in the current rows; else ATM-ish.
   useEffect(() => {
     if (!rows.length || !spot) { setSelectedSymbol(null); return; }
-    // Prefer ATM-ish: smallest |strike - spot|
+    const sigStrike = signal?.strike != null ? Number(signal.strike) : null;
+    const sigSide = String(signal?.direction ?? "").toUpperCase() === "PUT" ? "put" : "call";
+    if (sigStrike != null && side === sigSide) {
+      const exact = rows.find((r) => Number(r.strike) === sigStrike);
+      if (exact) { setSelectedSymbol(exact.symbol); return; }
+    }
+    // Fallback: ATM-ish (smallest |strike - spot|)
     const best = [...rows].sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
     setSelectedSymbol(best.symbol);
-  }, [rows, spot]);
+  }, [rows, spot, signal, side]);
+
+  // Scroll the selected row into view when it changes.
+  useEffect(() => {
+    if (!selectedSymbol) return;
+    const el = document.querySelector(`[data-contract-symbol="${selectedSymbol}"]`);
+    if (el && "scrollIntoView" in el) {
+      (el as HTMLElement).scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [selectedSymbol]);
 
   const selected = useMemo(() => rows.find((r) => r.symbol === selectedSymbol) ?? null, [rows, selectedSymbol]);
 
@@ -379,6 +395,7 @@ export function BuyOptionDialog(props: Props) {
                       )}
                       <button
                         type="button"
+                        data-contract-symbol={r.symbol}
                         onClick={() => setSelectedSymbol(r.symbol)}
                         className={cn(
                           "w-full grid grid-cols-6 gap-2 px-3 py-2 text-sm border-t text-left transition",

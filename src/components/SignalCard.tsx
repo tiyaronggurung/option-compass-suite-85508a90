@@ -106,12 +106,12 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                 <Clock className="h-3 w-3" />
                 {timeAgo(signal.created_at)}
               </span>
-              <span className="ticker-mono">${fmtPrice(Number(signal.price))}</span>
+              <span className="ticker-mono">Stock ${fmtPrice(Number(signal.price))}</span>
               {signal.contract_symbol && signal.strike != null ? (
                 <span className="ticker-mono">
-                  · {signal.direction} {Number(signal.strike).toFixed(0)}
+                  · {isCall ? "Call" : "Put"} ${Number(signal.strike).toFixed(0)} strike
                   {signal.dte != null ? ` · ${signal.dte}d` : ""}
-                  {signal.premium != null ? ` · $${fmtPrice(Number(signal.premium))} mid` : ""}
+                  {signal.premium != null ? ` · ${isCall ? "Call" : "Put"} premium $${fmtPrice(Number(signal.premium))}` : ""}
                 </span>
               ) : (
                 <span>· No contract yet</span>
