@@ -436,7 +436,14 @@ export function BuyOptionDialog(props: Props) {
               </Select>
 
               {loading && <span className="text-xs text-muted-foreground">Loading chain…</span>}
+              {!loading && chainStale && chain.length > 0 && (
+                <span className="text-xs text-amber-500">
+                  Using last updated chain data
+                  {chainLastUpdated && ` · ${Math.max(1, Math.round((Date.now() - chainLastUpdated) / 1000))}s ago`}
+                </span>
+              )}
             </div>
+
 
             {/* Chain table */}
             <div className="rounded-md border overflow-hidden">
