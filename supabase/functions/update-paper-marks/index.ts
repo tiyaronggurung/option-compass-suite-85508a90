@@ -137,11 +137,38 @@ Deno.serve(async (req) => {
     let skipped = 0;
     const unavailable: string[] = [];
 
+    // ── Batch chain fetch ──
+    // Collapse one UW chain call per (ticker, expiry) group instead of 3–4 calls per trade.
+    // This is the #1 source of 429s. Each call returns the whole chain; we map each OCC to its row.
+    const occByTrade = new Map<string, string>(); // tradeId -> occ
+    const groupKeys = new Set<string>();           // "TICKER|YYYY-MM-DD"
     for (const trade of open) {
-      // Only handle option trades here; non-option rows (none today) get skipped.
+      if (trade.is_option === false) continue;
+      const occ = resolveOccSymbol(trade);
+      if (!occ) continue;
+      occByTrade.set(trade.id, occ);
+      const parsed = parseOccSymbol(occ);
+      if (parsed) groupKeys.add(`${String(trade.ticker).toUpperCase()}|${parsed.expiry}`);
+    }
+    const chainQuoteByOcc = new Map<string, OptionQuote>();
+    await Promise.all(
+      Array.from(groupKeys).map(async (key) => {
+        const [ticker, expiry] = key.split("|");
+        const rows = await fetchUnusualWhalesChainRows(ticker, expiry);
+        if (!rows) return;
+        for (const row of rows) {
+          const sym = String(row.option_symbol ?? "").trim().toUpperCase();
+          if (!sym) continue;
+          const q = chainRowToQuote(row);
+          if (q) chainQuoteByOcc.set(sym, q);
+        }
+      }),
+    );
+
+    for (const trade of open) {
       if (trade.is_option === false) { skipped++; continue; }
 
-      const occ = resolveOccSymbol(trade);
+      const occ = occByTrade.get(trade.id) ?? resolveOccSymbol(trade);
       if (!occ) {
         unavailable.push(`${trade.ticker} (no contract symbol)`);
         await admin.from("paper_trades").update({
@@ -152,7 +179,9 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const quote = await fetchOptionQuote(occ, trade.ticker);
+      // Prefer the batched chain quote; only fall back to per-OCC endpoints if missing.
+      const batched = chainQuoteByOcc.get(occ);
+      const quote: OptionQuote = batched ?? await fetchOptionQuote(occ, trade.ticker);
       if (quote.source === "unavailable" || quote.premium == null || !Number.isFinite(quote.premium)) {
         unavailable.push(`${trade.ticker} ${occ}`);
         await admin.from("paper_trades").update({
@@ -371,6 +400,46 @@ function parseOccSymbol(occ: string): { expiry: string } | null {
   const m = /^([A-Z]{1,6})(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/.exec(String(occ).trim().toUpperCase());
   if (!m) return null;
   return { expiry: `20${m[2]}-${m[3]}-${m[4]}` };
+}
+
+// Batched chain fetch — one UW call per (ticker, expiry) covering many OCCs.
+async function fetchUnusualWhalesChainRows(ticker: string, expiry: string): Promise<any[] | null> {
+  const key = Deno.env.get("UNUSUAL_WHALES_API_KEY");
+  if (!key) return null;
+  const url = `https://api.unusualwhales.com/api/stock/${encodeURIComponent(ticker)}/option-contracts?expiry=${expiry}&limit=500`;
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
+    if (!res.ok) {
+      console.log("uw batch chain non-ok", { ticker, expiry, status: res.status });
+      return null;
+    }
+    const json = await res.json().catch(() => null) as any;
+    const rows: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    return rows;
+  } catch (e) {
+    console.warn("uw batch chain err", ticker, expiry, e);
+    return null;
+  }
+}
+
+function chainRowToQuote(row: any): OptionQuote | null {
+  const bid = num(row.nbbo_bid ?? row.bid);
+  const ask = num(row.nbbo_ask ?? row.ask);
+  const lastPx = num(row.last_price ?? row.last ?? row.mark);
+  const mid = bid != null && ask != null ? (bid + ask) / 2 : num(row.mid);
+  const premium = mid ?? lastPx ?? bid ?? ask;
+  if (premium == null) return null;
+  return {
+    premium, bid, ask, mid,
+    iv: num(row.implied_volatility ?? row.iv),
+    delta: num(row.delta),
+    gamma: num(row.gamma),
+    theta: num(row.theta),
+    vega: num(row.vega),
+    open_interest: numInt(row.open_interest ?? row.oi),
+    option_volume: numInt(row.volume),
+    source: "unusual_whales",
+  };
 }
 
 async function fetchTradierQuote(occ: string): Promise<OptionQuote | null> {

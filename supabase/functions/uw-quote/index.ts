@@ -5,7 +5,17 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 const UW_KEY = Deno.env.get("UNUSUAL_WHALES_API_KEY") ?? "";
 const UW_BASE = "https://api.unusualwhales.com/api";
 
-async function fetchOne(ticker: string): Promise<{ price: number | null; ts: string | null; error?: string }> {
+// Per-isolate cache. Stock quotes change second-to-second, but a 4s TTL is plenty
+// for UI freshness while collapsing 12 polls/min into ~3 actual UW calls per ticker.
+// On 429, we keep serving last-good for up to STALE_TTL_MS so the UI never blanks.
+type QuoteVal = { price: number | null; ts: string | null; error?: string };
+type CacheEntry = { at: number; val: QuoteVal };
+const TTL_MS = 4_000;
+const STALE_TTL_MS = 120_000;
+const cache = new Map<string, CacheEntry>();
+const inflight = new Map<string, Promise<QuoteVal>>();
+
+async function fetchOneLive(ticker: string): Promise<QuoteVal> {
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 5000);
@@ -17,7 +27,6 @@ async function fetchOne(ticker: string): Promise<{ price: number | null; ts: str
     if (!res.ok) return { price: null, ts: null, error: `status_${res.status}` };
     const json = await res.json();
     const d = json?.data ?? json ?? {};
-    // Prefer last trade close, fall back to close.
     const priceStr = d.close ?? d.last ?? d.price ?? null;
     const price = priceStr != null ? Number(priceStr) : null;
     const ts = d.tape_time ?? d.market_time ?? null;
@@ -25,6 +34,32 @@ async function fetchOne(ticker: string): Promise<{ price: number | null; ts: str
   } catch (e) {
     return { price: null, ts: null, error: (e as Error).message?.slice(0, 80) };
   }
+}
+
+async function fetchOne(ticker: string): Promise<QuoteVal> {
+  const now = Date.now();
+  const cached = cache.get(ticker);
+  if (cached && now - cached.at < TTL_MS) return cached.val;
+
+  let work = inflight.get(ticker);
+  if (!work) {
+    work = (async () => {
+      const fresh = await fetchOneLive(ticker);
+      // Successful fetch (has a price): cache it.
+      if (fresh.price != null) {
+        cache.set(ticker, { at: Date.now(), val: fresh });
+        return fresh;
+      }
+      // Failed/empty: serve last-good if recent.
+      if (cached && now - cached.at < STALE_TTL_MS) {
+        return { ...cached.val, error: fresh.error ?? "stale" };
+      }
+      return fresh;
+    })();
+    inflight.set(ticker, work);
+    work.finally(() => inflight.delete(ticker));
+  }
+  return work;
 }
 
 Deno.serve(async (req) => {
@@ -44,7 +79,7 @@ Deno.serve(async (req) => {
       });
     }
     const results = await Promise.all(tickers.map(async (t) => [t, await fetchOne(t)] as const));
-    const quotes: Record<string, { price: number | null; ts: string | null; error?: string }> = {};
+    const quotes: Record<string, QuoteVal> = {};
     for (const [t, r] of results) quotes[t] = r;
     return new Response(JSON.stringify({ quotes, fetched_at: new Date().toISOString() }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
