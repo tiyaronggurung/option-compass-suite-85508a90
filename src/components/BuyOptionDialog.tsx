@@ -98,6 +98,11 @@ export function BuyOptionDialog(props: Props) {
   const [chainTried, setChainTried] = useState(false);
   const [uwSpot, setUwSpot] = useState<number | null>(null);
 
+  const [chainStale, setChainStale] = useState(false);
+  const [chainLastUpdated, setChainLastUpdated] = useState<number | null>(null);
+  const [receipt, setReceipt] = useState<BuyOptionReceipt | null>(null);
+  const [restoredStrike, setRestoredStrike] = useState<number | null>(null);
+
   const signalSpot = useMemo(() => Number(signal?.price ?? 0) || 0, [signal]);
 
   // `spot` is the LIVE price used everywhere (ATM picker, projections, divider).
@@ -106,22 +111,29 @@ export function BuyOptionDialog(props: Props) {
   const spot = liveSpot;
   const spotDeltaPct = signalSpot > 0 ? ((liveSpot - signalSpot) / signalSpot) * 100 : 0;
 
-  // Reset state when dialog opens for a new signal.
+  // Reset state when dialog opens for a new signal — and restore any saved selection.
   useEffect(() => {
     if (!open || !signal) return;
     setChainTried(false);
     setSelectedSymbol(null);
-    setQty(1);
     setChain([]);
     setAvailableExpiries([]);
     setUwSpot(null);
-    const initialSide = String(signal.direction).toUpperCase() === "PUT" ? "put" : "call";
+    setChainStale(false);
+    setChainLastUpdated(null);
+    setReceipt(null);
+
+    const saved = loadSavedSelection(String(signal.id));
+    const initialSide = saved?.side ?? (String(signal.direction).toUpperCase() === "PUT" ? "put" : "call");
     setSide(initialSide);
+    setQty(saved?.qty ?? 1);
+    setRestoredStrike(saved?.strike ?? null);
     const sigExp = (signal as any).expiry as string | null;
-    setExpiry(sigExp ?? "");
+    setExpiry(saved?.expiry || sigExp || "");
   }, [open, signal]);
 
-  // Poll the live UW chain every 5s while open. Refetch immediately when expiry changes.
+  // Poll the live UW chain every 10s while open. Refetch immediately when expiry changes.
+  // On error or empty response we KEEP the last-good rows and flag the chain as stale.
   useEffect(() => {
     if (!open || !signal) return;
     let cancelled = false;
@@ -135,15 +147,27 @@ export function BuyOptionDialog(props: Props) {
         });
         if (cancelled) return;
         if (error) {
+          setChainStale(true);
           if (firstLoad) toast.error(`Live chain failed: ${error.message}`);
           return;
         }
-        const payload = data as { spot: number | null; expiries: string[]; expiry: string; rows: ChainRow[] };
-        setUwSpot(payload.spot ?? null);
-        setAvailableExpiries(payload.expiries ?? []);
-        setChain(payload.rows ?? []);
+        const payload = data as {
+          spot: number | null; expiries: string[]; expiry: string; rows: ChainRow[];
+          contracts_error?: string | null;
+        };
+        if (payload.spot != null) setUwSpot(payload.spot);
+        if (payload.expiries?.length) setAvailableExpiries(payload.expiries);
+        if (payload.rows && payload.rows.length > 0) {
+          setChain(payload.rows);
+          setChainStale(false);
+          setChainLastUpdated(Date.now());
+        } else {
+          // Empty (likely rate-limited or no contracts) — preserve last-good rows.
+          setChainStale(true);
+        }
         if (!expiry && payload.expiry) setExpiry(payload.expiry);
       } catch (e) {
+        if (!cancelled) setChainStale(true);
         if (firstLoad) toast.error(`Live chain error: ${(e as Error).message}`);
       } finally {
         if (firstLoad && !cancelled) {
@@ -155,11 +179,11 @@ export function BuyOptionDialog(props: Props) {
     };
 
     void fetchChain();
-    const id = setInterval(fetchChain, 5000);
+    const id = setInterval(fetchChain, 10_000);
     return () => { cancelled = true; clearInterval(id); };
   }, [open, signal, expiry]);
 
-  // If chain came back empty after first load, surface an error.
+  // If chain came back empty after first load AND we still have nothing, surface an error.
   useEffect(() => {
     if (!chainTried || loading) return;
     if (chain.length === 0 && signal) {
