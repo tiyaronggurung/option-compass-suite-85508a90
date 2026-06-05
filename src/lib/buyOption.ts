@@ -174,5 +174,35 @@ export async function buyOptionAsPaperTrade(input: BuyOptionInput): Promise<BuyO
     console.warn("[buyOption] trade_alert plan failed:", e);
   }
 
-  return { ok: true };
+  // Best-effort: fetch latest cash balance for the receipt.
+  let remainingCash = input.cashBalance - totalCost;
+  try {
+    const { data: acct } = await supabase
+      .from("paper_accounts")
+      .select("cash_balance")
+      .eq("user_id", input.userId)
+      .maybeSingle();
+    if (acct && Number.isFinite(Number((acct as any).cash_balance))) {
+      remainingCash = Number((acct as any).cash_balance);
+    }
+  } catch {
+    // ignore — fall back to local estimate
+  }
+
+  return {
+    ok: true,
+    receipt: {
+      tradeId: inserted?.id ?? null,
+      ticker: s.ticker,
+      optionType: optionTypeUpper,
+      strike: Number(c.strike),
+      expiry: c.expiry,
+      contracts: qty,
+      fillPremium: premium,
+      totalCost,
+      remainingCash,
+      status: "OPEN",
+      filledAt: openedAt,
+    },
+  };
 }
