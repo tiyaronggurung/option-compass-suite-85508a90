@@ -50,9 +50,9 @@ export async function buyOptionAsPaperTrade(input: BuyOptionInput): Promise<BuyO
   const multiplier = 100;
   const totalCost = premium * multiplier * qty;
 
-  // Buying power
-  if (totalCost > input.cashBalance + 1e-6) {
-    return { ok: false, reason: `Insufficient buying power. Need $${totalCost.toFixed(2)}, have $${input.cashBalance.toFixed(2)}.` };
+  // Buying power: allow any amount strictly less than the full account cash.
+  if (totalCost >= input.cashBalance) {
+    return { ok: false, reason: `Order ($${totalCost.toFixed(2)}) must be less than account cash ($${input.cashBalance.toFixed(2)}).` };
   }
 
   // Risk guards (use intendedRisk = totalCost so the user can't bypass the
