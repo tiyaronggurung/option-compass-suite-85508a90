@@ -525,6 +525,7 @@ Deno.serve(async (req) => {
       profile,
       candidates_considered: candidates.length,
       rejection_counts: rejectionCounts,
+      alpaca_fallback: alpacaFallbackDebug,
       latency_ms: Date.now() - t0,
     });
   }
