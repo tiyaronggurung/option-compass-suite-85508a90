@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtPrice, fmtPL, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
+import { TradeTimelinePanel } from "@/components/TradeTimelinePanel";
 
 type Props = {
   trade: PaperTrade;
