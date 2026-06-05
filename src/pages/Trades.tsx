@@ -299,7 +299,20 @@ function CloseTradeDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="exit-premium">Exit option premium ($ per share)</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="exit-premium">Exit option premium ($ per share)</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={useLiveMark}
+                disabled={fetchingMark}
+              >
+                <RefreshCw className={cn("h-3 w-3 mr-1", fetchingMark && "animate-spin")} />
+                {fetchingMark ? "Fetching…" : "Use live mark"}
+              </Button>
+            </div>
             <Input
               id="exit-premium"
               type="number"
@@ -310,9 +323,15 @@ function CloseTradeDialog({
               className="ticker-mono"
               placeholder="e.g. 5.10"
             />
-            <p className="text-[10px] text-muted-foreground">
-              Realized P/L = (exit − entry) × 100 × contracts
-            </p>
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Realized P/L = (exit − entry) × 100 × contracts</span>
+              {livePremium != null && (
+                <span className="ticker-mono">
+                  Live mark ${fmtPrice(livePremium)}
+                  {liveMarkAt && <> · {timeAgo(liveMarkAt)}</>}
+                </span>
+              )}
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Close reason</Label>
