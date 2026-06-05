@@ -163,7 +163,8 @@ Deno.serve(async (req) => {
     if (TERMINAL.has(next) && a.paper_trade_id) {
       const exitPremium = contractMid ?? mark?.current ?? mark?.mid ?? null;
       const status = next === "hit_t3" ? "WIN" : next === "stopped" ? "LOSS" : "CLOSED";
-      const exitReason = next === "hit_t3" ? "TARGET" : next === "stopped" ? "STOP" : "EXPIRED";
+      const exitReason = next === "hit_t3" ? "target_hit" : next === "stopped" ? "stop_hit" : "expired";
+
       const { data: existing } = await admin
         .from("paper_trades")
         .select("id,status,entry_premium,contracts,multiplier")
