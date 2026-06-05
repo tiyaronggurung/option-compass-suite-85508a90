@@ -18,6 +18,7 @@ import { TopSignalRow } from "@/components/TopSignalRow";
 import { SignalDetailDialog } from "@/components/SignalDetailDialog";
 import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 import { DisclaimerBar } from "@/components/Disclaimer";
+import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sourcePriority, type SourceFilter } from "@/lib/signalSource";
 
 type Tab = "calls" | "puts" | "all";
 type MaxRisk = "LOW" | "MEDIUM" | "HIGH";
@@ -37,6 +38,7 @@ export default function TopSignals() {
   const [maxRisk, setMaxRisk] = useState<MaxRisk>("HIGH");
   const [freshOnly, setFreshOnly] = useState(false);
   const [includeDebug, setIncludeDebug] = useState(false);
+  const [providerFilter, setProviderFilter] = useState<SourceFilter>("all");
 
   const [detail, setDetail] = useState<{ signal: Signal; breakdown: RankBreakdown } | null>(null);
   const [buyOpen, setBuyOpen] = useState(false);
@@ -84,7 +86,7 @@ export default function TopSignals() {
   }, [signals, includeDebug]);
 
   const filteredByTab = useMemo(() => {
-    return ranked.filter(({ signal, rank }) => {
+    const filtered = ranked.filter(({ signal, rank }) => {
       if (tab === "calls" && signal.direction !== "CALL") return false;
       if (tab === "puts" && signal.direction !== "PUT") return false;
       if (watchOnly && !watchSet.has(signal.ticker)) return false;
@@ -95,9 +97,18 @@ export default function TopSignals() {
         const ageMs = Date.now() - new Date(signal.created_at).getTime();
         if (ageMs > 60 * 60_000) return false;
       }
+      if (!matchesSourceFilter(signal as any, providerFilter)) return false;
       return true;
-    }).slice(0, TOP_N[tab]);
-  }, [ranked, tab, watchOnly, watchSet, minScore, maxRisk, freshOnly]);
+    });
+    // Re-sort: confirmed_by_both → UW → Alpaca → other; tiebreak on existing rank.total desc.
+    const sorted = [...filtered].sort((a, b) => {
+      const pa = sourcePriority(a.signal as any);
+      const pb = sourcePriority(b.signal as any);
+      if (pa !== pb) return pa - pb;
+      return b.rank.total - a.rank.total;
+    });
+    return sorted.slice(0, TOP_N[tab]);
+  }, [ranked, tab, watchOnly, watchSet, minScore, maxRisk, freshOnly, providerFilter]);
 
   async function refreshAfterTrade() {
     if (!user) return;
@@ -188,6 +199,20 @@ export default function TopSignals() {
       </section>
 
       <section className="space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Provider</span>
+          {SOURCE_FILTER_OPTIONS.map((f) => (
+            <Button
+              key={f.id}
+              size="sm"
+              variant={providerFilter === f.id ? "default" : "outline"}
+              className={cn("h-7 text-[11px] px-2", providerFilter === f.id ? "" : "bg-transparent")}
+              onClick={() => setProviderFilter(f.id)}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
         {!signals ? (
           Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)
         ) : filteredByTab.length === 0 ? (
