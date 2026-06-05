@@ -225,13 +225,6 @@ export function BuyOptionDialog(props: Props) {
     setSelectedSymbol(best.symbol);
   }, [rows, spot, signal, side, restoredStrike]);
 
-  // Persist the current selection per signal so reopening restores it.
-  useEffect(() => {
-    if (!open || !signal || !selected) return;
-    saveSelection(String(signal.id), {
-      side, expiry, strike: Number(selected.strike), qty,
-    });
-  }, [open, signal, side, expiry, selected, qty]);
 
   // Scroll the selected row into view when it changes.
   useEffect(() => {
