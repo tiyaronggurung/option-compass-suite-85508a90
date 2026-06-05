@@ -369,6 +369,37 @@ export function BuyOptionDialog(props: Props) {
         <ScrollArea className="max-h-[80vh]">
           <div className="px-6 pb-6 space-y-4">
 
+            {receipt && (
+              <div className="rounded-md border border-bull/40 bg-bull/5 p-4 space-y-3 mt-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold flex items-center gap-2">
+                    <span className="inline-block h-2 w-2 rounded-full bg-bull" />
+                    Paper trade filled
+                  </div>
+                  <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                    {receipt.status}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <Stat label="Ticker" value={receipt.ticker} />
+                  <Stat label="Type" value={receipt.optionType} />
+                  <Stat label="Strike" value={fmtMoney(receipt.strike)} />
+                  <Stat label="Expiration" value={receipt.expiry} />
+                  <Stat label="Quantity" value={`${receipt.contracts}× contract${receipt.contracts > 1 ? "s" : ""}`} />
+                  <Stat label="Fill premium" value={fmtMoney(receipt.fillPremium)} />
+                  <Stat label="Total cost" value={fmtMoney(receipt.totalCost)} />
+                  <Stat label="Remaining cash" value={fmtMoney(receipt.remainingCash)} />
+                </div>
+                <div className="flex justify-end gap-2 pt-1 border-t">
+                  <Button variant="outline" onClick={() => setReceipt(null)}>
+                    Buy another
+                  </Button>
+                  <Button onClick={() => onOpenChange(false)}>Done</Button>
+                </div>
+              </div>
+            )}
+
+
             {/* Side + expiry controls */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <div className="inline-flex rounded-md border bg-muted/30 p-0.5">
