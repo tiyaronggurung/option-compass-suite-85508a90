@@ -402,6 +402,46 @@ function parseOccSymbol(occ: string): { expiry: string } | null {
   return { expiry: `20${m[2]}-${m[3]}-${m[4]}` };
 }
 
+// Batched chain fetch — one UW call per (ticker, expiry) covering many OCCs.
+async function fetchUnusualWhalesChainRows(ticker: string, expiry: string): Promise<any[] | null> {
+  const key = Deno.env.get("UNUSUAL_WHALES_API_KEY");
+  if (!key) return null;
+  const url = `https://api.unusualwhales.com/api/stock/${encodeURIComponent(ticker)}/option-contracts?expiry=${expiry}&limit=500`;
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
+    if (!res.ok) {
+      console.log("uw batch chain non-ok", { ticker, expiry, status: res.status });
+      return null;
+    }
+    const json = await res.json().catch(() => null) as any;
+    const rows: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    return rows;
+  } catch (e) {
+    console.warn("uw batch chain err", ticker, expiry, e);
+    return null;
+  }
+}
+
+function chainRowToQuote(row: any): OptionQuote | null {
+  const bid = num(row.nbbo_bid ?? row.bid);
+  const ask = num(row.nbbo_ask ?? row.ask);
+  const lastPx = num(row.last_price ?? row.last ?? row.mark);
+  const mid = bid != null && ask != null ? (bid + ask) / 2 : num(row.mid);
+  const premium = mid ?? lastPx ?? bid ?? ask;
+  if (premium == null) return null;
+  return {
+    premium, bid, ask, mid,
+    iv: num(row.implied_volatility ?? row.iv),
+    delta: num(row.delta),
+    gamma: num(row.gamma),
+    theta: num(row.theta),
+    vega: num(row.vega),
+    open_interest: numInt(row.open_interest ?? row.oi),
+    option_volume: numInt(row.volume),
+    source: "unusual_whales",
+  };
+}
+
 async function fetchTradierQuote(occ: string): Promise<OptionQuote | null> {
   const key = Deno.env.get("TRADIER_API_KEY");
   if (!key) return null;
