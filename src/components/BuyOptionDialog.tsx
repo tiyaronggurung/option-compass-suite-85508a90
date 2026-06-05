@@ -155,15 +155,15 @@ export function BuyOptionDialog(props: Props) {
     return () => { cancelled = true; };
   }, [open, signal]);
 
-  // If chain came back empty, fall back to old approve flow and close.
+  // If chain came back empty, surface an error and let the user close.
+  // We intentionally do NOT auto-buy via the fallback path — the user must
+  // explicitly pick a contract from the chain.
   useEffect(() => {
     if (!chainTried || loading) return;
     if (chain.length === 0 && signal) {
-      toast.message("Option chain unavailable — using quick-approve fallback.");
-      onFallbackApprove(signal);
-      onOpenChange(false);
+      toast.error(`No option chain available for ${signal.ticker} — cannot buy.`);
     }
-  }, [chainTried, loading, chain.length, signal, onFallbackApprove, onOpenChange]);
+  }, [chainTried, loading, chain.length, signal]);
 
   const expiries = useMemo(() => Array.from(new Set(chain.map((r) => r.expiry))).sort(), [chain]);
 
