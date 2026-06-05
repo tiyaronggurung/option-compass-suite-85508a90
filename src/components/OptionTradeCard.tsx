@@ -75,6 +75,21 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
   const isLoss = (pl ?? 0) < 0;
   const tint = isWin ? "border-bull/30 bg-bull/[0.03]" : isLoss ? "border-bear/30 bg-bear/[0.03]" : "border-border";
 
+  // Live flash: when current_premium changes on an open trade, briefly tint the headline.
+  const prevPremiumRef = useRef<number | null>(currentPremium);
+  const [flash, setFlash] = useState<"up" | "down" | null>(null);
+  useEffect(() => {
+    if (closed) return;
+    const prev = prevPremiumRef.current;
+    if (prev != null && currentPremium != null && currentPremium !== prev) {
+      setFlash(currentPremium > prev ? "up" : "down");
+      const id = setTimeout(() => setFlash(null), 900);
+      prevPremiumRef.current = currentPremium;
+      return () => clearTimeout(id);
+    }
+    prevPremiumRef.current = currentPremium;
+  }, [currentPremium, closed]);
+
   return (
     <div className={cn("glass-card border p-4 space-y-3 transition-colors", tint)}>
       <div className="flex items-start justify-between gap-2">
