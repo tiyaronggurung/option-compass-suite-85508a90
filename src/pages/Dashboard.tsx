@@ -22,6 +22,7 @@ import { PaperAccountCard } from "@/components/PaperAccountCard";
 import ProviderStatusBanner from "@/components/ProviderStatusBanner";
 import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
 import { BuyOptionDialog } from "@/components/BuyOptionDialog";
+import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sortSignalsBySourcePriority, type SourceFilter } from "@/lib/signalSource";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
@@ -63,6 +64,7 @@ export default function Dashboard() {
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
   const [includeExpired, setIncludeExpired] = useState(false);
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleState | "all">("all");
+  const [providerFilter, setProviderFilter] = useState<SourceFilter>("all");
   const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
   const [risk, setRisk] = useState<RiskSettingsLike>(null);
   const [showDeveloping, setShowDeveloping] = useState(true);
@@ -158,7 +160,7 @@ export default function Dashboard() {
 
   const filtered = useMemo(() => {
     if (!signals) return [];
-    return signals.filter((s) => {
+    const base = signals.filter((s) => {
       if (dismissedIds.has(s.id)) return false;
       if (!s.is_demo && (s.confidence ?? 0) < 50) return false;
       const lc = getLifecycleState(s);
@@ -171,6 +173,7 @@ export default function Dashboard() {
       }
       if (sourceMode === "live" && s.is_demo) return false;
       if (sourceMode === "demo" && !s.is_demo) return false;
+      if (!matchesSourceFilter(s as any, providerFilter)) return false;
       if (filter === "bullish" && s.direction !== "CALL") return false;
       if (filter === "bearish" && s.direction !== "PUT") return false;
       if (filter === "high" && s.confidence < 80) return false;
@@ -183,7 +186,8 @@ export default function Dashboard() {
       }
       return true;
     });
-  }, [signals, filter, sourceMode, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
+    return sortSignalsBySourcePriority(base);
+  }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
@@ -352,6 +356,20 @@ export default function Dashboard() {
           >
             {includeExpired ? "Active + expired" : "Active only"}
           </Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground self-center mr-1">Provider</span>
+          {SOURCE_FILTER_OPTIONS.map((f) => (
+            <Button
+              key={f.id}
+              size="sm"
+              variant={providerFilter === f.id ? "default" : "outline"}
+              className={cn("h-7 text-[11px] px-2", providerFilter === f.id ? "" : "bg-transparent")}
+              onClick={() => setProviderFilter(f.id)}
+            >
+              {f.label}
+            </Button>
+          ))}
         </div>
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((f) => (
