@@ -49,12 +49,11 @@ export default function Performance() {
     })();
   }, [user]);
 
-  const closed = useMemo(() => (trades ?? []).filter((t) => t.status !== "OPEN"), [trades]);
-  const hasReal = closed.length >= 3;
   const metrics = useMemo(
-    () => hasReal ? computeReal(trades ?? [], signals) : demoMetrics(trades?.length ?? 0),
-    [trades, signals, hasReal],
+    () => computeReal(trades ?? [], signals),
+    [trades, signals],
   );
+  const hasAny = (trades?.length ?? 0) > 0;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -62,14 +61,10 @@ export default function Performance() {
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Performance</h1>
           <p className="text-sm text-muted-foreground">
-            {hasReal
-              ? "Real closed paper trades."
-              : "Demo data shown until you've closed at least 3 paper trades."}
+            {hasAny ? "Real paper trades." : "No paper trades yet. Approve a signal to get started."}
           </p>
         </div>
-        <Badge className={cn("border-0", hasReal ? "bg-emerald-500/15 text-emerald-400" : "bg-warn/15 text-warn")}>
-          {hasReal ? "Real paper data" : "Simulated · paper trading only"}
-        </Badge>
+        <Badge className="border-0 bg-emerald-500/15 text-emerald-400">Real paper data</Badge>
       </header>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -324,54 +319,3 @@ function computeReal(trades: PaperTrade[], signals: Record<string, Signal>) {
   };
 }
 
-function demoMetrics(total: number) {
-  let eq = 0;
-  const equityCurve = Array.from({ length: 20 }, (_, i) => {
-    eq += (Math.sin(i / 2) * 80) + (Math.random() * 40 - 10) + 25;
-    return { label: `#${i + 1}`, equity: Number(eq.toFixed(2)) };
-  });
-  const dailyPL = ["06-01","06-02","06-03","06-04","06-05","06-06","06-07","06-08","06-09","06-10"].map((d) => ({
-    label: d, pl: Number(((Math.random() - 0.4) * 220).toFixed(2)),
-  }));
-  return {
-    total: total || 47,
-    open: 3,
-    winRate: 62,
-    profitFactor: 1.84,
-    avgReturn: 28.4,
-    maxDD: -210.5,
-    highConvHit: 71,
-    avgMfe: 84, avgMae: -42,
-    equityCurve, dailyPL,
-    byTicker: [
-      { label: "NVDA", n: 12, winRate: 67, avgPl: 34 },
-      { label: "META", n: 9, winRate: 55, avgPl: 21 },
-      { label: "AMD", n: 7, winRate: 57, avgPl: 18 },
-    ] as BRow[],
-    byDirection: [
-      { label: "CALL", n: 28, winRate: 61, avgPl: 32 },
-      { label: "PUT", n: 19, winRate: 58, avgPl: 22 },
-    ] as BRow[],
-    byRisk: [
-      { label: "LOW", n: 14, winRate: 71, avgPl: 24 },
-      { label: "MEDIUM", n: 22, winRate: 59, avgPl: 28 },
-      { label: "HIGH", n: 11, winRate: 45, avgPl: 18 },
-    ] as BRow[],
-    bySource: [
-      { label: "Alpaca Signal Engine v1", n: 18, winRate: 64, avgPl: 31 },
-      { label: "Demo seed", n: 29, winRate: 58, avgPl: 24 },
-    ] as BRow[],
-    byConfidence: [
-      { label: "50–59", n: 4, winRate: 25, avgPl: -12 },
-      { label: "60–69", n: 9, winRate: 44, avgPl: 8 },
-      { label: "70–79", n: 14, winRate: 57, avgPl: 22 },
-      { label: "80–89", n: 11, winRate: 73, avgPl: 41 },
-      { label: "90+",   n: 5, winRate: 80, avgPl: 58 },
-    ] as BRow[],
-    byTag: [
-      { label: "VWAP Reclaim", n: 12, winRate: 67, avgPl: 34 },
-      { label: "Volume Spike", n: 9, winRate: 56, avgPl: 21 },
-      { label: "RSI Momentum", n: 8, winRate: 50, avgPl: 12 },
-    ] as BRow[],
-  };
-}
