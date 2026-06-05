@@ -141,7 +141,7 @@ function ResetPaperAccountPanel() {
     const { error } = await (supabase as any).rpc("reset_paper_account");
     setResetting(false);
     if (error) return toast.error(error.message);
-    toast.success("Paper account reset to $100,000");
+    toast.success("Paper account reset to $10,000");
   }
 
   return (
@@ -150,7 +150,7 @@ function ResetPaperAccountPanel() {
         <ShieldAlert className="h-4 w-4 text-warn" /> Paper account
       </h2>
       <p className="text-sm text-muted-foreground leading-relaxed">
-        Reset your paper trading account back to the $100,000 starting balance. This deletes
+        Reset your paper trading account back to the $10,000 starting balance. This deletes
         all open and closed paper trades and their related alerts. Real money is never involved.
       </p>
       <button
