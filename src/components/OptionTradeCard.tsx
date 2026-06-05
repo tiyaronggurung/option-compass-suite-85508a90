@@ -42,7 +42,12 @@ function optionLabel(t: PaperTrade): string {
 
 export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: Props) {
   const t = trade as any;
-  const unavailable = t.quote_source === "unavailable" || (live && t.current_premium == null && t.exit_premium == null);
+  const closedTrade = trade.status !== "OPEN";
+  const hasClosedPricing = closedTrade && (t.exit_premium != null || t.realized_pl != null);
+  const unavailable = !hasClosedPricing && (
+    t.quote_source === "unavailable" ||
+    (live && t.current_premium == null && t.exit_premium == null)
+  );
   const contracts = Number(t.contracts ?? 1);
   const multiplier = Number(t.multiplier ?? 100);
   const entryPremium = Number(t.entry_premium ?? trade.entry_price ?? 0);
