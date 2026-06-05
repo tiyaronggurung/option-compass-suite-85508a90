@@ -101,9 +101,9 @@ Deno.serve(async (req) => {
     let work = inflight.get(cacheKey);
     if (!work) {
       work = (async () => {
-        const [stateRes, chainsRes] = await Promise.allSettled([
+        const [stateRes, expiryRes] = await Promise.allSettled([
           uw(`/stock/${encodeURIComponent(ticker)}/stock-state`),
-          uw(`/stock/${encodeURIComponent(ticker)}/option-chains`),
+          uw(`/stock/${encodeURIComponent(ticker)}/expiry-breakdown`),
         ]);
 
         let spot: number | null = null;
@@ -112,21 +112,19 @@ Deno.serve(async (req) => {
           spot = numOrNull(d.close ?? d.last ?? d.price);
         }
 
-        let allSymbols: string[] = [];
-        if (chainsRes.status === "fulfilled") {
-          const c = chainsRes.value;
-          allSymbols = Array.isArray(c?.data) ? c.data : Array.isArray(c) ? c : [];
-        }
-
         const today = new Date();
         today.setUTCHours(0, 0, 0, 0);
         const expirySet = new Set<string>();
-        for (const sym of allSymbols) {
-          const p = parseOcc(sym);
-          if (!p) continue;
-          const d = new Date(p.expiry + "T00:00:00Z");
-          const dte = Math.round((d.getTime() - today.getTime()) / 86_400_000);
-          if (dte >= 0 && dte <= 45) expirySet.add(p.expiry);
+        if (expiryRes.status === "fulfilled") {
+          const j = expiryRes.value;
+          const arr: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+          for (const row of arr) {
+            const e = row?.expires ?? row?.expiry ?? row?.expiration ?? row?.expires_at;
+            if (typeof e !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e)) continue;
+            const d = new Date(e + "T00:00:00Z");
+            const dte = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+            if (dte >= 0 && dte <= 60) expirySet.add(e);
+          }
         }
         const expiries = Array.from(expirySet).sort();
 
