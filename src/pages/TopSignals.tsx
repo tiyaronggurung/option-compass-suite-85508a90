@@ -99,7 +99,18 @@ export default function TopSignals() {
     }).slice(0, TOP_N[tab]);
   }, [ranked, tab, watchOnly, watchSet, minScore, maxRisk, freshOnly]);
 
-  async function handleApprove(s: Signal) {
+  async function refreshAfterTrade() {
+    if (!user) return;
+    const [{ data: t }, { data: pa }] = await Promise.all([
+      supabase.from("paper_trades").select("*").eq("user_id", user.id),
+      supabase.from("paper_accounts").select("cash_balance").eq("user_id", user.id).maybeSingle(),
+    ]);
+    setTrades(t ?? []);
+    setCashBalance(Number((pa as any)?.cash_balance ?? 0));
+  }
+
+  // Fallback: 1-click approve when option chain isn't cached for this ticker.
+  async function fallbackApprove(s: Signal) {
     if (!user) return;
     const res = await approveSignalAsPaperTrade({
       userId: user.id,
@@ -110,8 +121,12 @@ export default function TopSignals() {
     });
     if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Paper trade opened on ${s.ticker}`);
-    const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user.id);
-    setTrades(data ?? []);
+    await refreshAfterTrade();
+  }
+
+  function handleApprove(s: Signal) {
+    setBuySignal(s);
+    setBuyOpen(true);
   }
 
   return (
