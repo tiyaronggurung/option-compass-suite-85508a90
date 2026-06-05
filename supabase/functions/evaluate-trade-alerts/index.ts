@@ -155,6 +155,41 @@ Deno.serve(async (req) => {
     const { error: upErr } = await admin.from("trade_alerts").update(patch).eq("id", a.id);
     if (upErr) console.warn("[evaluate-trade-alerts] update failed", a.id, upErr.message);
     else updated++;
+
+    // Keep paper_trade in sync: when an alert reaches a terminal state, close
+    // the linked open paper trade so the Open section and Active Plans card
+    // never diverge. Cash refund is handled by paper_trades_cash_accounting.
+    const TERMINAL = new Set(["stopped", "hit_t3", "expired"]);
+    if (TERMINAL.has(next) && a.paper_trade_id) {
+      const exitPremium = contractMid ?? mark?.current ?? mark?.mid ?? null;
+      const status = next === "hit_t3" ? "WIN" : next === "stopped" ? "LOSS" : "CLOSED";
+      const exitReason = next === "hit_t3" ? "TARGET" : next === "stopped" ? "STOP" : "EXPIRED";
+      const { data: existing } = await admin
+        .from("paper_trades")
+        .select("id,status,entry_premium,contracts,multiplier")
+        .eq("id", a.paper_trade_id)
+        .maybeSingle();
+      if (existing && existing.status === "OPEN") {
+        const mult = existing.multiplier ?? 100;
+        const qty = existing.contracts ?? 1;
+        const entry = Number(existing.entry_premium ?? 0);
+        const exitP = exitPremium != null ? Number(exitPremium) : null;
+        const realizedPlDollars = exitP != null ? (exitP - entry) * mult * qty : null;
+        const realizedPlPct = exitP != null && entry > 0 ? ((exitP - entry) / entry) * 100 : null;
+        const { error: ptErr } = await admin.from("paper_trades").update({
+          status,
+          exit_reason: exitReason,
+          exit_premium: exitP,
+          exit_price: exitP,
+          closed_at: now.toISOString(),
+          realized_pl: realizedPlDollars,
+          realized_pl_dollars: realizedPlDollars,
+          realized_pl_pct: realizedPlPct,
+        }).eq("id", a.paper_trade_id);
+        if (ptErr) console.warn("[evaluate-trade-alerts] paper_trade close failed", a.paper_trade_id, ptErr.message);
+      }
+    }
+
   }
 
   // 5. Fire dispatch-alert for every transition (best-effort, in parallel).
