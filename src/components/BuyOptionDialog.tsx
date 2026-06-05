@@ -237,6 +237,14 @@ export function BuyOptionDialog(props: Props) {
 
   const selected = useMemo(() => rows.find((r) => r.symbol === selectedSymbol) ?? null, [rows, selectedSymbol]);
 
+  // Persist the current selection per signal so reopening restores it.
+  useEffect(() => {
+    if (!open || !signal || !selected) return;
+    saveSelection(String(signal.id), {
+      side, expiry, strike: Number(selected.strike), qty,
+    });
+  }, [open, signal, side, expiry, selected, qty]);
+
   // Find the share-price divider index (strike just above spot)
   const dividerIndex = useMemo(() => {
     if (!spot) return -1;
