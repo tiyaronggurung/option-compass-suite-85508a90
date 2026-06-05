@@ -188,8 +188,9 @@ export default function Dashboard() {
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
   const openTrades = trades.filter((t) => t.status === "OPEN");
-  const closedTradeIds = useMemo(() => new Set(trades.filter((t) => t.status === "CLOSED").map((t) => t.id)), [trades]);
-  const activeAlerts = useMemo(() => alerts.filter((a) => !["cancelled"].includes(a.alert_status) && !closedTradeIds.has(a.paper_trade_id ?? "")), [alerts, closedTradeIds]);
+  const closedTradeIds = useMemo(() => new Set(trades.filter((t) => t.status !== "OPEN").map((t) => t.id)), [trades]);
+  const closedSignalIds = useMemo(() => new Set(trades.filter((t) => t.status !== "OPEN" && (t as any).signal_id).map((t) => (t as any).signal_id as string)), [trades]);
+  const activeAlerts = useMemo(() => alerts.filter((a) => !["cancelled"].includes(a.alert_status) && !closedTradeIds.has(a.paper_trade_id ?? "") && !closedSignalIds.has(a.signal_id ?? "")), [alerts, closedTradeIds, closedSignalIds]);
   const dailyPL = trades
     .filter((t) => new Date(t.opened_at).toDateString() === new Date().toDateString())
     .reduce((a, t) => a + Number(t.current_pl ?? 0), 0);
