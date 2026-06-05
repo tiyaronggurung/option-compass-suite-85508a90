@@ -99,9 +99,20 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
             {contracts} contract{contracts === 1 ? "" : "s"} · {multiplier}× multiplier
           </div>
         </div>
-        <Badge className={cn("border-0 text-[10px]", closed ? "bg-muted text-muted-foreground" : "bg-info/15 text-info")}>
-          {trade.status}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          {!closed && (
+            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-bull/60" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-bull" />
+              </span>
+              Live
+            </span>
+          )}
+          <Badge className={cn("border-0 text-[10px]", closed ? "bg-muted text-muted-foreground" : "bg-info/15 text-info")}>
+            {trade.status}
+          </Badge>
+        </div>
       </div>
 
       {/* Safety banner */}
