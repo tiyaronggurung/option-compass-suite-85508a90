@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DisclaimerBar } from "@/components/Disclaimer";
+import { PaperAccountCard } from "@/components/PaperAccountCard";
 import { fmtPL, fmtPrice, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -111,6 +112,9 @@ export default function Trades() {
       </header>
 
       <DisclaimerBar />
+
+      <PaperAccountCard />
+
 
       <Section title="Open">
         {!trades ? <Skeleton className="h-24" />
