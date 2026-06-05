@@ -16,6 +16,7 @@ import { sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { TopSignalRow } from "@/components/TopSignalRow";
 import { SignalDetailDialog } from "@/components/SignalDetailDialog";
+import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 import { DisclaimerBar } from "@/components/Disclaimer";
 
 type Tab = "calls" | "puts" | "all";
@@ -38,6 +39,9 @@ export default function TopSignals() {
   const [includeDebug, setIncludeDebug] = useState(false);
 
   const [detail, setDetail] = useState<{ signal: Signal; breakdown: RankBreakdown } | null>(null);
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [buySignal, setBuySignal] = useState<Signal | null>(null);
+  const [cashBalance, setCashBalance] = useState<number>(0);
 
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
@@ -45,17 +49,19 @@ export default function TopSignals() {
     if (!user) return;
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }, { data: rs }] = await Promise.all([
+      const [{ data: s }, { data: t }, { data: w }, { data: rs }, { data: pa }] = await Promise.all([
         supabase.from("signals").select("*").order("created_at", { ascending: false }).limit(200),
         supabase.from("paper_trades").select("*").eq("user_id", user.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user.id),
         supabase.from("risk_settings").select("*").eq("user_id", user.id).maybeSingle(),
+        supabase.from("paper_accounts").select("cash_balance").eq("user_id", user.id).maybeSingle(),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
       setRisk(rs as RiskSettingsLike);
+      setCashBalance(Number((pa as any)?.cash_balance ?? 0));
     })();
     return () => { cancel = true; };
   }, [user]);
@@ -93,7 +99,18 @@ export default function TopSignals() {
     }).slice(0, TOP_N[tab]);
   }, [ranked, tab, watchOnly, watchSet, minScore, maxRisk, freshOnly]);
 
-  async function handleApprove(s: Signal) {
+  async function refreshAfterTrade() {
+    if (!user) return;
+    const [{ data: t }, { data: pa }] = await Promise.all([
+      supabase.from("paper_trades").select("*").eq("user_id", user.id),
+      supabase.from("paper_accounts").select("cash_balance").eq("user_id", user.id).maybeSingle(),
+    ]);
+    setTrades(t ?? []);
+    setCashBalance(Number((pa as any)?.cash_balance ?? 0));
+  }
+
+  // Fallback: 1-click approve when option chain isn't cached for this ticker.
+  async function fallbackApprove(s: Signal) {
     if (!user) return;
     const res = await approveSignalAsPaperTrade({
       userId: user.id,
@@ -104,8 +121,12 @@ export default function TopSignals() {
     });
     if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Paper trade opened on ${s.ticker}`);
-    const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user.id);
-    setTrades(data ?? []);
+    await refreshAfterTrade();
+  }
+
+  function handleApprove(s: Signal) {
+    setBuySignal(s);
+    setBuyOpen(true);
   }
 
   return (
@@ -192,6 +213,19 @@ export default function TopSignals() {
         open={!!detail}
         onOpenChange={(v) => !v && setDetail(null)}
         rankBreakdown={detail?.breakdown}
+      />
+
+      <BuyOptionDialog
+        open={buyOpen}
+        signal={buySignal}
+        userId={user?.id ?? ""}
+        risk={risk}
+        openTradesCount={openTrades.length}
+        todayRealizedPL={todayRealizedPL}
+        cashBalance={cashBalance}
+        onOpenChange={setBuyOpen}
+        onSuccess={refreshAfterTrade}
+        onFallbackApprove={fallbackApprove}
       />
     </div>
   );

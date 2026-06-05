@@ -21,6 +21,7 @@ import MarketOverviewStrip from "@/components/MarketOverviewStrip";
 import { PaperAccountCard } from "@/components/PaperAccountCard";
 import ProviderStatusBanner from "@/components/ProviderStatusBanner";
 import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
+import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
@@ -66,6 +67,9 @@ export default function Dashboard() {
   const [risk, setRisk] = useState<RiskSettingsLike>(null);
   const [showDeveloping, setShowDeveloping] = useState(true);
   const [alerts, setAlerts] = useState<TradeAlert[]>([]);
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [buySignal, setBuySignal] = useState<Signal | null>(null);
+  const [cashBalance, setCashBalance] = useState<number>(0);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   const reloadAlerts = async () => {
@@ -82,7 +86,7 @@ export default function Dashboard() {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }] = await Promise.all([
+      const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }, { data: pa }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
         supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 50).order("created_at", { ascending: false }).limit(30),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
@@ -91,6 +95,7 @@ export default function Dashboard() {
         supabase.from("signal_actions").select("signal_id").eq("user_id", user!.id).in("action", ["dismissed", "approved"]),
         supabase.from("provider_configs").select("last_status").eq("provider", "alpaca").maybeSingle(),
         supabase.from("risk_settings").select("*").eq("user_id", user!.id).maybeSingle(),
+        supabase.from("paper_accounts").select("cash_balance").eq("user_id", user!.id).maybeSingle(),
       ]);
       if (cancel) return;
       setSignals(s ?? []);
@@ -101,6 +106,7 @@ export default function Dashboard() {
       if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
       setAlpacaStatus(pc?.last_status ?? null);
       setRisk(rs as RiskSettingsLike);
+      setCashBalance(Number((pa as any)?.cash_balance ?? 0));
       reloadAlerts();
     })();
 
@@ -188,7 +194,8 @@ export default function Dashboard() {
   const todayRealizedPL = useMemo(() => sumTodayRealizedPL(trades as any), [trades]);
   const effective = useMemo(() => effectiveRisk(risk), [risk]);
 
-  async function approve(s: Signal) {
+  // Fallback: 1-click approve (used when option chain is unavailable).
+  async function fallbackApprove(s: Signal) {
     const res = await approveSignalAsPaperTrade({
       userId: user!.id,
       signal: s,
@@ -198,16 +205,40 @@ export default function Dashboard() {
     });
     if (!res.ok) return toast.error((res as { reason: string }).reason);
     toast.success(`Paper trade opened on ${s.ticker}`);
-    // Mark as actioned so it disappears from this user's dashboard and doesn't reappear on reload.
     await supabase.from("signal_actions").insert({
       user_id: user!.id,
       signal_id: s.id,
       action: "approved",
     });
     setDismissedIds((prev) => new Set(prev).add(s.id));
-    const { data } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
-    setTrades(data ?? []);
+    await refreshAfterTrade();
+  }
+
+  async function refreshAfterTrade() {
+    const [{ data: t }, { data: pa }] = await Promise.all([
+      supabase.from("paper_trades").select("*").eq("user_id", user!.id),
+      supabase.from("paper_accounts").select("cash_balance").eq("user_id", user!.id).maybeSingle(),
+    ]);
+    setTrades(t ?? []);
+    setCashBalance(Number((pa as any)?.cash_balance ?? 0));
     reloadAlerts();
+  }
+
+  // New primary action: open the Robinhood-style Buy Option modal.
+  function approve(s: Signal) {
+    setBuySignal(s);
+    setBuyOpen(true);
+  }
+
+  async function onBuySuccess() {
+    if (!buySignal) return;
+    await supabase.from("signal_actions").insert({
+      user_id: user!.id,
+      signal_id: buySignal.id,
+      action: "approved",
+    });
+    setDismissedIds((prev) => new Set(prev).add(buySignal.id));
+    await refreshAfterTrade();
   }
 
 
@@ -446,6 +477,19 @@ export default function Dashboard() {
         open={!!detailSignal}
         onOpenChange={(v) => !v && setDetailSignal(null)}
         outcome={detailSignal ? signalOutcome(detailSignal, trades, dismissedIds) : undefined}
+      />
+
+      <BuyOptionDialog
+        open={buyOpen}
+        signal={buySignal}
+        userId={user?.id ?? ""}
+        risk={risk}
+        openTradesCount={openTrades.length}
+        todayRealizedPL={todayRealizedPL}
+        cashBalance={cashBalance}
+        onOpenChange={setBuyOpen}
+        onSuccess={onBuySuccess}
+        onFallbackApprove={fallbackApprove}
       />
     </div>
   );
