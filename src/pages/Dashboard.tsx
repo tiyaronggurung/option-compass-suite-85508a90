@@ -18,6 +18,7 @@ import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
 import MarketOverviewStrip from "@/components/MarketOverviewStrip";
+import { PaperAccountCard } from "@/components/PaperAccountCard";
 import ProviderStatusBanner from "@/components/ProviderStatusBanner";
 import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
 
