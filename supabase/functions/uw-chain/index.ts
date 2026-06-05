@@ -62,6 +62,13 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Per-isolate in-memory cache. Multiple concurrent polls within CACHE_TTL_MS
+// share the same response, drastically cutting UW API calls and avoiding 429s.
+const CACHE_TTL_MS = 8_000;
+type CacheEntry = { at: number; payload: any };
+const responseCache = new Map<string, CacheEntry>();
+const inflight = new Map<string, Promise<any>>();
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (!UW_KEY) {
