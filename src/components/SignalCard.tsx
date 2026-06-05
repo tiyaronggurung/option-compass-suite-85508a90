@@ -11,6 +11,7 @@ import type { ConfirmationMatrix } from "@/lib/confirmations";
 import { getTier, TIER_META } from "@/lib/signalTiers";
 import { getLifecycleState, LIFECYCLE_META } from "@/lib/signalLifecycle";
 import { classifySignalSource } from "@/lib/signalSource";
+import { useLiveQuote } from "@/hooks/useLiveQuote";
 
 type Props = {
   signal: Signal;
@@ -24,6 +25,12 @@ type Props = {
 
 export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none", subLabel }: Props) {
   const isCall = signal.direction === "CALL";
+  const liveQuote = useLiveQuote(signal.ticker);
+  const snapshotPrice = Number(signal.price);
+  const livePrice = liveQuote?.price ?? null;
+  const displayPrice = livePrice != null && Number.isFinite(livePrice) ? livePrice : snapshotPrice;
+  const isLive = livePrice != null && Number.isFinite(livePrice);
+  const moveSinceSignal = isLive && snapshotPrice > 0 ? ((livePrice - snapshotPrice) / snapshotPrice) * 100 : null;
   const tier = getTier(signal);
   const tierMeta = TIER_META[tier];
   const ring = tierMeta.ringClass;
@@ -106,7 +113,26 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                 <Clock className="h-3 w-3" />
                 {timeAgo(signal.created_at)}
               </span>
-              <span className="ticker-mono">Stock ${fmtPrice(Number(signal.price))}</span>
+              <span
+                className="ticker-mono"
+                title={
+                  isLive
+                    ? `Live from Unusual Whales · signal price was $${fmtPrice(snapshotPrice)}`
+                    : `Snapshot at signal time`
+                }
+              >
+                Stock ${fmtPrice(displayPrice)}
+                {isLive ? (
+                  <span className="ml-1 text-[10px] text-bull">● live</span>
+                ) : (
+                  <span className="ml-1 text-[10px] text-muted-foreground">snapshot</span>
+                )}
+                {moveSinceSignal != null && Math.abs(moveSinceSignal) >= 0.05 && (
+                  <span className={cn("ml-1 text-[10px]", moveSinceSignal >= 0 ? "text-bull" : "text-bear")}>
+                    ({moveSinceSignal >= 0 ? "+" : ""}{moveSinceSignal.toFixed(2)}%)
+                  </span>
+                )}
+              </span>
               {signal.contract_symbol && signal.strike != null ? (
                 <span className="ticker-mono">
                   · {isCall ? "Call" : "Put"} ${Number(signal.strike).toFixed(0)} strike

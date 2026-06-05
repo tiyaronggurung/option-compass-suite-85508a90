@@ -70,102 +70,86 @@ export function BuyOptionDialog(props: Props) {
   const [chain, setChain] = useState<ChainRow[]>([]);
   const [side, setSide] = useState<"call" | "put">("call");
   const [expiry, setExpiry] = useState<string>("");
+  const [availableExpiries, setAvailableExpiries] = useState<string[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [qty, setQty] = useState<number>(1);
   const [submitting, setSubmitting] = useState(false);
   const [chainTried, setChainTried] = useState(false);
+  const [uwSpot, setUwSpot] = useState<number | null>(null);
 
   const signalSpot = useMemo(() => Number(signal?.price ?? 0) || 0, [signal]);
 
-  // Derive live underlying price from the loaded chain using put-call parity:
-  //   S ≈ K + (Call_mid - Put_mid)   (ignoring r, q for short-dated options)
-  // We use the median across strikes near the signal price for robustness.
-  const liveSpot = useMemo(() => {
-    if (!chain.length) return signalSpot;
-    // Use the nearest expiry only — most liquid and least parity drift.
-    const expiries = Array.from(new Set(chain.map((r) => r.expiry))).sort();
-    const targetExp = expiries[0];
-    if (!targetExp) return signalSpot;
-    const callsByStrike = new Map<number, ChainRow>();
-    const putsByStrike = new Map<number, ChainRow>();
-    for (const r of chain) {
-      if (r.expiry !== targetExp) continue;
-      const mid =
-        r.bid != null && r.ask != null && r.bid > 0 && r.ask > 0
-          ? (Number(r.bid) + Number(r.ask)) / 2
-          : Number(r.ask ?? r.last ?? r.bid ?? 0);
-      if (!mid || !Number.isFinite(mid)) continue;
-      const slot = r.type === "call" ? callsByStrike : putsByStrike;
-      slot.set(Number(r.strike), { ...r, bid: mid, ask: mid } as ChainRow);
-    }
-    const estimates: number[] = [];
-    for (const [strike, call] of callsByStrike) {
-      const put = putsByStrike.get(strike);
-      if (!put) continue;
-      const cMid = Number(call.bid);
-      const pMid = Number(put.bid);
-      const s = strike + cMid - pMid;
-      if (Number.isFinite(s) && s > 0) estimates.push(s);
-    }
-    if (!estimates.length) return signalSpot;
-    estimates.sort((a, b) => a - b);
-    return estimates[Math.floor(estimates.length / 2)];
-  }, [chain, signalSpot]);
-
   // `spot` is the LIVE price used everywhere (ATM picker, projections, divider).
+  // Sourced from Unusual Whales (uw-chain returns it); falls back to signal snapshot.
+  const liveSpot = uwSpot != null && Number.isFinite(uwSpot) && uwSpot > 0 ? uwSpot : signalSpot;
   const spot = liveSpot;
   const spotDeltaPct = signalSpot > 0 ? ((liveSpot - signalSpot) / signalSpot) * 100 : 0;
 
-  // Load chain when dialog opens
+  // Reset state when dialog opens for a new signal.
   useEffect(() => {
     if (!open || !signal) return;
-    let cancelled = false;
-    setLoading(true);
     setChainTried(false);
     setSelectedSymbol(null);
     setQty(1);
+    setChain([]);
+    setAvailableExpiries([]);
+    setUwSpot(null);
     const initialSide = String(signal.direction).toUpperCase() === "PUT" ? "put" : "call";
     setSide(initialSide);
-
-    (async () => {
-      const today = new Date().toISOString().slice(0, 10);
-      const { data, error } = await supabase
-        .from("options_contracts")
-        .select("symbol, underlying, expiry, strike, type, bid, ask, last, volume, open_interest, delta, gamma, theta, vega, iv")
-        .eq("underlying", signal.ticker)
-        .gte("expiry", today)
-        .order("expiry", { ascending: true })
-        .order("strike", { ascending: true })
-        .limit(1000);
-      if (cancelled) return;
-      setLoading(false);
-      setChainTried(true);
-      if (error) {
-        toast.error(`Chain load failed: ${error.message}`);
-        return;
-      }
-      const rows = ((data ?? []) as ChainRow[]).filter((r) => daysToExpiry(r.expiry) < 30);
-      setChain(rows);
-      // Pick initial expiry: signal.expiry if present in chain, else earliest
-      const expiries = Array.from(new Set(rows.map((r) => r.expiry))).sort();
-      const sigExp = (signal as any).expiry as string | null;
-      const initialExp = sigExp && expiries.includes(sigExp) ? sigExp : expiries[0] ?? "";
-      setExpiry(initialExp);
-    })();
-    return () => { cancelled = true; };
+    const sigExp = (signal as any).expiry as string | null;
+    setExpiry(sigExp ?? "");
   }, [open, signal]);
 
-  // If chain came back empty, surface an error and let the user close.
-  // We intentionally do NOT auto-buy via the fallback path — the user must
-  // explicitly pick a contract from the chain.
+  // Poll the live UW chain every 5s while open. Refetch immediately when expiry changes.
+  useEffect(() => {
+    if (!open || !signal) return;
+    let cancelled = false;
+    let firstLoad = true;
+
+    const fetchChain = async () => {
+      if (firstLoad) setLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("uw-chain", {
+          body: { ticker: signal.ticker, expiry: expiry || (signal as any).expiry || null },
+        });
+        if (cancelled) return;
+        if (error) {
+          if (firstLoad) toast.error(`Live chain failed: ${error.message}`);
+          return;
+        }
+        const payload = data as { spot: number | null; expiries: string[]; expiry: string; rows: ChainRow[] };
+        setUwSpot(payload.spot ?? null);
+        setAvailableExpiries(payload.expiries ?? []);
+        setChain(payload.rows ?? []);
+        if (!expiry && payload.expiry) setExpiry(payload.expiry);
+      } catch (e) {
+        if (firstLoad) toast.error(`Live chain error: ${(e as Error).message}`);
+      } finally {
+        if (firstLoad && !cancelled) {
+          setLoading(false);
+          setChainTried(true);
+          firstLoad = false;
+        }
+      }
+    };
+
+    void fetchChain();
+    const id = setInterval(fetchChain, 5000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [open, signal, expiry]);
+
+  // If chain came back empty after first load, surface an error.
   useEffect(() => {
     if (!chainTried || loading) return;
     if (chain.length === 0 && signal) {
-      toast.error(`No option chain available for ${signal.ticker} — cannot buy.`);
+      toast.error(`No live option chain available for ${signal.ticker}.`);
     }
   }, [chainTried, loading, chain.length, signal]);
 
-  const expiries = useMemo(() => Array.from(new Set(chain.map((r) => r.expiry))).sort(), [chain]);
+  const expiries = useMemo(() => {
+    if (availableExpiries.length) return availableExpiries;
+    return Array.from(new Set(chain.map((r) => r.expiry))).sort();
+  }, [availableExpiries, chain]);
 
   const rows = useMemo(() => {
     return chain
@@ -298,6 +282,9 @@ export function BuyOptionDialog(props: Props) {
             <span className="text-muted-foreground">
               Live spot{" "}
               <span className="ticker-mono text-foreground">{fmtMoney(liveSpot)}</span>
+              {uwSpot != null && (
+                <span className="ml-1 text-[10px] text-bull">● UW live</span>
+              )}
               {signalSpot > 0 && liveSpot > 0 && (
                 <span
                   className={cn(
