@@ -203,9 +203,17 @@ export function BuyOptionDialog(props: Props) {
   }, [chain, side, expiry]);
 
   // Auto-pick a sensible default strike when expiry/side changes.
-  // Prefer the signal's exact strike if it's in the current rows; else ATM-ish.
+  // Priority: restored-from-localStorage strike > signal's exact strike > ATM-ish.
   useEffect(() => {
     if (!rows.length || !spot) { setSelectedSymbol(null); return; }
+    if (restoredStrike != null) {
+      const exact = rows.find((r) => Number(r.strike) === Number(restoredStrike));
+      if (exact) {
+        setSelectedSymbol(exact.symbol);
+        setRestoredStrike(null); // consume once so later side/expiry changes use defaults
+        return;
+      }
+    }
     const sigStrike = signal?.strike != null ? Number(signal.strike) : null;
     const sigSide = String(signal?.direction ?? "").toUpperCase() === "PUT" ? "put" : "call";
     if (sigStrike != null && side === sigSide) {
@@ -215,7 +223,15 @@ export function BuyOptionDialog(props: Props) {
     // Fallback: ATM-ish (smallest |strike - spot|)
     const best = [...rows].sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
     setSelectedSymbol(best.symbol);
-  }, [rows, spot, signal, side]);
+  }, [rows, spot, signal, side, restoredStrike]);
+
+  // Persist the current selection per signal so reopening restores it.
+  useEffect(() => {
+    if (!open || !signal || !selected) return;
+    saveSelection(String(signal.id), {
+      side, expiry, strike: Number(selected.strike), qty,
+    });
+  }, [open, signal, side, expiry, selected, qty]);
 
   // Scroll the selected row into view when it changes.
   useEffect(() => {
