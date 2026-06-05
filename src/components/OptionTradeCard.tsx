@@ -133,7 +133,12 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
         <>
           {/* Robinhood-style headline */}
           <div className="pt-1">
-            <div className={cn("text-2xl font-semibold ticker-mono", isWin ? "text-bull" : isLoss ? "text-bear" : "text-foreground")}>
+            <div className={cn(
+              "text-2xl font-semibold ticker-mono transition-colors duration-700 rounded px-1 -mx-1",
+              isWin ? "text-bull" : isLoss ? "text-bear" : "text-foreground",
+              flash === "up" && "bg-bull/15",
+              flash === "down" && "bg-bear/15",
+            )}>
               {pl == null ? "—" : `${pl >= 0 ? "+" : ""}$${fmtPL(pl)}`}
             </div>
             <div className={cn("text-sm ticker-mono", isWin ? "text-bull" : isLoss ? "text-bear" : "text-muted-foreground")}>
