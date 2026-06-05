@@ -113,6 +113,9 @@ export default function Trades() {
 
       <DisclaimerBar />
 
+      <PaperAccountCard />
+
+
       <Section title="Open">
         {!trades ? <Skeleton className="h-24" />
           : open.length === 0 ? <Empty text="No open paper trades. Approve a signal from the dashboard." />
