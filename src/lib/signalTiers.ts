@@ -12,7 +12,8 @@ export function tierFor(confidence: number): Tier {
 
 export function getTier(signal: Signal): Tier {
   const t = (signal as any).tier as Tier | undefined | null;
-  return t ?? tierFor(signal.confidence);
+  if (t && (t in TIER_META)) return t;
+  return tierFor(signal.confidence);
 }
 
 export const TIER_META: Record<Tier, { label: string; emoji: string; className: string; ringClass: string }> = {
