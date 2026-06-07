@@ -28,8 +28,10 @@ type Analysis = {
 };
 
 export default function Analyst() {
+  const [params] = useSearchParams();
+  const focusedId = params.get("signal");
   const [signals, setSignals] = useState<Signal[] | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(focusedId);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
 
@@ -41,6 +43,11 @@ export default function Analyst() {
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // If route changes ?signal=… after mount, follow it.
+  useEffect(() => {
+    if (focusedId) setSelectedId(focusedId);
+  }, [focusedId]);
 
   const selected = useMemo(() => signals?.find((s) => s.id === selectedId) ?? null, [signals, selectedId]);
 
