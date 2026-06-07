@@ -193,7 +193,6 @@ export default function Dashboard() {
   }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
-  const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
   const openTrades = trades.filter((t) => t.status === "OPEN");
   const closedTradeIds = useMemo(() => new Set(trades.filter((t) => t.status !== "OPEN").map((t) => t.id)), [trades]);
   const closedSignalIds = useMemo(() => new Set(trades.filter((t) => t.status !== "OPEN" && (t as any).signal_id).map((t) => (t as any).signal_id as string)), [trades]);
