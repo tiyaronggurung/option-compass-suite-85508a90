@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, TrendingUp, TrendingDown, Target } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, Target, X } from "lucide-react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
@@ -7,6 +7,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DisclaimerBar } from "@/components/Disclaimer";
 import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
@@ -50,11 +53,35 @@ export default function Performance() {
     })();
   }, [user]);
 
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
+  const [tickerFilter, setTickerFilter] = useState<string>("__all__");
+
+  const availableTickers = useMemo(() => {
+    const set = new Set<string>();
+    (trades ?? []).forEach((t) => set.add(t.ticker));
+    return Array.from(set).sort();
+  }, [trades]);
+
+  const filteredTrades = useMemo(() => {
+    if (!trades) return null;
+    const fromMs = fromDate ? new Date(fromDate + "T00:00:00").getTime() : null;
+    const toMs = toDate ? new Date(toDate + "T23:59:59").getTime() : null;
+    return trades.filter((t) => {
+      if (tickerFilter !== "__all__" && t.ticker !== tickerFilter) return false;
+      const ref = new Date(t.closed_at ?? t.opened_at).getTime();
+      if (fromMs != null && ref < fromMs) return false;
+      if (toMs != null && ref > toMs) return false;
+      return true;
+    });
+  }, [trades, fromDate, toDate, tickerFilter]);
+
   const metrics = useMemo(
-    () => computeReal(trades ?? [], signals),
-    [trades, signals],
+    () => computeReal(filteredTrades ?? [], signals),
+    [filteredTrades, signals],
   );
-  const hasAny = (trades?.length ?? 0) > 0;
+  const hasAny = (filteredTrades?.length ?? 0) > 0;
+  const filtersActive = fromDate !== "" || toDate !== "" || tickerFilter !== "__all__";
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -67,6 +94,54 @@ export default function Performance() {
         </div>
         <Badge className="border-0 bg-emerald-500/15 text-emerald-400">Real paper data</Badge>
       </header>
+
+      <section className="glass-card p-3 flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <label className="text-[11px] uppercase tracking-wider text-muted-foreground">From</label>
+          <Input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="h-9 w-[150px]"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] uppercase tracking-wider text-muted-foreground">To</label>
+          <Input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="h-9 w-[150px]"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Ticker</label>
+          <Select value={tickerFilter} onValueChange={setTickerFilter}>
+            <SelectTrigger className="h-9 w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All tickers</SelectItem>
+              {availableTickers.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {filtersActive && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 gap-1"
+            onClick={() => { setFromDate(""); setToDate(""); setTickerFilter("__all__"); }}
+          >
+            <X className="h-3.5 w-3.5" /> Clear
+          </Button>
+        )}
+        <div className="ml-auto text-xs text-muted-foreground">
+          {filteredTrades?.length ?? 0} of {trades?.length ?? 0} trades
+        </div>
+      </section>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Total paper trades" value={metrics.total} icon={Activity} accent="text-primary" />
@@ -119,9 +194,9 @@ export default function Performance() {
             </Card>
           </section>
 
-          <HighlightsRow trades={trades} signals={signals} />
+          <HighlightsRow trades={filteredTrades ?? []} signals={signals} />
 
-          <TradeHistoryTable trades={trades} signals={signals} />
+          <TradeHistoryTable trades={filteredTrades ?? []} signals={signals} />
 
           <section className="grid lg:grid-cols-2 gap-4">
             <BreakdownTable title="By tag" rows={metrics.byTag} />
@@ -132,7 +207,14 @@ export default function Performance() {
             <BreakdownTable title="By confidence bucket" rows={metrics.byConfidence} />
           </section>
 
-          {user && <NotTakenSignalHistory userId={user.id} />}
+          {user && (
+            <NotTakenSignalHistory
+              userId={user.id}
+              fromDate={fromDate || null}
+              toDate={toDate || null}
+              ticker={tickerFilter === "__all__" ? null : tickerFilter}
+            />
+          )}
         </>
       )}
     </div>

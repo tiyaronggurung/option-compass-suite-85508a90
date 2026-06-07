@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { PaperTrade, Signal } from "@/lib/signalHelpers";
 import { isExpired } from "@/lib/signalFreshness";
-import { rankSignals, type RankBreakdown } from "@/lib/rankSignals";
+import { rankSignals, getContractMeta, type RankBreakdown } from "@/lib/rankSignals";
 import { sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { TopSignalRow } from "@/components/TopSignalRow";
@@ -85,6 +85,22 @@ export default function TopSignals() {
     return rankSignals(base);
   }, [signals, includeDebug]);
 
+  // Compute call vs put total contract volume across the broadly-filtered set
+  // (before the call/put tab split) so the bias reflects the whole board.
+  const sideVolumes = useMemo(() => {
+    let call = 0; let put = 0;
+    for (const { signal } of ranked) {
+      const fm = (signal.flow_metrics ?? {}) as any;
+      const cm = getContractMeta(signal) as any;
+      const v = Number(fm.volume ?? fm.option_volume ?? fm.total_volume ?? cm?.volume ?? 0) || 0;
+      if (signal.direction === "CALL") call += v;
+      else if (signal.direction === "PUT") put += v;
+    }
+    const bias: "CALL" | "PUT" | null =
+      call === 0 && put === 0 ? null : call >= put ? "CALL" : "PUT";
+    return { call, put, bias };
+  }, [ranked]);
+
   const filteredByTab = useMemo(() => {
     const filtered = ranked.filter(({ signal, rank }) => {
       if (tab === "calls" && signal.direction !== "CALL") return false;
@@ -100,15 +116,20 @@ export default function TopSignals() {
       if (!matchesSourceFilter(signal as any, providerFilter)) return false;
       return true;
     });
-    // Re-sort: confirmed_by_both → UW → Alpaca → other; tiebreak on existing rank.total desc.
+    // Re-sort: winning-side bias (only on the "All" tab) → source priority → score.
     const sorted = [...filtered].sort((a, b) => {
+      if (tab === "all" && sideVolumes.bias) {
+        const aWin = a.signal.direction === sideVolumes.bias ? 0 : 1;
+        const bWin = b.signal.direction === sideVolumes.bias ? 0 : 1;
+        if (aWin !== bWin) return aWin - bWin;
+      }
       const pa = sourcePriority(a.signal as any);
       const pb = sourcePriority(b.signal as any);
       if (pa !== pb) return pa - pb;
       return b.rank.total - a.rank.total;
     });
     return sorted.slice(0, TOP_N[tab]);
-  }, [ranked, tab, watchOnly, watchSet, minScore, maxRisk, freshOnly, providerFilter]);
+  }, [ranked, tab, watchOnly, watchSet, minScore, maxRisk, freshOnly, providerFilter, sideVolumes]);
 
   async function refreshAfterTrade() {
     if (!user) return;
@@ -213,6 +234,29 @@ export default function TopSignals() {
             </Button>
           ))}
         </div>
+        {sideVolumes.bias && (
+          <div className="glass-card px-3 py-2 flex flex-wrap items-center gap-3 text-xs">
+            <span className="text-muted-foreground uppercase tracking-wider text-[10px]">Flow bias</span>
+            <span className="ticker-mono">
+              CALL vol <span className={cn(sideVolumes.bias === "CALL" ? "text-bull font-semibold" : "text-muted-foreground")}>
+                {sideVolumes.call.toLocaleString()}
+              </span>
+            </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="ticker-mono">
+              PUT vol <span className={cn(sideVolumes.bias === "PUT" ? "text-bear font-semibold" : "text-muted-foreground")}>
+                {sideVolumes.put.toLocaleString()}
+              </span>
+            </span>
+            <span className="ml-auto text-[11px]">
+              Bias:{" "}
+              <span className={cn("font-semibold", sideVolumes.bias === "CALL" ? "text-bull" : "text-bear")}>
+                {sideVolumes.bias}S
+              </span>
+              {tab === "all" && <span className="text-muted-foreground"> · boosted in list</span>}
+            </span>
+          </div>
+        )}
         {!signals ? (
           Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)
         ) : filteredByTab.length === 0 ? (

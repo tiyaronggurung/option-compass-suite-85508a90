@@ -270,7 +270,14 @@ export function TradeHistoryTable({
   );
 }
 
-export function NotTakenSignalHistory({ userId }: { userId: string }) {
+export function NotTakenSignalHistory({
+  userId, fromDate = null, toDate = null, ticker = null,
+}: {
+  userId: string;
+  fromDate?: string | null;
+  toDate?: string | null;
+  ticker?: string | null;
+}) {
   const [rows, setRows] = useState<OutcomeRow[] | null>(null);
 
   useEffect(() => {
@@ -280,17 +287,21 @@ export function NotTakenSignalHistory({ userId }: { userId: string }) {
         .from("paper_trades").select("signal_id").eq("user_id", userId);
       const takenIds = new Set((trades ?? []).map((x) => x.signal_id).filter(Boolean) as string[]);
 
-      const { data: outs } = await supabase
+      let q = supabase
         .from("signal_outcomes")
         .select("signal_id,ticker,direction,confidence,tier,status,entry_at,entry_price,return_1d,return_3d,return_5d,win_1d,win_3d,win_5d")
         .neq("status", "pending")
         .order("entry_at", { ascending: false })
         .limit(200);
+      if (ticker) q = q.eq("ticker", ticker);
+      if (fromDate) q = q.gte("entry_at", new Date(fromDate + "T00:00:00").toISOString());
+      if (toDate) q = q.lte("entry_at", new Date(toDate + "T23:59:59").toISOString());
+      const { data: outs } = await q;
 
       const filtered = (outs ?? []).filter((o) => !takenIds.has(o.signal_id));
       setRows(filtered as OutcomeRow[]);
     })();
-  }, [userId]);
+  }, [userId, fromDate, toDate, ticker]);
 
   if (!rows) return <Skeleton className="h-48" />;
 
