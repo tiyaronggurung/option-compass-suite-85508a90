@@ -512,3 +512,383 @@ function ReviewRow({ label, value, accent }: { label: string; value: string | nu
     </div>
   );
 }
+
+// -----------------------------------------------------------------------------
+// Partial close: split-row approach. Reduce parent contracts/cost, then insert
+// a child OPEN row at parent entry premium, then update child to CLOSED at exit.
+// Net cash via existing trigger = realized P/L on the slice.
+// -----------------------------------------------------------------------------
+function PartialCloseDialog({
+  trade, onOpenChange, onClosed,
+}: {
+  trade: PaperTrade | null;
+  onOpenChange: (v: boolean) => void;
+  onClosed: () => void;
+}) {
+  const t = trade as any;
+  const totalContracts = Math.max(1, Number(t?.contracts ?? 1));
+  const multiplier = Number(t?.multiplier ?? 100);
+  const entryPremium = Number(t?.entry_premium ?? trade?.entry_price ?? 0);
+
+  const [qtyStr, setQtyStr] = useState("1");
+  const [exitPremiumStr, setExitPremiumStr] = useState("");
+  const [reason, setReason] = useState<CloseReason>("manual_close");
+  const [livePremium, setLivePremium] = useState<number | null>(null);
+  const [fetchingMark, setFetchingMark] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (trade) {
+      setQtyStr("1");
+      const seed = t?.current_premium != null ? Number(t.current_premium) : entryPremium;
+      setLivePremium(t?.current_premium != null ? Number(t.current_premium) : null);
+      setExitPremiumStr(seed ? String(seed) : "");
+      setReason("manual_close");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trade]);
+
+  async function useLiveMark() {
+    if (!trade) return;
+    setFetchingMark(true);
+    const { error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
+    if (error) { setFetchingMark(false); return toast.error(error.message); }
+    const { data: fresh } = await supabase
+      .from("paper_trades").select("current_premium").eq("id", trade.id).maybeSingle();
+    setFetchingMark(false);
+    const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
+    if (mark == null) return toast.error("No live mark available");
+    setLivePremium(mark);
+    setExitPremiumStr(String(mark));
+    toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+  }
+
+  if (!trade) return null;
+
+  const qty = Math.floor(Number(qtyStr));
+  const validQty = Number.isFinite(qty) && qty >= 1 && qty < totalContracts;
+  const exitPremium = Number(exitPremiumStr);
+  const validExit = exitPremiumStr !== "" && !Number.isNaN(exitPremium) && exitPremium >= 0;
+  const valid = validQty && validExit;
+
+  const sliceCost = entryPremium * multiplier * qty;
+  const sliceExitValue = validExit ? exitPremium * multiplier * qty : 0;
+  const realizedPl = validExit ? (exitPremium - entryPremium) * multiplier * qty : 0;
+  const realizedPlPct = validExit && sliceCost > 0 ? (realizedPl / sliceCost) * 100 : 0;
+  const childStatus: PaperTrade["status"] =
+    reason === "target_hit" ? "WIN"
+    : reason === "stop_hit" ? "LOSS"
+    : realizedPl > 0 ? "WIN" : realizedPl < 0 ? "LOSS" : "CLOSED";
+
+  async function submit() {
+    if (!valid || !trade) return;
+    setSubmitting(true);
+
+    // 1) Reduce parent contracts and total_cost proportionally. Cash unchanged here
+    //    (trigger only moves cash on INSERT and on status transitions).
+    const remainingContracts = totalContracts - qty;
+    const remainingTotalCost = entryPremium * multiplier * remainingContracts;
+    const remainingValue = (t?.current_premium != null ? Number(t.current_premium) : entryPremium)
+      * multiplier * remainingContracts;
+    const remainingUnreal = remainingValue - remainingTotalCost;
+    const remainingUnrealPct = remainingTotalCost > 0 ? (remainingUnreal / remainingTotalCost) * 100 : 0;
+
+    const { error: parentErr } = await supabase.from("paper_trades").update({
+      contracts: remainingContracts,
+      total_cost: Number(remainingTotalCost.toFixed(2)),
+      current_value: Number(remainingValue.toFixed(2)),
+      unrealized_pl: Number(remainingUnreal.toFixed(2)),
+      unrealized_pl_pct: Number(remainingUnrealPct.toFixed(2)),
+      current_pl: Number(remainingUnreal.toFixed(2)),
+      current_pl_pct: Number(remainingUnrealPct.toFixed(2)),
+    } as any).eq("id", trade.id);
+    if (parentErr) { setSubmitting(false); return toast.error(`Parent update failed: ${parentErr.message}`); }
+
+    // 2) Insert child OPEN row (clones option contract identity from parent).
+    //    Trigger debits cash for the slice cost.
+    const { data: child, error: insErr } = await supabase.from("paper_trades").insert({
+      user_id: trade.user_id,
+      signal_id: trade.signal_id as any,
+      ticker: trade.ticker,
+      direction: trade.direction,
+      contract_idea: t?.contract_idea ?? null,
+      is_option: true,
+      option_type: t?.option_type ?? null,
+      strike: t?.strike ?? null,
+      expiry: t?.expiry ?? null,
+      contracts: qty,
+      multiplier,
+      entry_premium: Number(entryPremium.toFixed(4)),
+      entry_price: Number(entryPremium.toFixed(4)),
+      total_cost: Number(sliceCost.toFixed(2)),
+      status: "OPEN",
+      paper_test_class: (t?.paper_test_class ?? null),
+      contract_snapshot_id: t?.contract_snapshot_id ?? null,
+      confidence_at_approval: t?.confidence_at_approval ?? null,
+      opened_at: trade.opened_at,
+    } as any).select("id").maybeSingle();
+    if (insErr || !child) {
+      // Roll back the parent reduction so the user isn't left in a broken state.
+      await supabase.from("paper_trades").update({
+        contracts: totalContracts,
+        total_cost: Number((entryPremium * multiplier * totalContracts).toFixed(2)),
+      } as any).eq("id", trade.id);
+      setSubmitting(false);
+      return toast.error(`Child insert failed: ${insErr?.message ?? "unknown"}`);
+    }
+
+    // 3) Close the child row with exit premium. Trigger credits cash with proceeds.
+    const mfe = realizedPl > 0 ? realizedPl : 0;
+    const mae = realizedPl < 0 ? realizedPl : 0;
+    const { error: closeErr } = await supabase.from("paper_trades").update({
+      status: childStatus,
+      exit_premium: Number(exitPremium.toFixed(4)),
+      exit_price: Number(exitPremium.toFixed(4)),
+      realized_pl: Number(realizedPl.toFixed(2)),
+      realized_pl_dollars: Number(realizedPl.toFixed(2)),
+      realized_pl_pct: Number(realizedPlPct.toFixed(2)),
+      current_pl: Number(realizedPl.toFixed(2)),
+      current_pl_pct: Number(realizedPlPct.toFixed(2)),
+      current_premium: Number(exitPremium.toFixed(4)),
+      current_value: Number(sliceExitValue.toFixed(2)),
+      unrealized_pl: Number(realizedPl.toFixed(2)),
+      unrealized_pl_pct: Number(realizedPlPct.toFixed(2)),
+      exit_reason: reason,
+      mfe: Number(mfe.toFixed(2)),
+      mae: Number(mae.toFixed(2)),
+      max_gain: Math.abs(mfe),
+      max_drawdown: Math.abs(mae),
+      closed_at: new Date().toISOString(),
+    } as any).eq("id", child.id);
+    setSubmitting(false);
+    if (closeErr) return toast.error(`Child close failed: ${closeErr.message}`);
+
+    toast.success(`Closed ${qty} of ${totalContracts} · ${realizedPl >= 0 ? "+" : ""}$${fmtPL(realizedPl)}`);
+    onClosed();
+  }
+
+  return (
+    <Dialog open={!!trade} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Close part of position</DialogTitle>
+          <DialogDescription>
+            {trade.ticker} {trade.direction} · {totalContracts} open · entry ${fmtPrice(entryPremium)}.
+            Closes a slice; rest stays open.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="partial-qty">Contracts to close (1–{totalContracts - 1})</Label>
+            <Input
+              id="partial-qty" type="number" min={1} max={totalContracts - 1} step={1}
+              value={qtyStr} onChange={(e) => setQtyStr(e.target.value)} className="ticker-mono"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="partial-exit">Exit premium ($ per share)</Label>
+              <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs"
+                onClick={useLiveMark} disabled={fetchingMark}>
+                <RefreshCw className={cn("h-3 w-3 mr-1", fetchingMark && "animate-spin")} />
+                {fetchingMark ? "Fetching…" : "Use live mark"}
+              </Button>
+            </div>
+            <Input
+              id="partial-exit" type="number" step="0.01" min="0"
+              value={exitPremiumStr} onChange={(e) => setExitPremiumStr(e.target.value)}
+              className="ticker-mono" placeholder="e.g. 5.10"
+            />
+            {livePremium != null && (
+              <div className="text-[10px] text-muted-foreground ticker-mono">
+                Live mark ${fmtPrice(livePremium)}
+              </div>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Close reason</Label>
+            <Select value={reason} onValueChange={(v) => setReason(v as CloseReason)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {REASON_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="rounded-md border border-border bg-card-elevated/40 p-3 text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Slice cost</span>
+              <span className="ticker-mono">${fmtPL(sliceCost)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Slice exit value</span>
+              <span className="ticker-mono">${fmtPL(sliceExitValue)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Realized P/L (slice)</span>
+              <span className={cn("ticker-mono", realizedPl >= 0 ? "text-bull" : "text-bear")}>
+                {realizedPl >= 0 ? "+" : ""}${fmtPL(realizedPl)} ({realizedPlPct >= 0 ? "+" : ""}{realizedPlPct.toFixed(2)}%)
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Remaining open</span>
+              <span className="ticker-mono">{Math.max(0, totalContracts - (validQty ? qty : 0))} contract(s)</span>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={submit} disabled={submitting || !valid}>
+            {submitting ? "Closing…" : "Close slice"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Add more: creates a separate sibling OPEN row at the chosen entry premium.
+// Kept as a distinct row so each leg can be closed independently with clean
+// cash accounting via the existing INSERT trigger.
+// -----------------------------------------------------------------------------
+function AddMoreDialog({
+  trade, onOpenChange, onAdded,
+}: {
+  trade: PaperTrade | null;
+  onOpenChange: (v: boolean) => void;
+  onAdded: () => void;
+}) {
+  const t = trade as any;
+  const multiplier = Number(t?.multiplier ?? 100);
+
+  const [qtyStr, setQtyStr] = useState("1");
+  const [entryStr, setEntryStr] = useState("");
+  const [livePremium, setLivePremium] = useState<number | null>(null);
+  const [fetchingMark, setFetchingMark] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (trade) {
+      setQtyStr("1");
+      const seed = t?.current_premium != null
+        ? Number(t.current_premium)
+        : Number(t?.entry_premium ?? trade.entry_price ?? 0);
+      setLivePremium(t?.current_premium != null ? Number(t.current_premium) : null);
+      setEntryStr(seed ? String(seed) : "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trade]);
+
+  async function useLiveMark() {
+    if (!trade) return;
+    setFetchingMark(true);
+    const { error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
+    if (error) { setFetchingMark(false); return toast.error(error.message); }
+    const { data: fresh } = await supabase
+      .from("paper_trades").select("current_premium").eq("id", trade.id).maybeSingle();
+    setFetchingMark(false);
+    const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
+    if (mark == null) return toast.error("No live mark available");
+    setLivePremium(mark);
+    setEntryStr(String(mark));
+    toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+  }
+
+  if (!trade) return null;
+
+  const qty = Math.floor(Number(qtyStr));
+  const validQty = Number.isFinite(qty) && qty >= 1;
+  const entry = Number(entryStr);
+  const validEntry = entryStr !== "" && !Number.isNaN(entry) && entry > 0;
+  const valid = validQty && validEntry;
+  const newCost = valid ? entry * multiplier * qty : 0;
+
+  async function submit() {
+    if (!valid || !trade) return;
+    setSubmitting(true);
+    const { error } = await supabase.from("paper_trades").insert({
+      user_id: trade.user_id,
+      signal_id: trade.signal_id as any,
+      ticker: trade.ticker,
+      direction: trade.direction,
+      contract_idea: t?.contract_idea ?? null,
+      is_option: true,
+      option_type: t?.option_type ?? null,
+      strike: t?.strike ?? null,
+      expiry: t?.expiry ?? null,
+      contracts: qty,
+      multiplier,
+      entry_premium: Number(entry.toFixed(4)),
+      entry_price: Number(entry.toFixed(4)),
+      current_premium: Number(entry.toFixed(4)),
+      total_cost: Number(newCost.toFixed(2)),
+      status: "OPEN",
+      paper_test_class: t?.paper_test_class ?? null,
+      contract_snapshot_id: t?.contract_snapshot_id ?? null,
+      confidence_at_approval: t?.confidence_at_approval ?? null,
+    } as any);
+    setSubmitting(false);
+    if (error) return toast.error(error.message);
+    toast.success(`Added ${qty} contract${qty === 1 ? "" : "s"} · $${fmtPL(newCost)} cost`);
+    onAdded();
+  }
+
+  return (
+    <Dialog open={!!trade} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add to position</DialogTitle>
+          <DialogDescription>
+            {trade.ticker} {trade.direction} · same contract. Added as a separate leg you can close independently.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="add-qty">Contracts to add</Label>
+            <Input
+              id="add-qty" type="number" min={1} step={1}
+              value={qtyStr} onChange={(e) => setQtyStr(e.target.value)} className="ticker-mono"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="add-entry">Entry premium ($ per share)</Label>
+              <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs"
+                onClick={useLiveMark} disabled={fetchingMark}>
+                <RefreshCw className={cn("h-3 w-3 mr-1", fetchingMark && "animate-spin")} />
+                {fetchingMark ? "Fetching…" : "Use live mark"}
+              </Button>
+            </div>
+            <Input
+              id="add-entry" type="number" step="0.01" min="0"
+              value={entryStr} onChange={(e) => setEntryStr(e.target.value)}
+              className="ticker-mono" placeholder="e.g. 5.10"
+            />
+            {livePremium != null && (
+              <div className="text-[10px] text-muted-foreground ticker-mono">
+                Live mark ${fmtPrice(livePremium)}
+              </div>
+            )}
+          </div>
+          <div className="rounded-md border border-border bg-card-elevated/40 p-3 text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">New cost</span>
+              <span className="ticker-mono">${fmtPL(newCost)}</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              A new OPEN trade row will be created. Existing position is unchanged.
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={submit} disabled={submitting || !valid}>
+            {submitting ? "Adding…" : "Add contracts"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
