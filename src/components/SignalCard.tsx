@@ -1,17 +1,20 @@
-import { ArrowDownRight, ArrowUpRight, CheckCircle2, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Brain, CheckCircle2, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
-import { getFreshness } from "@/lib/signalFreshness";
+import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
 import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
 import { getTier, TIER_META } from "@/lib/signalTiers";
 import { getLifecycleState, LIFECYCLE_META } from "@/lib/signalLifecycle";
 import { classifySignalSource } from "@/lib/signalSource";
 import { useLiveQuote } from "@/hooks/useLiveQuote";
+import { SignalRadar } from "@/components/SignalRadar";
+
 
 type Props = {
   signal: Signal;
