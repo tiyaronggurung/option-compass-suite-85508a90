@@ -301,10 +301,20 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
       </div>
 
       {/* Actions */}
-      <div className="flex justify-end gap-1 pt-1">
+      <div className="flex flex-wrap justify-end gap-1 pt-1">
+        {live && onAddMore && (
+          <Button size="sm" variant="outline" className="bg-transparent" onClick={() => onAddMore(trade)}>
+            Add more
+          </Button>
+        )}
+        {live && onClosePartial && contracts > 1 && (
+          <Button size="sm" variant="outline" className="bg-transparent" onClick={() => onClosePartial(trade)}>
+            Close partial
+          </Button>
+        )}
         {live && onClose && (
           <Button size="sm" variant="outline" className="bg-transparent" onClick={() => onClose(trade)}>
-            Close…
+            Close all
           </Button>
         )}
         {!live && onReview && (
