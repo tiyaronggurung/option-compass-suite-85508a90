@@ -96,8 +96,8 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                   {OUTCOME_LABEL[outcome]}
                 </Badge>
               )}
-              <Badge className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", freshClass)} title={`Signal freshness: ${freshLabel}`}>
-                <Timer className="h-3 w-3" /> {freshLabel}
+              <Badge className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", freshClass)} title={`Expires in ${countdown}`}>
+                <Timer className="h-3 w-3" /> {countdown}
               </Badge>
               {showLifecycleBadge && (
                 <Badge
