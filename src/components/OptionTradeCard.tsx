@@ -205,18 +205,27 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
 
 
       <>
-          {/* Robinhood-style headline */}
+          {/* Robinhood-style headline — click to toggle $ / % */}
           <div className="pt-1">
-            <div className={cn(
-              "text-2xl font-semibold ticker-mono transition-colors duration-700 rounded px-1 -mx-1",
-              isWin ? "text-bull" : isLoss ? "text-bear" : "text-foreground",
-              flash === "up" && "bg-bull/15",
-              flash === "down" && "bg-bear/15",
-            )}>
-              {pl == null ? "—" : `${pl >= 0 ? "+" : ""}$${fmtPL(pl)}`}
-            </div>
+            <button
+              type="button"
+              onClick={togglePlMode}
+              title={`Show ${plMode === "dollar" ? "percent" : "dollar"} P/L`}
+              className={cn(
+                "text-2xl font-semibold ticker-mono transition-colors duration-700 rounded px-1 -mx-1 block text-left hover:bg-card-elevated/40",
+                isWin ? "text-bull" : isLoss ? "text-bear" : "text-foreground",
+                flash === "up" && "bg-bull/15",
+                flash === "down" && "bg-bear/15",
+              )}
+            >
+              {plMode === "dollar"
+                ? (pl == null ? "—" : `${pl >= 0 ? "+" : ""}$${fmtPL(pl)}`)
+                : (plPct == null ? "—" : `${plPct >= 0 ? "+" : ""}${plPct.toFixed(2)}%`)}
+            </button>
             <div className={cn("text-sm ticker-mono", isWin ? "text-bull" : isLoss ? "text-bear" : "text-muted-foreground")}>
-              {plPct == null ? "—" : `${plPct >= 0 ? "+" : ""}${plPct.toFixed(2)}%`}
+              {plMode === "dollar"
+                ? (plPct == null ? "—" : `${plPct >= 0 ? "+" : ""}${plPct.toFixed(2)}%`)
+                : (pl == null ? "—" : `${pl >= 0 ? "+" : ""}$${fmtPL(pl)}`)}
               {closed && <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">realized</span>}
             </div>
             {!closed && dayPl != null && (
