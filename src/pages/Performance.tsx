@@ -12,6 +12,7 @@ import { DisclaimerBar } from "@/components/Disclaimer";
 import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
 import { deriveTags, ALL_TAGS, type TagId } from "@/lib/signalTags";
 import { cn } from "@/lib/utils";
+import { HighlightsRow, TradeHistoryTable, NotTakenSignalHistory } from "@/components/PerformanceInsights";
 
 const BULL = "hsl(145 75% 48%)";
 const BEAR = "hsl(358 78% 58%)";
@@ -118,6 +119,10 @@ export default function Performance() {
             </Card>
           </section>
 
+          <HighlightsRow trades={trades} signals={signals} />
+
+          <TradeHistoryTable trades={trades} signals={signals} />
+
           <section className="grid lg:grid-cols-2 gap-4">
             <BreakdownTable title="By tag" rows={metrics.byTag} />
             <BreakdownTable title="By source" rows={metrics.bySource} />
@@ -126,6 +131,8 @@ export default function Performance() {
             <BreakdownTable title="By risk level" rows={metrics.byRisk} />
             <BreakdownTable title="By confidence bucket" rows={metrics.byConfidence} />
           </section>
+
+          {user && <NotTakenSignalHistory userId={user.id} />}
         </>
       )}
     </div>
