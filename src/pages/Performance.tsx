@@ -53,11 +53,35 @@ export default function Performance() {
     })();
   }, [user]);
 
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
+  const [tickerFilter, setTickerFilter] = useState<string>("__all__");
+
+  const availableTickers = useMemo(() => {
+    const set = new Set<string>();
+    (trades ?? []).forEach((t) => set.add(t.ticker));
+    return Array.from(set).sort();
+  }, [trades]);
+
+  const filteredTrades = useMemo(() => {
+    if (!trades) return null;
+    const fromMs = fromDate ? new Date(fromDate + "T00:00:00").getTime() : null;
+    const toMs = toDate ? new Date(toDate + "T23:59:59").getTime() : null;
+    return trades.filter((t) => {
+      if (tickerFilter !== "__all__" && t.ticker !== tickerFilter) return false;
+      const ref = new Date(t.closed_at ?? t.opened_at).getTime();
+      if (fromMs != null && ref < fromMs) return false;
+      if (toMs != null && ref > toMs) return false;
+      return true;
+    });
+  }, [trades, fromDate, toDate, tickerFilter]);
+
   const metrics = useMemo(
-    () => computeReal(trades ?? [], signals),
-    [trades, signals],
+    () => computeReal(filteredTrades ?? [], signals),
+    [filteredTrades, signals],
   );
-  const hasAny = (trades?.length ?? 0) > 0;
+  const hasAny = (filteredTrades?.length ?? 0) > 0;
+  const filtersActive = fromDate !== "" || toDate !== "" || tickerFilter !== "__all__";
 
   return (
     <div className="space-y-6 animate-fade-in">
