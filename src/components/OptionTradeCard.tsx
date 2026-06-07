@@ -19,10 +19,14 @@ import { TradeTimelinePanel } from "@/components/TradeTimelinePanel";
 type Props = {
   trade: PaperTrade;
   onClose?: (t: PaperTrade) => void;
+  onClosePartial?: (t: PaperTrade) => void;
+  onAddMore?: (t: PaperTrade) => void;
   onReview?: (t: PaperTrade) => void;
   hasReview?: boolean;
   live?: boolean; // open vs closed view
 };
+
+const PL_MODE_KEY = "paper:plMode"; // "dollar" | "percent"
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -41,7 +45,7 @@ function optionLabel(t: PaperTrade): string {
   return `${t.ticker} ${strikeStr} ${type} ${fmtExpiry((t as any).expiry)}`.trim();
 }
 
-export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: Props) {
+export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onReview, hasReview, live }: Props) {
   const t = trade as any;
   const closedTrade = trade.status !== "OPEN";
   const hasClosedPricing = closedTrade && (t.exit_premium != null || t.realized_pl != null);
@@ -88,6 +92,25 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
     }
     prevPremiumRef.current = currentPremium;
   }, [currentPremium, closed]);
+  // P/L display mode — persisted across cards via localStorage.
+  const [plMode, setPlMode] = useState<"dollar" | "percent">(() => {
+    if (typeof window === "undefined") return "dollar";
+    return (window.localStorage.getItem(PL_MODE_KEY) as "dollar" | "percent") || "dollar";
+  });
+  function togglePlMode() {
+    const next = plMode === "dollar" ? "percent" : "dollar";
+    setPlMode(next);
+    try { window.localStorage.setItem(PL_MODE_KEY, next); } catch { /* ignore */ }
+    try { window.dispatchEvent(new StorageEvent("storage", { key: PL_MODE_KEY, newValue: next })); } catch { /* ignore */ }
+  }
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key === PL_MODE_KEY && e.newValue) setPlMode(e.newValue as "dollar" | "percent");
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
 
   // Watch linked trade_alert for terminal lifecycle hints (target/stop/expire).
   // Auto-close is OFF — we only surface a "consider closing" banner so the user
@@ -182,18 +205,27 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
 
 
       <>
-          {/* Robinhood-style headline */}
+          {/* Robinhood-style headline — click to toggle $ / % */}
           <div className="pt-1">
-            <div className={cn(
-              "text-2xl font-semibold ticker-mono transition-colors duration-700 rounded px-1 -mx-1",
-              isWin ? "text-bull" : isLoss ? "text-bear" : "text-foreground",
-              flash === "up" && "bg-bull/15",
-              flash === "down" && "bg-bear/15",
-            )}>
-              {pl == null ? "—" : `${pl >= 0 ? "+" : ""}$${fmtPL(pl)}`}
-            </div>
+            <button
+              type="button"
+              onClick={togglePlMode}
+              title={`Show ${plMode === "dollar" ? "percent" : "dollar"} P/L`}
+              className={cn(
+                "text-2xl font-semibold ticker-mono transition-colors duration-700 rounded px-1 -mx-1 block text-left hover:bg-card-elevated/40",
+                isWin ? "text-bull" : isLoss ? "text-bear" : "text-foreground",
+                flash === "up" && "bg-bull/15",
+                flash === "down" && "bg-bear/15",
+              )}
+            >
+              {plMode === "dollar"
+                ? (pl == null ? "—" : `${pl >= 0 ? "+" : ""}$${fmtPL(pl)}`)
+                : (plPct == null ? "—" : `${plPct >= 0 ? "+" : ""}${plPct.toFixed(2)}%`)}
+            </button>
             <div className={cn("text-sm ticker-mono", isWin ? "text-bull" : isLoss ? "text-bear" : "text-muted-foreground")}>
-              {plPct == null ? "—" : `${plPct >= 0 ? "+" : ""}${plPct.toFixed(2)}%`}
+              {plMode === "dollar"
+                ? (plPct == null ? "—" : `${plPct >= 0 ? "+" : ""}${plPct.toFixed(2)}%`)
+                : (pl == null ? "—" : `${pl >= 0 ? "+" : ""}$${fmtPL(pl)}`)}
               {closed && <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">realized</span>}
             </div>
             {!closed && dayPl != null && (
@@ -269,10 +301,20 @@ export function OptionTradeCard({ trade, onClose, onReview, hasReview, live }: P
       </div>
 
       {/* Actions */}
-      <div className="flex justify-end gap-1 pt-1">
+      <div className="flex flex-wrap justify-end gap-1 pt-1">
+        {live && onAddMore && (
+          <Button size="sm" variant="outline" className="bg-transparent" onClick={() => onAddMore(trade)}>
+            Add more
+          </Button>
+        )}
+        {live && onClosePartial && contracts > 1 && (
+          <Button size="sm" variant="outline" className="bg-transparent" onClick={() => onClosePartial(trade)}>
+            Close partial
+          </Button>
+        )}
         {live && onClose && (
           <Button size="sm" variant="outline" className="bg-transparent" onClick={() => onClose(trade)}>
-            Close…
+            Close all
           </Button>
         )}
         {!live && onReview && (
