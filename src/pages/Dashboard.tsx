@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, DollarSign, Flame, Radio, Tag as TagIcon, TrendingUp } from "lucide-react";
+import { Activity, DollarSign, Flame, Radio, Tag as TagIcon, TrendingDown, TrendingUp, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { SignalCard } from "@/components/SignalCard";
@@ -22,7 +22,10 @@ import { PaperAccountCard } from "@/components/PaperAccountCard";
 import ProviderStatusBanner from "@/components/ProviderStatusBanner";
 import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
 import { BuyOptionDialog } from "@/components/BuyOptionDialog";
-import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sortSignalsBySourcePriority, type SourceFilter } from "@/lib/signalSource";
+import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sortSignalsBySourcePriority, sourcePriority, type SourceFilter } from "@/lib/signalSource";
+import { TopSignalRow } from "@/components/TopSignalRow";
+import { rankSignals, type RankBreakdown } from "@/lib/rankSignals";
+import { Link } from "react-router-dom";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
 const FILTERS: { id: Filter; label: string }[] = [
@@ -190,16 +193,35 @@ export default function Dashboard() {
   }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
-  const highConv = signals?.filter((s) => s.confidence >= 80 && s.status === "LIVE").length ?? 0;
   const openTrades = trades.filter((t) => t.status === "OPEN");
   const closedTradeIds = useMemo(() => new Set(trades.filter((t) => t.status !== "OPEN").map((t) => t.id)), [trades]);
   const closedSignalIds = useMemo(() => new Set(trades.filter((t) => t.status !== "OPEN" && (t as any).signal_id).map((t) => (t as any).signal_id as string)), [trades]);
   const activeAlerts = useMemo(() => alerts.filter((a) => !["cancelled"].includes(a.alert_status) && !closedTradeIds.has(a.paper_trade_id ?? "") && !closedSignalIds.has(a.signal_id ?? "")), [alerts, closedTradeIds, closedSignalIds]);
-  const dailyPL = trades
-    .filter((t) => new Date(t.opened_at).toDateString() === new Date().toDateString())
-    .reduce((a, t) => a + Number(t.current_pl ?? 0), 0);
   const todayRealizedPL = useMemo(() => sumTodayRealizedPL(trades as any), [trades]);
+  const unrealizedPL = useMemo(
+    () => openTrades.reduce((a, t) => a + Number((t as any).unrealized_pl ?? t.current_pl ?? 0), 0),
+    [openTrades],
+  );
+  const tradesOpenedToday = useMemo(
+    () => trades.filter((t) => new Date(t.opened_at).toDateString() === new Date().toDateString()).length,
+    [trades],
+  );
+  const dailyPL = todayRealizedPL + unrealizedPL;
   const effective = useMemo(() => effectiveRisk(risk), [risk]);
+
+  // Top 5 ranked signals for the dashboard hero strip.
+  const dashboardTop = useMemo(() => {
+    if (!signals) return [];
+    const base = signals.filter((s) => !s.hidden && !s.is_demo && s.status === "LIVE" && !isExpired(s));
+    const ranked = rankSignals(base);
+    const sorted = [...ranked].sort((a, b) => {
+      const pa = sourcePriority(a.signal as any);
+      const pb = sourcePriority(b.signal as any);
+      if (pa !== pb) return pa - pb;
+      return b.rank.total - a.rank.total;
+    });
+    return sorted.slice(0, 5);
+  }, [signals]);
 
   // Fallback: 1-click approve (used when option chain is unavailable).
   async function fallbackApprove(s: Signal) {
@@ -300,15 +322,43 @@ export default function Dashboard() {
 
       <PaperAccountCard />
 
+      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Stat icon={DollarSign} label="Realized today" value={`$${fmtPL(todayRealizedPL)}`} accent={todayRealizedPL >= 0 ? "text-bull" : "text-bear"} />
+        <Stat icon={todayRealizedPL + unrealizedPL >= 0 ? TrendingUp : TrendingDown} label="Unrealized open" value={`$${fmtPL(unrealizedPL)}`} accent={unrealizedPL >= 0 ? "text-bull" : "text-bear"} />
+        <Stat icon={DollarSign} label="Daily P/L total" value={`$${fmtPL(dailyPL)}`} accent={dailyPL >= 0 ? "text-bull" : "text-bear"} />
+        <Stat icon={Activity} label="Open trades" value={String(openTrades.length)} accent="text-info" />
+        <Stat icon={Flame} label="Trades today" value={String(tradesOpenedToday)} accent="text-primary" />
+        <Stat icon={Radio} label="Live signals" value={String(totalLive)} accent="text-primary" />
+      </section>
+
+      {dashboardTop.length > 0 && (
+        <section className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold tracking-tight uppercase text-muted-foreground flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-primary" /> Top Signals
+            </h2>
+            <Button asChild size="sm" variant="ghost" className="h-7 text-[11px]">
+              <Link to="/app/top-signals">View all →</Link>
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {dashboardTop.map(({ signal, rank }: { signal: Signal; rank: RankBreakdown }, i: number) => (
+              <TopSignalRow
+                key={signal.id}
+                rank={i + 1}
+                signal={signal}
+                breakdown={rank}
+                onApprove={approve}
+                onReject={dismiss}
+                onDetails={(s) => setDetailSignal(s)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       <ProviderStatusBanner signals={signals} />
 
-
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat icon={Radio} label="Live signals" value={String(totalLive)} accent="text-primary" />
-        <Stat icon={Flame} label="High conviction" value={String(highConv)} accent="text-bull" />
-        <Stat icon={Activity} label="Open paper trades" value={String(openTrades.length)} accent="text-info" />
-        <Stat icon={DollarSign} label="Daily P/L (paper)" value={`$${fmtPL(dailyPL)}`} accent={dailyPL >= 0 ? "text-bull" : "text-bear"} />
-      </section>
 
       <RiskStatusCard
         effective={effective}

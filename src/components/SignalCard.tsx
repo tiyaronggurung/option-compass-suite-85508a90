@@ -1,17 +1,20 @@
-import { ArrowDownRight, ArrowUpRight, CheckCircle2, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Brain, CheckCircle2, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
-import { getFreshness } from "@/lib/signalFreshness";
+import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
 import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
 import { getTier, TIER_META } from "@/lib/signalTiers";
 import { getLifecycleState, LIFECYCLE_META } from "@/lib/signalLifecycle";
 import { classifySignalSource } from "@/lib/signalSource";
 import { useLiveQuote } from "@/hooks/useLiveQuote";
+import { SignalRadar } from "@/components/SignalRadar";
+
 
 type Props = {
   signal: Signal;
@@ -36,11 +39,11 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const ring = tierMeta.ringClass;
   const tags: TagId[] = deriveTags(signal, watchlist ?? new Set());
   const freshness = getFreshness(signal);
+  const countdown = getCountdownLabel(signal);
   const freshClass =
     freshness === "fresh" ? "bg-bull/15 text-bull"
     : freshness === "aging" ? "bg-warn/15 text-warn"
     : "bg-muted text-muted-foreground";
-  const freshLabel = freshness === "fresh" ? "Fresh" : freshness === "aging" ? "Aging" : "Expired";
   const lifecycleState = getLifecycleState(signal);
   const lifecycleMeta = LIFECYCLE_META[lifecycleState];
   const showLifecycleBadge = lifecycleState !== "active";
@@ -93,8 +96,8 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                   {OUTCOME_LABEL[outcome]}
                 </Badge>
               )}
-              <Badge className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", freshClass)} title={`Signal freshness: ${freshLabel}`}>
-                <Timer className="h-3 w-3" /> {freshLabel}
+              <Badge className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", freshClass)} title={`Expires in ${countdown}`}>
+                <Timer className="h-3 w-3" /> {countdown}
               </Badge>
               {showLifecycleBadge && (
                 <Badge
@@ -146,7 +149,9 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
           </div>
         </div>
 
-        <ConfidenceRing value={signal.confidence} />
+        <div className="w-36 shrink-0">
+          <SignalRadar signal={signal} compact />
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -175,21 +180,31 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
       />
 
       {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
-        <div className="mt-2 text-[11px] text-muted-foreground line-clamp-2">
-          {(signal.reasons as string[]).slice(0, 2).join(" · ")}
-        </div>
+        <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+          {(signal.reasons as string[]).slice(0, 6).map((r, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <span className="text-bull mt-px">✓</span>
+              <span className="flex-1">{r}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         <Button size="sm" className={cn("flex-1 sm:flex-none min-w-0", isCall ? "bg-bull text-bull-foreground hover:bg-bull/90" : "bg-bear text-bear-foreground hover:bg-bear/90")}
           onClick={() => onApprove(signal)}>
-          Approve paper trade
+          Approve
         </Button>
         {onReject && (
           <Button size="sm" variant="ghost" onClick={() => onReject(signal)}>
             <X className="h-4 w-4 mr-1" /> Reject
           </Button>
         )}
+        <Button size="sm" variant="outline" className="bg-transparent gap-1" asChild>
+          <Link to={`/app/analyst?signal=${signal.id}`}>
+            <Brain className="h-3.5 w-3.5" /> Analyze
+          </Link>
+        </Button>
         {onDetails && (
           <Button size="sm" variant="ghost" className="ml-auto" onClick={() => onDetails(signal)}>
             <Info className="h-4 w-4" />
@@ -200,22 +215,6 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   );
 }
 
-function ConfidenceRing({ value }: { value: number }) {
-  const r = 18;
-  const c = 2 * Math.PI * r;
-  const dash = (value / 100) * c;
-  const color = value >= 80 ? "hsl(var(--bull))" : value >= 65 ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))";
-  return (
-    <div className="relative h-12 w-12 shrink-0">
-      <svg viewBox="0 0 44 44" className="h-12 w-12 -rotate-90">
-        <circle cx="22" cy="22" r={r} stroke="hsl(var(--border))" strokeWidth="4" fill="none" />
-        <circle cx="22" cy="22" r={r} stroke={color} strokeWidth="4" fill="none" strokeLinecap="round"
-          strokeDasharray={`${dash} ${c - dash}`} />
-      </svg>
-      <div className="absolute inset-0 grid place-items-center text-[11px] font-semibold ticker-mono">{value}</div>
-    </div>
-  );
-}
 
 function RiskBadge({ level }: { level: Signal["risk_level"] }) {
   const map: Record<string, string> = {
