@@ -39,6 +39,8 @@ export default function Trades() {
   const [trades, setTrades] = useState<PaperTrade[] | null>(null);
   const [reviews, setReviews] = useState<Record<string, TradeReview>>({});
   const [closing, setClosing] = useState<PaperTrade | null>(null);
+  const [partialClosing, setPartialClosing] = useState<PaperTrade | null>(null);
+  const [addingMore, setAddingMore] = useState<PaperTrade | null>(null);
   const [reviewing, setReviewing] = useState<PaperTrade | null>(null);
   const [refreshingMarks, setRefreshingMarks] = useState(false);
   const refreshRef = useRef<() => Promise<void>>();
