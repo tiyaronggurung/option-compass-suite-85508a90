@@ -39,11 +39,11 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const ring = tierMeta.ringClass;
   const tags: TagId[] = deriveTags(signal, watchlist ?? new Set());
   const freshness = getFreshness(signal);
+  const countdown = getCountdownLabel(signal);
   const freshClass =
     freshness === "fresh" ? "bg-bull/15 text-bull"
     : freshness === "aging" ? "bg-warn/15 text-warn"
     : "bg-muted text-muted-foreground";
-  const freshLabel = freshness === "fresh" ? "Fresh" : freshness === "aging" ? "Aging" : "Expired";
   const lifecycleState = getLifecycleState(signal);
   const lifecycleMeta = LIFECYCLE_META[lifecycleState];
   const showLifecycleBadge = lifecycleState !== "active";
