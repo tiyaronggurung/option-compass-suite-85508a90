@@ -1,24 +1,35 @@
-import { ArrowDownRight, ArrowUpRight, Info, ShieldAlert, Timer } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Brain, Info, ShieldAlert, Timer, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtPrice, timeAgo, type Signal } from "@/lib/signalHelpers";
-import { getFreshness } from "@/lib/signalFreshness";
+import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
 import type { RankBreakdown } from "@/lib/rankSignals";
 import { getContractMeta } from "@/lib/rankSignals";
+import { SignalRadar } from "@/components/SignalRadar";
 
 type Props = {
   rank: number;
   signal: Signal;
   breakdown: RankBreakdown;
   onApprove: (s: Signal) => void;
+  onReject?: (s: Signal) => void;
   onDetails: (s: Signal, b: RankBreakdown) => void;
 };
 
-export function TopSignalRow({ rank, signal, breakdown, onApprove, onDetails }: Props) {
+function fmtExpiry(d?: string | null): string | null {
+  if (!d) return null;
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+export function TopSignalRow({ rank, signal, breakdown, onApprove, onReject, onDetails }: Props) {
   const isCall = signal.direction === "CALL";
   const contract = getContractMeta(signal);
   const freshness = getFreshness(signal);
+  const countdown = getCountdownLabel(signal);
   const freshClass =
     freshness === "fresh" ? "bg-bull/15 text-bull"
     : freshness === "aging" ? "bg-warn/15 text-warn"
@@ -28,11 +39,13 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onDetails }: 
     MEDIUM: "bg-warn/15 text-warn",
     HIGH: "bg-bear/15 text-bear",
   };
+  const expiryLabel = fmtExpiry(signal.expiry as any);
+  const strikeLabel = signal.strike != null ? `$${Number(signal.strike).toFixed(0)}` : null;
 
   return (
     <div className="glass-card p-3 md:p-4 ring-1 ring-border hover:ring-primary/40 transition">
-      <div className="flex items-center gap-3 md:gap-4">
-        <div className="w-8 text-center text-lg font-semibold text-muted-foreground ticker-mono shrink-0">
+      <div className="flex items-start gap-3 md:gap-4">
+        <div className="w-8 text-center text-lg font-semibold text-muted-foreground ticker-mono shrink-0 pt-1">
           {rank}
         </div>
         <div
@@ -50,11 +63,21 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onDetails }: 
             <Badge variant="outline" className={cn("border-0 text-xs", isCall ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear")}>
               {signal.direction}
             </Badge>
+            {strikeLabel && (
+              <Badge variant="outline" className="border-border/60 text-[11px] ticker-mono">
+                {strikeLabel} strike
+              </Badge>
+            )}
+            {expiryLabel && (
+              <Badge variant="outline" className="border-border/60 text-[11px]">
+                Exp {expiryLabel}{signal.dte != null ? ` · ${signal.dte}d` : ""}
+              </Badge>
+            )}
             <Badge className={cn("border-0 gap-1 text-[10px]", riskMap[signal.risk_level])}>
               <ShieldAlert className="h-3 w-3" /> {signal.risk_level}
             </Badge>
-            <Badge className={cn("border-0 gap-1 text-[10px]", freshClass)}>
-              <Timer className="h-3 w-3" /> {freshness}
+            <Badge className={cn("border-0 gap-1 text-[10px]", freshClass)} title={`Expires in ${countdown}`}>
+              <Timer className="h-3 w-3" /> {countdown}
             </Badge>
           </div>
 
@@ -64,7 +87,6 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onDetails }: 
             ) : (
               <span>No contract match</span>
             )}
-            {signal.dte != null && <span>DTE {signal.dte}</span>}
             {contract?.delta != null && <span>Δ {Number(contract.delta).toFixed(2)}</span>}
             {signal.premium != null && <span>${fmtPrice(Number(signal.premium))} mid</span>}
             {contract?.spread_pct != null && <span>spread {Number(contract.spread_pct).toFixed(1)}%</span>}
@@ -73,21 +95,19 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onDetails }: 
           </div>
 
           {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
-            <div className="mt-1 text-[11px] text-muted-foreground line-clamp-1">
-              {(signal.reasons as string[]).slice(0, 2).join(" · ")}
-            </div>
+            <ul className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
+              {(signal.reasons as string[]).slice(0, 3).map((r, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <span className="text-bull mt-px">✓</span>
+                  <span className="line-clamp-1">{r}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
-        <div className="hidden sm:flex flex-col items-end shrink-0 w-20">
-          <div className={cn(
-            "text-2xl font-semibold ticker-mono",
-            breakdown.total >= 75 ? "text-bull" : breakdown.total >= 50 ? "text-primary" : "text-muted-foreground",
-          )}>
-            {breakdown.total.toFixed(0)}
-          </div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">rank</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">conf {signal.confidence}</div>
+        <div className="hidden md:block w-40 shrink-0">
+          <SignalRadar signal={signal} compact />
         </div>
 
         <div className="flex flex-col gap-1.5 shrink-0">
@@ -97,6 +117,16 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onDetails }: 
             onClick={() => onApprove(signal)}
           >
             Approve
+          </Button>
+          {onReject && (
+            <Button size="sm" variant="ghost" onClick={() => onReject(signal)}>
+              <X className="h-4 w-4 mr-1" /> Reject
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="bg-transparent gap-1" asChild>
+            <Link to={`/app/analyst?signal=${signal.id}`}>
+              <Brain className="h-3.5 w-3.5" /> Analyze
+            </Link>
           </Button>
           <Button size="sm" variant="ghost" onClick={() => onDetails(signal, breakdown)}>
             <Info className="h-4 w-4 mr-1" /> Details
