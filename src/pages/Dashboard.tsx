@@ -198,11 +198,31 @@ export default function Dashboard() {
   const closedTradeIds = useMemo(() => new Set(trades.filter((t) => t.status !== "OPEN").map((t) => t.id)), [trades]);
   const closedSignalIds = useMemo(() => new Set(trades.filter((t) => t.status !== "OPEN" && (t as any).signal_id).map((t) => (t as any).signal_id as string)), [trades]);
   const activeAlerts = useMemo(() => alerts.filter((a) => !["cancelled"].includes(a.alert_status) && !closedTradeIds.has(a.paper_trade_id ?? "") && !closedSignalIds.has(a.signal_id ?? "")), [alerts, closedTradeIds, closedSignalIds]);
-  const dailyPL = trades
-    .filter((t) => new Date(t.opened_at).toDateString() === new Date().toDateString())
-    .reduce((a, t) => a + Number(t.current_pl ?? 0), 0);
   const todayRealizedPL = useMemo(() => sumTodayRealizedPL(trades as any), [trades]);
+  const unrealizedPL = useMemo(
+    () => openTrades.reduce((a, t) => a + Number((t as any).unrealized_pl ?? t.current_pl ?? 0), 0),
+    [openTrades],
+  );
+  const tradesOpenedToday = useMemo(
+    () => trades.filter((t) => new Date(t.opened_at).toDateString() === new Date().toDateString()).length,
+    [trades],
+  );
+  const dailyPL = todayRealizedPL + unrealizedPL;
   const effective = useMemo(() => effectiveRisk(risk), [risk]);
+
+  // Top 5 ranked signals for the dashboard hero strip.
+  const dashboardTop = useMemo(() => {
+    if (!signals) return [];
+    const base = signals.filter((s) => !s.hidden && !s.is_demo && s.status === "LIVE" && !isExpired(s));
+    const ranked = rankSignals(base);
+    const sorted = [...ranked].sort((a, b) => {
+      const pa = sourcePriority(a.signal as any);
+      const pb = sourcePriority(b.signal as any);
+      if (pa !== pb) return pa - pb;
+      return b.rank.total - a.rank.total;
+    });
+    return sorted.slice(0, 5);
+  }, [signals]);
 
   // Fallback: 1-click approve (used when option chain is unavailable).
   async function fallbackApprove(s: Signal) {
