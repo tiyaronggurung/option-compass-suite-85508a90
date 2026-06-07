@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { PaperTrade, Signal } from "@/lib/signalHelpers";
 import { isExpired } from "@/lib/signalFreshness";
-import { rankSignals, type RankBreakdown } from "@/lib/rankSignals";
+import { rankSignals, getContractMeta, type RankBreakdown } from "@/lib/rankSignals";
 import { sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { TopSignalRow } from "@/components/TopSignalRow";
