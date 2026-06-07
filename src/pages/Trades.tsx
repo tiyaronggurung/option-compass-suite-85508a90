@@ -165,6 +165,8 @@ export default function Trades() {
                   trade={t}
                   live
                   onClose={(x) => setClosing(x)}
+                  onClosePartial={(x) => setPartialClosing(x)}
+                  onAddMore={(x) => setAddingMore(x)}
                 />
               ))}
             </div>
