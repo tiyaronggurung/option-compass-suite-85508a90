@@ -19,10 +19,14 @@ import { TradeTimelinePanel } from "@/components/TradeTimelinePanel";
 type Props = {
   trade: PaperTrade;
   onClose?: (t: PaperTrade) => void;
+  onClosePartial?: (t: PaperTrade) => void;
+  onAddMore?: (t: PaperTrade) => void;
   onReview?: (t: PaperTrade) => void;
   hasReview?: boolean;
   live?: boolean; // open vs closed view
 };
+
+const PL_MODE_KEY = "paper:plMode"; // "dollar" | "percent"
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
