@@ -323,15 +323,43 @@ export default function Dashboard() {
 
       <PaperAccountCard />
 
+      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Stat icon={DollarSign} label="Realized today" value={`$${fmtPL(todayRealizedPL)}`} accent={todayRealizedPL >= 0 ? "text-bull" : "text-bear"} />
+        <Stat icon={todayRealizedPL + unrealizedPL >= 0 ? TrendingUp : TrendingDown} label="Unrealized open" value={`$${fmtPL(unrealizedPL)}`} accent={unrealizedPL >= 0 ? "text-bull" : "text-bear"} />
+        <Stat icon={DollarSign} label="Daily P/L total" value={`$${fmtPL(dailyPL)}`} accent={dailyPL >= 0 ? "text-bull" : "text-bear"} />
+        <Stat icon={Activity} label="Open trades" value={String(openTrades.length)} accent="text-info" />
+        <Stat icon={Flame} label="Trades today" value={String(tradesOpenedToday)} accent="text-primary" />
+        <Stat icon={Radio} label="Live signals" value={String(totalLive)} accent="text-primary" />
+      </section>
+
+      {dashboardTop.length > 0 && (
+        <section className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold tracking-tight uppercase text-muted-foreground flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-primary" /> Top Signals
+            </h2>
+            <Button asChild size="sm" variant="ghost" className="h-7 text-[11px]">
+              <Link to="/app/top-signals">View all →</Link>
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {dashboardTop.map(({ signal, rank }: { signal: Signal; rank: RankBreakdown }, i: number) => (
+              <TopSignalRow
+                key={signal.id}
+                rank={i + 1}
+                signal={signal}
+                breakdown={rank}
+                onApprove={approve}
+                onReject={dismiss}
+                onDetails={(s) => setDetailSignal(s)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       <ProviderStatusBanner signals={signals} />
 
-
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat icon={Radio} label="Live signals" value={String(totalLive)} accent="text-primary" />
-        <Stat icon={Flame} label="High conviction" value={String(highConv)} accent="text-bull" />
-        <Stat icon={Activity} label="Open paper trades" value={String(openTrades.length)} accent="text-info" />
-        <Stat icon={DollarSign} label="Daily P/L (paper)" value={`$${fmtPL(dailyPL)}`} accent={dailyPL >= 0 ? "text-bull" : "text-bear"} />
-      </section>
 
       <RiskStatusCard
         effective={effective}
