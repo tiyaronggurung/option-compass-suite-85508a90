@@ -27,3 +27,17 @@ export function getFreshness(s: Signal, now = Date.now()): Freshness {
 export function isExpired(s: Signal, now = Date.now()): boolean {
   return now >= getExpiryMs(s);
 }
+
+/** Human-readable countdown until expiry, e.g. "1h 30m", "12m", "45s", or "Expired". */
+export function getCountdownLabel(s: Signal, now = Date.now()): string {
+  const expiry = getExpiryMs(s);
+  const remaining = expiry - now;
+  if (remaining <= 0) return "Expired";
+  const totalSec = Math.floor(remaining / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const sec = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${sec}s`;
+}
