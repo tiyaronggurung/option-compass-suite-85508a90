@@ -92,6 +92,25 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
     }
     prevPremiumRef.current = currentPremium;
   }, [currentPremium, closed]);
+  // P/L display mode — persisted across cards via localStorage.
+  const [plMode, setPlMode] = useState<"dollar" | "percent">(() => {
+    if (typeof window === "undefined") return "dollar";
+    return (window.localStorage.getItem(PL_MODE_KEY) as "dollar" | "percent") || "dollar";
+  });
+  function togglePlMode() {
+    const next = plMode === "dollar" ? "percent" : "dollar";
+    setPlMode(next);
+    try { window.localStorage.setItem(PL_MODE_KEY, next); } catch { /* ignore */ }
+    try { window.dispatchEvent(new StorageEvent("storage", { key: PL_MODE_KEY, newValue: next })); } catch { /* ignore */ }
+  }
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key === PL_MODE_KEY && e.newValue) setPlMode(e.newValue as "dollar" | "percent");
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
 
   // Watch linked trade_alert for terminal lifecycle hints (target/stop/expire).
   // Auto-close is OFF — we only surface a "consider closing" banner so the user
