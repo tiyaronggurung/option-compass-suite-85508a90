@@ -149,7 +149,9 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
           </div>
         </div>
 
-        <ConfidenceRing value={signal.confidence} />
+        <div className="w-36 shrink-0">
+          <SignalRadar signal={signal} compact />
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -178,21 +180,31 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
       />
 
       {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
-        <div className="mt-2 text-[11px] text-muted-foreground line-clamp-2">
-          {(signal.reasons as string[]).slice(0, 2).join(" · ")}
-        </div>
+        <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+          {(signal.reasons as string[]).slice(0, 6).map((r, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <span className="text-bull mt-px">✓</span>
+              <span className="flex-1">{r}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         <Button size="sm" className={cn("flex-1 sm:flex-none min-w-0", isCall ? "bg-bull text-bull-foreground hover:bg-bull/90" : "bg-bear text-bear-foreground hover:bg-bear/90")}
           onClick={() => onApprove(signal)}>
-          Approve paper trade
+          Approve
         </Button>
         {onReject && (
           <Button size="sm" variant="ghost" onClick={() => onReject(signal)}>
             <X className="h-4 w-4 mr-1" /> Reject
           </Button>
         )}
+        <Button size="sm" variant="outline" className="bg-transparent gap-1" asChild>
+          <Link to={`/app/analyst?signal=${signal.id}`}>
+            <Brain className="h-3.5 w-3.5" /> Analyze
+          </Link>
+        </Button>
         {onDetails && (
           <Button size="sm" variant="ghost" className="ml-auto" onClick={() => onDetails(signal)}>
             <Info className="h-4 w-4" />
@@ -202,6 +214,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
     </div>
   );
 }
+
 
 function ConfidenceRing({ value }: { value: number }) {
   const r = 18;
