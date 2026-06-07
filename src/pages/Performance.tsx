@@ -119,6 +119,10 @@ export default function Performance() {
             </Card>
           </section>
 
+          <HighlightsRow trades={trades} signals={signals} />
+
+          <TradeHistoryTable trades={trades} signals={signals} />
+
           <section className="grid lg:grid-cols-2 gap-4">
             <BreakdownTable title="By tag" rows={metrics.byTag} />
             <BreakdownTable title="By source" rows={metrics.bySource} />
@@ -127,6 +131,8 @@ export default function Performance() {
             <BreakdownTable title="By risk level" rows={metrics.byRisk} />
             <BreakdownTable title="By confidence bucket" rows={metrics.byConfidence} />
           </section>
+
+          {user && <NotTakenSignalHistory userId={user.id} />}
         </>
       )}
     </div>
