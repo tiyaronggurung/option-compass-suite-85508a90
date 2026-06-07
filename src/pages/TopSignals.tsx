@@ -234,6 +234,29 @@ export default function TopSignals() {
             </Button>
           ))}
         </div>
+        {sideVolumes.bias && (
+          <div className="glass-card px-3 py-2 flex flex-wrap items-center gap-3 text-xs">
+            <span className="text-muted-foreground uppercase tracking-wider text-[10px]">Flow bias</span>
+            <span className="ticker-mono">
+              CALL vol <span className={cn(sideVolumes.bias === "CALL" ? "text-bull font-semibold" : "text-muted-foreground")}>
+                {sideVolumes.call.toLocaleString()}
+              </span>
+            </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="ticker-mono">
+              PUT vol <span className={cn(sideVolumes.bias === "PUT" ? "text-bear font-semibold" : "text-muted-foreground")}>
+                {sideVolumes.put.toLocaleString()}
+              </span>
+            </span>
+            <span className="ml-auto text-[11px]">
+              Bias:{" "}
+              <span className={cn("font-semibold", sideVolumes.bias === "CALL" ? "text-bull" : "text-bear")}>
+                {sideVolumes.bias}S
+              </span>
+              {tab === "all" && <span className="text-muted-foreground"> · boosted in list</span>}
+            </span>
+          </div>
+        )}
         {!signals ? (
           Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)
         ) : filteredByTab.length === 0 ? (
