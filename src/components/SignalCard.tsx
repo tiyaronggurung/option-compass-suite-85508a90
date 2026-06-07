@@ -216,23 +216,6 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
 }
 
 
-function ConfidenceRing({ value }: { value: number }) {
-  const r = 18;
-  const c = 2 * Math.PI * r;
-  const dash = (value / 100) * c;
-  const color = value >= 80 ? "hsl(var(--bull))" : value >= 65 ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))";
-  return (
-    <div className="relative h-12 w-12 shrink-0">
-      <svg viewBox="0 0 44 44" className="h-12 w-12 -rotate-90">
-        <circle cx="22" cy="22" r={r} stroke="hsl(var(--border))" strokeWidth="4" fill="none" />
-        <circle cx="22" cy="22" r={r} stroke={color} strokeWidth="4" fill="none" strokeLinecap="round"
-          strokeDasharray={`${dash} ${c - dash}`} />
-      </svg>
-      <div className="absolute inset-0 grid place-items-center text-[11px] font-semibold ticker-mono">{value}</div>
-    </div>
-  );
-}
-
 function RiskBadge({ level }: { level: Signal["risk_level"] }) {
   const map: Record<string, string> = {
     LOW: "bg-bull/15 text-bull",
