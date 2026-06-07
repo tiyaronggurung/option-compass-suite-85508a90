@@ -195,6 +195,16 @@ export default function Trades() {
         onOpenChange={(v) => !v && setClosing(null)}
         onClosed={() => { setClosing(null); refresh(); }}
       />
+      <PartialCloseDialog
+        trade={partialClosing}
+        onOpenChange={(v) => !v && setPartialClosing(null)}
+        onClosed={() => { setPartialClosing(null); refresh(); }}
+      />
+      <AddMoreDialog
+        trade={addingMore}
+        onOpenChange={(v) => !v && setAddingMore(null)}
+        onAdded={() => { setAddingMore(null); refresh(); }}
+      />
       <ReviewDialog
         trade={reviewing}
         cached={reviewing ? reviews[reviewing.id] : undefined}
