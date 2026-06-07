@@ -85,6 +85,22 @@ export default function TopSignals() {
     return rankSignals(base);
   }, [signals, includeDebug]);
 
+  // Compute call vs put total contract volume across the broadly-filtered set
+  // (before the call/put tab split) so the bias reflects the whole board.
+  const sideVolumes = useMemo(() => {
+    let call = 0; let put = 0;
+    for (const { signal } of ranked) {
+      const fm = (signal.flow_metrics ?? {}) as any;
+      const cm = getContractMeta(signal) as any;
+      const v = Number(fm.volume ?? fm.option_volume ?? fm.total_volume ?? cm?.volume ?? 0) || 0;
+      if (signal.direction === "CALL") call += v;
+      else if (signal.direction === "PUT") put += v;
+    }
+    const bias: "CALL" | "PUT" | null =
+      call === 0 && put === 0 ? null : call >= put ? "CALL" : "PUT";
+    return { call, put, bias };
+  }, [ranked]);
+
   const filteredByTab = useMemo(() => {
     const filtered = ranked.filter(({ signal, rank }) => {
       if (tab === "calls" && signal.direction !== "CALL") return false;
@@ -100,15 +116,20 @@ export default function TopSignals() {
       if (!matchesSourceFilter(signal as any, providerFilter)) return false;
       return true;
     });
-    // Re-sort: confirmed_by_both → UW → Alpaca → other; tiebreak on existing rank.total desc.
+    // Re-sort: winning-side bias (only on the "All" tab) → source priority → score.
     const sorted = [...filtered].sort((a, b) => {
+      if (tab === "all" && sideVolumes.bias) {
+        const aWin = a.signal.direction === sideVolumes.bias ? 0 : 1;
+        const bWin = b.signal.direction === sideVolumes.bias ? 0 : 1;
+        if (aWin !== bWin) return aWin - bWin;
+      }
       const pa = sourcePriority(a.signal as any);
       const pb = sourcePriority(b.signal as any);
       if (pa !== pb) return pa - pb;
       return b.rank.total - a.rank.total;
     });
     return sorted.slice(0, TOP_N[tab]);
-  }, [ranked, tab, watchOnly, watchSet, minScore, maxRisk, freshOnly, providerFilter]);
+  }, [ranked, tab, watchOnly, watchSet, minScore, maxRisk, freshOnly, providerFilter, sideVolumes]);
 
   async function refreshAfterTrade() {
     if (!user) return;
