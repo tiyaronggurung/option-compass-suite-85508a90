@@ -176,7 +176,6 @@ export default function Dashboard() {
         return false;
       }
       if (sourceMode === "live" && s.is_demo) return false;
-      if (sourceMode === "demo" && !s.is_demo) return false;
       if (!matchesSourceFilter(s as any, providerFilter)) return false;
       if (filter === "bullish" && s.direction !== "CALL") return false;
       if (filter === "bearish" && s.direction !== "PUT") return false;
