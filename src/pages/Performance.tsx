@@ -160,8 +160,9 @@ export default function Performance() {
 
       <Leaderboard currentUserId={user?.id} />
 
-
+      {!trades ? <Skeleton className="h-72" /> : (
         <>
+
           <section className="grid lg:grid-cols-2 gap-4">
             <Card title="Equity curve (paper)">
               <ResponsiveContainer width="100%" height={220}>
