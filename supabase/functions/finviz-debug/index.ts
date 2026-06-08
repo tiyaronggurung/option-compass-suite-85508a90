@@ -1,6 +1,7 @@
 // Finviz debug probe — inspects exactly what quote_export.ashx returns
 // for the configured FINVIZ_API_KEY. Read-only. No scoring side effects.
 // Never echoes the API key in logs or response.
+import { requireAdmin } from "../_shared/requireAdmin.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
