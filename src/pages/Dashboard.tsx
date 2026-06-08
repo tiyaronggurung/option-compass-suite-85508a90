@@ -191,6 +191,9 @@ export default function Dashboard() {
       }
       return true;
     });
+    if (lifecycleFilter === "fresh") {
+      return base.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
     return sortSignalsBySourcePriority(base);
   }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
