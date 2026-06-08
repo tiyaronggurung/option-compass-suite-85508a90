@@ -3,6 +3,7 @@
 // row in public.market_regime (id='global'). Cron every 15 min in market hours.
 // No live orders. Safe to call manually for testing.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/requireAdmin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
