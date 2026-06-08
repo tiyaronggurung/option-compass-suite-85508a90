@@ -24,7 +24,7 @@ import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
 import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sortSignalsBySourcePriority, sourcePriority, type SourceFilter } from "@/lib/signalSource";
 import { TopSignalRow } from "@/components/TopSignalRow";
-import { rankSignals, type RankBreakdown } from "@/lib/rankSignals";
+import { rankSignals, type RankBreakdown, getContractMeta } from "@/lib/rankSignals";
 import { Link } from "react-router-dom";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
