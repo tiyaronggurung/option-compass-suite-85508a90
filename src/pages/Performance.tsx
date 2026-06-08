@@ -16,6 +16,8 @@ import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
 import { deriveTags, ALL_TAGS, type TagId } from "@/lib/signalTags";
 import { cn } from "@/lib/utils";
 import { HighlightsRow, TradeHistoryTable, NotTakenSignalHistory } from "@/components/PerformanceInsights";
+import { Leaderboard } from "@/components/Leaderboard";
+
 
 const BULL = "hsl(145 75% 48%)";
 const BEAR = "hsl(358 78% 58%)";
