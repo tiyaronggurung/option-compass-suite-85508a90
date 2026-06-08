@@ -11,6 +11,7 @@ import { ProviderEnginesPanel } from "@/components/ProviderEnginesPanel";
 import { EarningsCalendarPanel } from "@/components/EarningsCalendarPanel";
 import { SignalModePanel } from "@/components/SignalModePanel";
 import { SignalAuditPanel } from "@/components/SignalAuditPanel";
+import { InviteUserPanel } from "@/components/InviteUserPanel";
 import SignalLearningPanel from "@/components/SignalLearningPanel";
 import MarkingEngineStatus from "@/components/MarkingEngineStatus";
 import OptionsChainPanel from "@/components/OptionsChainPanel";
@@ -86,6 +87,8 @@ export default function Settings() {
           </div>
         )}
       </section>
+
+      <InviteUserPanel />
 
       <ResetPaperAccountPanel />
 
