@@ -211,6 +211,18 @@ export default function Dashboard() {
   const dailyPL = todayRealizedPL + unrealizedPL;
   const effective = useMemo(() => effectiveRisk(risk), [risk]);
 
+  const filteredDeveloping = useMemo(() => {
+    if (!developing) return [];
+    return developing.filter((s) => {
+      if ((s.confidence ?? 0) < minDevelopingScore) return false;
+      if (hideZeroBid) {
+        const bid = getContractMeta(s)?.bid;
+        if (bid == null || bid === 0) return false;
+      }
+      return true;
+    });
+  }, [developing, minDevelopingScore, hideZeroBid]);
+
   // Top 5 ranked signals for the dashboard hero strip.
   const dashboardTop = useMemo(() => {
     if (!signals) return [];
