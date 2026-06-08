@@ -75,6 +75,8 @@ export default function Dashboard() {
   const [buyOpen, setBuyOpen] = useState(false);
   const [buySignal, setBuySignal] = useState<Signal | null>(null);
   const [cashBalance, setCashBalance] = useState<number>(0);
+  const [minDevelopingScore, setMinDevelopingScore] = useState(0);
+  const [hideZeroBid, setHideZeroBid] = useState(true);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   const reloadAlerts = async () => {
