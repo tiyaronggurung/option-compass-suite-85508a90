@@ -13,6 +13,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { uwFetch } from "../_shared/unusual-whales.ts";
 import { runConfirmationSweep } from "../_shared/crossSourceMatch.ts";
+import { requireAdmin } from "../_shared/requireAdmin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
