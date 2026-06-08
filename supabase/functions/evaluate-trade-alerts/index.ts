@@ -9,6 +9,7 @@
 // signal generation, or guest flows.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { requireAdmin } from "../_shared/requireAdmin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
