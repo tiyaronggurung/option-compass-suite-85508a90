@@ -158,7 +158,9 @@ export default function Performance() {
 
       <DisclaimerBar />
 
-      {!trades ? <Skeleton className="h-72" /> : (
+      <Leaderboard currentUserId={user?.id} />
+
+
         <>
           <section className="grid lg:grid-cols-2 gap-4">
             <Card title="Equity curve (paper)">
