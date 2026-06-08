@@ -109,7 +109,7 @@ export default function Dashboard() {
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
       setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
-      if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
+      if (settings?.signal_mode && ["both", "live"].includes(settings.signal_mode)) setSourceMode(settings.signal_mode as SourceMode);
       setAlpacaStatus(pc?.last_status ?? null);
       setRisk(rs as RiskSettingsLike);
       setCashBalance(Number((pa as any)?.cash_balance ?? 0));
