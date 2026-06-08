@@ -76,7 +76,8 @@ export function SignalAuditPanel() {
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">admin</span>
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Last 50 live (non-demo) signals with approve/reject ratios to help tune the engine.
+          Last 50 live (non-demo) signals with approve/reject ratios to help tune the engine. Auto-refreshes every 30s.
+          {lastRefresh && <span className="ml-1 opacity-70">· Updated {lastRefresh.toLocaleTimeString()}</span>}
         </p>
       </div>
 
