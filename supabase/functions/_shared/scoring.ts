@@ -55,10 +55,10 @@ export type ScoringResult = {
 };
 
 export const WEIGHTS: Record<ComponentKey, number> = {
-  options_flow: 0.30,
-  technical:    0.25,
-  news:         0.20,
-  sentiment:    0.15,
+  options_flow: 0.25,
+  technical:    0.35,
+  news:         0.25,
+  sentiment:    0.05,
   volatility:   0.10,
 };
 
@@ -998,7 +998,7 @@ export async function scoreInstitutional(
            extras.insider.state === "auth_failed" ? "auth_failed" :
            extras.insider.state === "not_entitled" ? "not_entitled" : "degraded"),
       detail: `insider:${extras.insider.state} · news:${extras.news.state} · sectors:${extras.sectors.state}`,
-      note: "Sub-signals only — weights remain 30/25/20/15/10. Each endpoint degrades independently.",
+      note: "Sub-signals only — weights now 35/25/25/5/10. Each endpoint degrades independently.",
     },
     (() => {
       const nd = (news.details ?? {}) as Record<string, unknown>;
