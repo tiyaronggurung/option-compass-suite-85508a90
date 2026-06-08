@@ -165,9 +165,9 @@ Deno.serve(async (req) => {
   }
 
   const providers: ProviderId[] = ["alpaca", "tradier", "polygon", "unusual_whales", "news"];
-  const results = await Promise.all(providers.map(async (p) => {
+  const results: Array<{ provider: ProviderId } & ProbeResult> = [];
+  for (const p of providers) {
     const r = await probe(p);
-    // Only update sync metadata for providers we actually probed (configured).
     if (r.configured) {
       await admin.from("provider_configs").update({
         last_sync_at: new Date().toISOString(),
@@ -177,8 +177,11 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       }).eq("provider", p);
     }
-    return { provider: p, ...r };
-  }));
+    results.push({ provider: p, ...r });
+    // Small gap between probes to avoid burst-rate-limiting shared upstreams (e.g. UW).
+    await new Promise((res) => setTimeout(res, 250));
+  }
+
 
   return new Response(JSON.stringify({ ok: true, results }), {
     status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
