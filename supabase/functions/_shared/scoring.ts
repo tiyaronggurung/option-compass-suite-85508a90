@@ -998,7 +998,7 @@ export async function scoreInstitutional(
            extras.insider.state === "auth_failed" ? "auth_failed" :
            extras.insider.state === "not_entitled" ? "not_entitled" : "degraded"),
       detail: `insider:${extras.insider.state} · news:${extras.news.state} · sectors:${extras.sectors.state}`,
-      note: "Sub-signals only — weights remain 30/25/20/15/10. Each endpoint degrades independently.",
+      note: "Sub-signals only — weights now 35/25/25/5/10. Each endpoint degrades independently.",
     },
     (() => {
       const nd = (news.details ?? {}) as Record<string, unknown>;
