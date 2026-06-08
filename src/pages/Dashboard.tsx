@@ -524,33 +524,61 @@ export default function Dashboard() {
                 Below Threshold — Not Tradeable Yet · confidence 50–69 · for transparency only
               </p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-transparent"
-              onClick={() => setShowDeveloping((v) => !v)}
-            >
-              {showDeveloping ? `Hide (${developing.length})` : `Show (${developing.length})`}
-            </Button>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hideZeroBid}
+                  onChange={(e) => setHideZeroBid(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                />
+                Hide $0 bid
+              </label>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Min score</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={69}
+                  step={1}
+                  value={minDevelopingScore}
+                  onChange={(e) => setMinDevelopingScore(Number(e.target.value))}
+                  className="w-24 accent-primary"
+                />
+                <span className="text-xs font-medium tabular-nums w-5">{minDevelopingScore}</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="bg-transparent"
+                onClick={() => setShowDeveloping((v) => !v)}
+              >
+                {showDeveloping ? `Hide (${filteredDeveloping.length})` : `Show (${filteredDeveloping.length})`}
+              </Button>
+            </div>
           </div>
           {showDeveloping && (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-75 hover:opacity-100 transition-opacity">
-              {developing.map((s) => (
-                <SignalCard
-                  key={s.id}
-                  signal={s}
-                  watchlist={watchSet}
-                  onApprove={approve}
-                  onReject={dismiss}
-                  onDetails={(sig) => setDetailSignal(sig)}
-                  outcome={signalOutcome(s, trades, dismissedIds)}
-                  subLabel={
-                    (s.confidence ?? 0) >= 65
-                      ? "Near Watchlist — Paper Test"
-                      : "Paper Test Candidate"
-                  }
-                />
-              ))}
+              {filteredDeveloping.length === 0 ? (
+                <EmptyState />
+              ) : (
+                filteredDeveloping.map((s) => (
+                  <SignalCard
+                    key={s.id}
+                    signal={s}
+                    watchlist={watchSet}
+                    onApprove={approve}
+                    onReject={dismiss}
+                    onDetails={(sig) => setDetailSignal(sig)}
+                    outcome={signalOutcome(s, trades, dismissedIds)}
+                    subLabel={
+                      (s.confidence ?? 0) >= 65
+                        ? "Near Watchlist — Paper Test"
+                        : "Paper Test Candidate"
+                    }
+                  />
+                ))
+              )}
             </div>
           )}
         </section>
