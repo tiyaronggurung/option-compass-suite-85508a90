@@ -66,7 +66,7 @@ export default function Dashboard() {
   const [tagFilter, setTagFilter] = useState<TagId | null>(null);
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null);
   const [includeExpired, setIncludeExpired] = useState(false);
-  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleState | "all">("all");
+  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleState | "all">("fresh");
   const [providerFilter, setProviderFilter] = useState<SourceFilter>("all");
   const [alpacaStatus, setAlpacaStatus] = useState<string | null>(null);
   const [risk, setRisk] = useState<RiskSettingsLike>(null);
@@ -191,6 +191,9 @@ export default function Dashboard() {
       }
       return true;
     });
+    if (lifecycleFilter === "fresh") {
+      return base.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
     return sortSignalsBySourcePriority(base);
   }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
