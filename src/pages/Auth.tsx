@@ -19,7 +19,6 @@ const schema = z.object({
 export default function AuthPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,21 +34,11 @@ export default function AuthPage() {
     }
     setBusy(true);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email: parsed.data.email,
-          password: parsed.data.password,
-          options: { emailRedirectTo: `${window.location.origin}/app` },
-        });
-        if (error) throw error;
-        toast.success("Account created. Welcome to the desk.");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: parsed.data.email,
-          password: parsed.data.password,
-        });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email: parsed.data.email,
+        password: parsed.data.password,
+      });
+      if (error) throw error;
     } catch (err: any) {
       toast.error(err?.message ?? "Authentication failed");
     } finally {
@@ -92,33 +81,27 @@ export default function AuthPage() {
             <span className="text-sm font-semibold">Tradingflow <span className="text-primary">101</span></span>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Sign in to the desk</h2>
-          <p className="text-sm text-muted-foreground mt-1">Educational paper-trading dashboard.</p>
+          <p className="text-sm text-muted-foreground mt-1">Invite-only. Use the link from your invite email to set your password.</p>
 
-          <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="mt-6">
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="signin">Sign in</TabsTrigger>
-              <TabsTrigger value="signup">Create account</TabsTrigger>
-            </TabsList>
-            <TabsContent value={mode}>
-              <form onSubmit={submit} className="space-y-4 mt-6">
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" autoComplete="email" value={email}
-                    onChange={(e) => setEmail(e.target.value)} required />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Password</Label>
-                  <Input id="password" type="password"
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    value={password} onChange={(e) => setPassword(e.target.value)} required />
-                </div>
-                <Button type="submit" disabled={busy} className="w-full">
-                  {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {mode === "signup" ? "Create account" : "Sign in"}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+          <form onSubmit={submit} className="space-y-4 mt-6">
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" autoComplete="email" value={email}
+                onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" type="password" autoComplete="current-password"
+                value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </div>
+            <Button type="submit" disabled={busy} className="w-full">
+              {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Sign in
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              New sign-ups are disabled. Ask an admin for an invite.
+            </p>
+          </form>
         </div>
       </div>
     </div>
