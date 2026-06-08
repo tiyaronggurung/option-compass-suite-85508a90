@@ -55,10 +55,10 @@ export type ScoringResult = {
 };
 
 export const WEIGHTS: Record<ComponentKey, number> = {
-  options_flow: 0.30,
-  technical:    0.25,
-  news:         0.20,
-  sentiment:    0.15,
+  options_flow: 0.25,
+  technical:    0.35,
+  news:         0.25,
+  sentiment:    0.05,
   volatility:   0.10,
 };
 
