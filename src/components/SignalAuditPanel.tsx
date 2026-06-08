@@ -15,10 +15,13 @@ interface Row {
 export function SignalAuditPanel() {
   const { isAdmin, loading } = useIsAdmin();
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
-    (async () => {
+    let cancelled = false;
+
+    const load = async () => {
       const { data: signals } = await supabase
         .from("signals")
         .select("*")
@@ -27,7 +30,10 @@ export function SignalAuditPanel() {
         .limit(50);
       const list = (signals ?? []) as Signal[];
       const ids = list.map((s) => s.id);
-      if (ids.length === 0) { setRows([]); return; }
+      if (ids.length === 0) {
+        if (!cancelled) { setRows([]); setLastRefresh(new Date()); }
+        return;
+      }
 
       const [{ data: approvals }, { data: dismissals }] = await Promise.all([
         supabase.from("paper_trades").select("signal_id").in("signal_id", ids),
@@ -44,12 +50,18 @@ export function SignalAuditPanel() {
         dCount.set(r.signal_id, (dCount.get(r.signal_id) ?? 0) + 1);
       }
 
+      if (cancelled) return;
       setRows(list.map((s) => ({
         signal: s,
         approvals: aCount.get(s.id) ?? 0,
         dismissals: dCount.get(s.id) ?? 0,
       })));
-    })();
+      setLastRefresh(new Date());
+    };
+
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [isAdmin]);
 
   if (loading) return <Skeleton className="h-40" />;
