@@ -114,10 +114,30 @@ async function probeFinnhubNews(): Promise<ProbeResult> {
   }
 }
 
+async function probeTradier(): Promise<ProbeResult> {
+  const key = Deno.env.get("TRADIER_API_KEY");
+  if (!key) return { status: "unknown", latency_ms: null, error: null, configured: false };
+  const t0 = Date.now();
+  try {
+    const res = await fetchWithRetry("https://api.tradier.com/v1/markets/quotes?symbols=SPY", {
+      headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+    });
+    const latency = Date.now() - t0;
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { status: "error", latency_ms: latency, error: `HTTP ${res.status}: ${text.slice(0, 200)}`, configured: true };
+    }
+    await res.json().catch(() => null);
+    return { status: "ok", latency_ms: latency, error: null, configured: true };
+  } catch (e) {
+    return { status: "error", latency_ms: Date.now() - t0, error: (e as Error).message, configured: true };
+  }
+}
+
 async function probe(provider: ProviderId): Promise<ProbeResult> {
   switch (provider) {
     case "alpaca": return await probeAlpaca();
-    case "tradier": return notConfigured("TRADIER_API_KEY");
+    case "tradier": return await probeTradier();
     case "polygon": return notConfigured("POLYGON_API_KEY");
     case "unusual_whales": return await probeUnusualWhales();
     case "news": return await probeFinnhubNews();
