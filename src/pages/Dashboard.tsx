@@ -38,11 +38,10 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "watch", label: "Watchlist only" },
 ];
 
-type SourceMode = "both" | "live" | "demo";
+type SourceMode = "both" | "live";
 const SOURCE_FILTERS: { id: SourceMode; label: string }[] = [
   { id: "both", label: "All sources" },
   { id: "live", label: "Live market data" },
-  { id: "demo", label: "Demo only" },
 ];
 
 function marketStatus() {
@@ -110,7 +109,7 @@ export default function Dashboard() {
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
       setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
-      if (settings?.signal_mode) setSourceMode(settings.signal_mode as SourceMode);
+      if (settings?.signal_mode && ["both", "live"].includes(settings.signal_mode)) setSourceMode(settings.signal_mode as SourceMode);
       setAlpacaStatus(pc?.last_status ?? null);
       setRisk(rs as RiskSettingsLike);
       setCashBalance(Number((pa as any)?.cash_balance ?? 0));
@@ -177,7 +176,6 @@ export default function Dashboard() {
         return false;
       }
       if (sourceMode === "live" && s.is_demo) return false;
-      if (sourceMode === "demo" && !s.is_demo) return false;
       if (!matchesSourceFilter(s as any, providerFilter)) return false;
       if (filter === "bullish" && s.direction !== "CALL") return false;
       if (filter === "bearish" && s.direction !== "PUT") return false;
