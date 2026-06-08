@@ -17,18 +17,42 @@ interface ProbeResult {
   configured: boolean;
 }
 
+// Fetch with timeout + single retry on transient failures (network, 429, 5xx).
+async function fetchWithRetry(url: string, init: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
+  const attempt = async (): Promise<Response> => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  try {
+    const res = await attempt();
+    if (res.status === 429 || res.status >= 500) {
+      // Drain body before retrying to free the connection
+      await res.text().catch(() => "");
+      await new Promise((r) => setTimeout(r, 800));
+      return await attempt();
+    }
+    return res;
+  } catch (_e) {
+    await new Promise((r) => setTimeout(r, 800));
+    return await attempt();
+  }
+}
+
 async function probeAlpaca(): Promise<ProbeResult> {
   const key = Deno.env.get("ALPACA_API_KEY_ID");
   const secret = Deno.env.get("ALPACA_API_SECRET_KEY");
   if (!key || !secret) {
     return { status: "unknown", latency_ms: null, error: null, configured: false };
   }
-  // Account endpoint lives on the trading API, not the data API — use it explicitly
-  // to avoid 404s when ALPACA_BASE_URL is pointed at data.alpaca.markets or similar.
   const tradingBase = "https://paper-api.alpaca.markets";
   const t0 = Date.now();
   try {
-    const res = await fetch(`${tradingBase}/v2/account`, {
+    const res = await fetchWithRetry(`${tradingBase}/v2/account`, {
       headers: { "APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret },
     });
     const latency = Date.now() - t0;
@@ -57,7 +81,7 @@ async function probeUnusualWhales(): Promise<ProbeResult> {
   if (!key) return { status: "unknown", latency_ms: null, error: null, configured: false };
   const t0 = Date.now();
   try {
-    const res = await fetch("https://api.unusualwhales.com/api/stock/SPY/flow-alerts?limit=1", {
+    const res = await fetchWithRetry("https://api.unusualwhales.com/api/stock/SPY/flow-alerts?limit=1", {
       headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
     });
     const latency = Date.now() - t0;
@@ -77,7 +101,7 @@ async function probeFinnhubNews(): Promise<ProbeResult> {
   if (!key) return { status: "unknown", latency_ms: null, error: null, configured: false };
   const t0 = Date.now();
   try {
-    const res = await fetch(`https://finnhub.io/api/v1/news?category=general&token=${encodeURIComponent(key)}`);
+    const res = await fetchWithRetry(`https://finnhub.io/api/v1/news?category=general&token=${encodeURIComponent(key)}`);
     const latency = Date.now() - t0;
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -99,6 +123,7 @@ async function probe(provider: ProviderId): Promise<ProbeResult> {
     case "news": return await probeFinnhubNews();
   }
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
