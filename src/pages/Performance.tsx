@@ -16,6 +16,8 @@ import { fmtPL, type PaperTrade, type Signal } from "@/lib/signalHelpers";
 import { deriveTags, ALL_TAGS, type TagId } from "@/lib/signalTags";
 import { cn } from "@/lib/utils";
 import { HighlightsRow, TradeHistoryTable, NotTakenSignalHistory } from "@/components/PerformanceInsights";
+import { Leaderboard } from "@/components/Leaderboard";
+
 
 const BULL = "hsl(145 75% 48%)";
 const BEAR = "hsl(358 78% 58%)";
@@ -156,8 +158,11 @@ export default function Performance() {
 
       <DisclaimerBar />
 
+      <Leaderboard currentUserId={user?.id} />
+
       {!trades ? <Skeleton className="h-72" /> : (
         <>
+
           <section className="grid lg:grid-cols-2 gap-4">
             <Card title="Equity curve (paper)">
               <ResponsiveContainer width="100%" height={220}>

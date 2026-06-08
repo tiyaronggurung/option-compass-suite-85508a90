@@ -1509,6 +1509,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_leaderboard: {
+        Args: { _window?: string }
+        Returns: {
+          closed_trades: number
+          display_name: string
+          live_equity: number
+          realized_pl: number
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
