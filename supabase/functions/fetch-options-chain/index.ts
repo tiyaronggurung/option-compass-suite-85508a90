@@ -1,3 +1,5 @@
+// Fetch option chain via Tradier (migrated from Alpaca) and upsert into options_contracts.
+// Same I/O contract as before — callers (scan-signals, pick-contract, refresh_scanner) unchanged.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -6,9 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const ALPACA_KEY = Deno.env.get("ALPACA_API_KEY_ID") ?? "";
-const ALPACA_SECRET = Deno.env.get("ALPACA_API_SECRET_KEY") ?? "";
-const ALPACA_DATA_BASE = "https://data.alpaca.markets";
+const TRADIER_KEY = Deno.env.get("TRADIER_API_KEY") ?? "";
+const TRADIER_BASE = "https://api.tradier.com/v1";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -35,25 +36,22 @@ Deno.serve(async (req) => {
     const action = body.action ?? "fetch";
 
     if (action === "test") {
-      if (!ALPACA_KEY || !ALPACA_SECRET) {
-        return json({ ok: false, configured: false, error: "Alpaca credentials not configured" });
-      }
-      const res = await fetch(`${ALPACA_DATA_BASE}/v1beta1/options/snapshots/SPY?limit=1`, {
-        headers: { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET },
+      if (!TRADIER_KEY) return json({ ok: false, configured: false, error: "Tradier credentials not configured" });
+      const res = await fetch(`${TRADIER_BASE}/markets/quotes?symbols=SPY`, {
+        headers: { Authorization: `Bearer ${TRADIER_KEY}`, Accept: "application/json" },
       });
       const ok = res.ok;
       const txt = ok ? "" : await res.text();
       return json({ ok, configured: true, status: res.status, error: ok ? null : txt.slice(0, 300) });
     }
 
-    if (!ALPACA_KEY || !ALPACA_SECRET) return json({ error: "Alpaca not configured" }, 500);
+    if (!TRADIER_KEY) return json({ error: "Tradier not configured" }, 500);
 
     // Default 14–30 DTE focused window: today+10 .. today+45
     const today = new Date();
     const defaultStart = isoDate(addDays(today, 10));
     const defaultEnd   = isoDate(addDays(today, 45));
 
-    // Bulk refresh for scanner tickers
     if (action === "refresh_scanner") {
       const tickers: string[] = Array.isArray(body.tickers) && body.tickers.length
         ? body.tickers.map((s: any) => String(s).toUpperCase())
@@ -73,7 +71,7 @@ Deno.serve(async (req) => {
     }
 
     const underlying = String(body.ticker ?? "").toUpperCase().trim();
-    const expiry = String(body.expiry ?? "").trim(); // single YYYY-MM-DD (optional)
+    const expiry = String(body.expiry ?? "").trim();
     const startExpiry = String(body.start_expiry ?? "").trim();
     const endExpiry   = String(body.end_expiry ?? "").trim();
     if (!underlying) return json({ error: "ticker required" }, 400);
@@ -81,79 +79,92 @@ Deno.serve(async (req) => {
       return json({ error: `Invalid ticker symbol "${underlying}". Use a symbol like NVDA, not a company name.` }, 400);
     }
 
-    // Resolve window:
-    //  - explicit single expiry → use it
-    //  - explicit window → use it
-    //  - neither → default 10..45 day window (so we don't waste the 1000-row limit on 0DTE chains)
     let startE = "";
     let endE = "";
-    if (expiry) {
-      startE = expiry;
-      endE = expiry;
-    } else if (startExpiry || endExpiry) {
-      startE = startExpiry || defaultStart;
-      endE = endExpiry || defaultEnd;
-    } else {
-      startE = defaultStart;
-      endE = defaultEnd;
-    }
+    if (expiry) { startE = expiry; endE = expiry; }
+    else if (startExpiry || endExpiry) { startE = startExpiry || defaultStart; endE = endExpiry || defaultEnd; }
+    else { startE = defaultStart; endE = defaultEnd; }
 
     try {
       const count = await fetchAndCache(admin, underlying, startE, endE);
       return json({ ok: true, count, underlying, start_expiry: startE, end_expiry: endE });
     } catch (e: any) {
       const msg = e?.message ?? String(e);
-      const status = msg.startsWith("ALPACA_400:") ? 400 : 502;
+      const status = msg.startsWith("TRADIER_400:") ? 400 : 502;
       return json({ error: msg }, status);
     }
-
   } catch (e: any) {
     return json({ error: e?.message ?? String(e) }, 500);
   }
 });
 
-async function fetchAndCache(admin: any, underlying: string, startE: string, endE: string): Promise<number> {
-  const params = new URLSearchParams({ limit: "1000" });
-  if (startE) params.set("expiration_date_gte", startE);
-  if (endE)   params.set("expiration_date_lte", endE);
-  const apiUrl = `${ALPACA_DATA_BASE}/v1beta1/options/snapshots/${underlying}?${params}`;
-  const res = await fetch(apiUrl, {
-    headers: { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET },
-  });
-  if (!res.ok) {
-    const txt = await res.text();
-    if (res.status === 400) throw new Error(`ALPACA_400: ${txt.slice(0, 200)}`);
-    throw new Error(`Alpaca ${res.status}: ${txt.slice(0, 200)}`);
-  }
-  const data = await res.json();
-  const snapshots = data.snapshots ?? {};
-  const rows: any[] = [];
-  const now = new Date().toISOString();
-  for (const [symbol, snap] of Object.entries<any>(snapshots)) {
-    const parsed = parseOcc(symbol);
-    if (!parsed) continue;
-    const q = snap.latestQuote ?? {};
-    const t = snap.latestTrade ?? {};
-    const g = snap.greeks ?? {};
-    rows.push({
-      symbol,
-      underlying: parsed.underlying,
-      expiry: parsed.expiry,
-      strike: parsed.strike,
-      type: parsed.type,
-      bid: q.bp ?? null,
-      ask: q.ap ?? null,
-      last: t.p ?? null,
-      volume: snap.dailyBar?.v ?? null,
-      open_interest: snap.openInterest ?? null,
-      delta: g.delta ?? null,
-      gamma: g.gamma ?? null,
-      theta: g.theta ?? null,
-      vega: g.vega ?? null,
-      iv: snap.impliedVolatility ?? null,
-      updated_at: now,
+async function tradier(path: string, params: Record<string, string>, timeoutMs = 10_000): Promise<any> {
+  const qs = new URLSearchParams(params).toString();
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${TRADIER_BASE}${path}?${qs}`, {
+      headers: { Authorization: `Bearer ${TRADIER_KEY}`, Accept: "application/json" },
+      signal: ctrl.signal,
     });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      if (res.status === 400) throw new Error(`TRADIER_400: ${t.slice(0, 200)}`);
+      throw new Error(`Tradier ${path} ${res.status}: ${t.slice(0, 200)}`);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(tid);
   }
+}
+
+async function fetchAndCache(admin: any, underlying: string, startE: string, endE: string): Promise<number> {
+  // 1) List expirations and filter to the requested window.
+  const expJson = await tradier("/markets/options/expirations", { symbol: underlying, includeAllRoots: "true", strikes: "false" });
+  const rawExp = expJson?.expirations?.date;
+  const allExp: string[] = Array.isArray(rawExp) ? rawExp : rawExp ? [rawExp] : [];
+  const windowExp = allExp.filter((e) => typeof e === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e) && e >= startE && e <= endE);
+  if (windowExp.length === 0) return 0;
+
+  // 2) Pull each expiration's chain (with Greeks) and collect rows.
+  const now = new Date().toISOString();
+  const rows: any[] = [];
+  for (const exp of windowExp) {
+    let chainJson: any;
+    try {
+      chainJson = await tradier("/markets/options/chains", { symbol: underlying, expiration: exp, greeks: "true" }, 12_000);
+    } catch (e) {
+      // Skip a bad expiration but keep going so partial cache is still useful.
+      console.warn("tradier chain failed", underlying, exp, (e as Error).message);
+      continue;
+    }
+    const raw = chainJson?.options?.option;
+    const arr: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    for (const c of arr) {
+      const symbol = String(c.symbol ?? "");
+      if (!symbol) continue;
+      const g = c.greeks ?? {};
+      rows.push({
+        symbol,
+        underlying: String(c.underlying ?? underlying),
+        expiry: String(c.expiration_date ?? exp),
+        strike: numOrNull(c.strike) ?? 0,
+        type: String(c.option_type ?? "").toLowerCase() === "put" ? "put" : "call",
+        bid: numOrNull(c.bid),
+        ask: numOrNull(c.ask),
+        last: numOrNull(c.last),
+        volume: numOrNull(c.volume),
+        open_interest: numOrNull(c.open_interest),
+        delta: numOrNull(g.delta),
+        gamma: numOrNull(g.gamma),
+        theta: numOrNull(g.theta),
+        vega: numOrNull(g.vega),
+        iv: numOrNull(g.mid_iv ?? g.smv_vol ?? g.ask_iv ?? g.bid_iv),
+        updated_at: now,
+      });
+    }
+  }
+
   if (rows.length > 0) {
     const chunk = 500;
     for (let i = 0; i < rows.length; i += chunk) {
@@ -166,28 +177,18 @@ async function fetchAndCache(admin: any, underlying: string, startE: string, end
   return rows.length;
 }
 
+function numOrNull(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : null;
+}
 function addDays(d: Date, n: number): Date {
-  const x = new Date(d);
-  x.setUTCDate(x.getUTCDate() + n);
-  return x;
+  const x = new Date(d); x.setUTCDate(x.getUTCDate() + n); return x;
 }
 function isoDate(d: Date): string { return d.toISOString().slice(0, 10); }
-
 function json(b: unknown, status = 200) {
   return new Response(JSON.stringify(b), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-function parseOcc(sym: string): { underlying: string; expiry: string; strike: number; type: "call" | "put" } | null {
-  const m = sym.match(/^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
-  if (!m) return null;
-  const [, underlying, yy, mm, dd, cp, strikeRaw] = m;
-  return {
-    underlying,
-    expiry: `20${yy}-${mm}-${dd}`,
-    strike: parseInt(strikeRaw, 10) / 1000,
-    type: cp === "C" ? "call" : "put",
-  };
 }
