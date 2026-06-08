@@ -1,5 +1,6 @@
 // Lightweight health check for Apify token.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/requireAdmin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,6 +10,8 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const auth = await requireAdmin(req);
+  if (!auth.ok) return new Response(JSON.stringify({ error: auth.msg }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   const token = Deno.env.get("APIFY_API_TOKEN") ?? "";
   const t0 = Date.now();
   let status: "ok" | "error" | "unknown" = "unknown";

@@ -3,6 +3,7 @@
 // row in public.market_regime (id='global'). Cron every 15 min in market hours.
 // No live orders. Safe to call manually for testing.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/requireAdmin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +48,8 @@ function trendPct(bars: Bar[], lookback = 20): number {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const auth = await requireAdmin(req);
+  if (!auth.ok) return new Response(JSON.stringify({ error: auth.msg }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   try {
     if (!ALPACA_KEY) throw new Error("ALPACA_API_KEY_ID not configured");
     const [spy, qqq, vix] = await Promise.all([

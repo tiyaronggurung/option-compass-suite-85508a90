@@ -1,6 +1,7 @@
 // Finviz debug probe — inspects exactly what quote_export.ashx returns
 // for the configured FINVIZ_API_KEY. Read-only. No scoring side effects.
 // Never echoes the API key in logs or response.
+import { requireAdmin } from "../_shared/requireAdmin.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -116,6 +117,11 @@ async function probe(ticker: string, paramName: "auth" | "apikey", followRedirec
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  const auth = await requireAdmin(req);
+  if (!auth.ok) return new Response(JSON.stringify({ error: auth.msg }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+
 
   if (!FINVIZ_KEY) {
     return new Response(JSON.stringify({
