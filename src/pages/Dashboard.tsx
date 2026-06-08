@@ -38,11 +38,10 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "watch", label: "Watchlist only" },
 ];
 
-type SourceMode = "both" | "live" | "demo";
+type SourceMode = "both" | "live";
 const SOURCE_FILTERS: { id: SourceMode; label: string }[] = [
   { id: "both", label: "All sources" },
   { id: "live", label: "Live market data" },
-  { id: "demo", label: "Demo only" },
 ];
 
 function marketStatus() {
