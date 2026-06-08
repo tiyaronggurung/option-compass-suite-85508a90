@@ -1,5 +1,6 @@
 // Lightweight health check for Finviz API key. Updates provider_configs row.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/requireAdmin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
