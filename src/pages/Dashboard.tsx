@@ -24,7 +24,7 @@ import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
 import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sortSignalsBySourcePriority, sourcePriority, type SourceFilter } from "@/lib/signalSource";
 import { TopSignalRow } from "@/components/TopSignalRow";
-import { rankSignals, type RankBreakdown } from "@/lib/rankSignals";
+import { rankSignals, type RankBreakdown, getContractMeta } from "@/lib/rankSignals";
 import { Link } from "react-router-dom";
 
 type Filter = "all" | "bullish" | "bearish" | "high" | "low" | "0dte" | "watch";
@@ -75,6 +75,8 @@ export default function Dashboard() {
   const [buyOpen, setBuyOpen] = useState(false);
   const [buySignal, setBuySignal] = useState<Signal | null>(null);
   const [cashBalance, setCashBalance] = useState<number>(0);
+  const [minDevelopingScore, setMinDevelopingScore] = useState(0);
+  const [hideZeroBid, setHideZeroBid] = useState(true);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   const reloadAlerts = async () => {
@@ -208,6 +210,18 @@ export default function Dashboard() {
   );
   const dailyPL = todayRealizedPL + unrealizedPL;
   const effective = useMemo(() => effectiveRisk(risk), [risk]);
+
+  const filteredDeveloping = useMemo(() => {
+    if (!developing) return [];
+    return developing.filter((s) => {
+      if ((s.confidence ?? 0) < minDevelopingScore) return false;
+      if (hideZeroBid) {
+        const bid = getContractMeta(s)?.bid;
+        if (bid == null || bid === 0) return false;
+      }
+      return true;
+    });
+  }, [developing, minDevelopingScore, hideZeroBid]);
 
   // Top 5 ranked signals for the dashboard hero strip.
   const dashboardTop = useMemo(() => {
@@ -510,33 +524,61 @@ export default function Dashboard() {
                 Below Threshold — Not Tradeable Yet · confidence 50–69 · for transparency only
               </p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-transparent"
-              onClick={() => setShowDeveloping((v) => !v)}
-            >
-              {showDeveloping ? `Hide (${developing.length})` : `Show (${developing.length})`}
-            </Button>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hideZeroBid}
+                  onChange={(e) => setHideZeroBid(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                />
+                Hide $0 bid
+              </label>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Min score</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={69}
+                  step={1}
+                  value={minDevelopingScore}
+                  onChange={(e) => setMinDevelopingScore(Number(e.target.value))}
+                  className="w-24 accent-primary"
+                />
+                <span className="text-xs font-medium tabular-nums w-5">{minDevelopingScore}</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="bg-transparent"
+                onClick={() => setShowDeveloping((v) => !v)}
+              >
+                {showDeveloping ? `Hide (${filteredDeveloping.length})` : `Show (${filteredDeveloping.length})`}
+              </Button>
+            </div>
           </div>
           {showDeveloping && (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-75 hover:opacity-100 transition-opacity">
-              {developing.map((s) => (
-                <SignalCard
-                  key={s.id}
-                  signal={s}
-                  watchlist={watchSet}
-                  onApprove={approve}
-                  onReject={dismiss}
-                  onDetails={(sig) => setDetailSignal(sig)}
-                  outcome={signalOutcome(s, trades, dismissedIds)}
-                  subLabel={
-                    (s.confidence ?? 0) >= 65
-                      ? "Near Watchlist — Paper Test"
-                      : "Paper Test Candidate"
-                  }
-                />
-              ))}
+              {filteredDeveloping.length === 0 ? (
+                <EmptyState />
+              ) : (
+                filteredDeveloping.map((s) => (
+                  <SignalCard
+                    key={s.id}
+                    signal={s}
+                    watchlist={watchSet}
+                    onApprove={approve}
+                    onReject={dismiss}
+                    onDetails={(sig) => setDetailSignal(sig)}
+                    outcome={signalOutcome(s, trades, dismissedIds)}
+                    subLabel={
+                      (s.confidence ?? 0) >= 65
+                        ? "Near Watchlist — Paper Test"
+                        : "Paper Test Candidate"
+                    }
+                  />
+                ))
+              )}
             </div>
           )}
         </section>
