@@ -18,6 +18,7 @@ import OptionsChainPanel from "@/components/OptionsChainPanel";
 import SignalScannerPanel from "@/components/SignalScannerPanel";
 import ScannerUniversePanel from "@/components/ScannerUniversePanel";
 import ConfirmationProvidersPanel from "@/components/ConfirmationProvidersPanel";
+import TwoFactorPanel from "@/components/TwoFactorPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -87,6 +88,8 @@ export default function Settings() {
           </div>
         )}
       </section>
+
+      <TwoFactorPanel />
 
       <InviteUserPanel />
 
