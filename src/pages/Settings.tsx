@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldAlert, ShieldCheck } from "lucide-react";
+import { ShieldAlert, ShieldCheck, Monitor } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
@@ -89,6 +89,8 @@ export default function Settings() {
           </div>
         )}
       </section>
+
+      <ActiveSessionPanel />
 
       <TwoFactorPanel />
 
@@ -181,6 +183,69 @@ function ResetPaperAccountPanel() {
       >
         {resetting ? "Resetting…" : "Reset Paper Account"}
       </button>
+    </section>
+  );
+}
+
+function ActiveSessionPanel() {
+  const { user } = useAuth();
+  const [session, setSession] = useState<{ device_label: string; last_seen_at: string } | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("active_sessions")
+      .select("device_label,last_seen_at")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => setSession(data));
+  }, [user]);
+
+  function parseDevice(label: string): string {
+    // Label format: "platform · userAgent"
+    const parts = label.split(" · ");
+    const ua = parts[1] || parts[0] || "";
+    const platform = parts[0] || "";
+
+    const osMatch = ua.match(/(Windows|Mac OS X|Linux|Android|iOS|iPhone|iPad)/i);
+    const os = osMatch ? osMatch[0] : platform;
+
+    const browserMatch = ua.match(/(Chrome|Safari|Firefox|Edge|Opera)\//i);
+    const browser = browserMatch ? browserMatch[1] : "Browser";
+
+    return `${os} · ${browser}`;
+  }
+
+  function relativeTime(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const secs = Math.floor(diff / 1000);
+    if (secs < 60) return "Just now";
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }
+
+  if (!session) return null;
+
+  return (
+    <section className="glass-card p-5 space-y-3">
+      <h2 className="font-semibold flex items-center gap-2">
+        <Monitor className="h-4 w-4 text-primary" /> Active Session
+      </h2>
+      <div className="flex items-center justify-between rounded-md border border-border px-4 py-3">
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">{parseDevice(session.device_label)}</p>
+          <p className="text-xs text-muted-foreground">Last seen {relativeTime(session.last_seen_at)}</p>
+        </div>
+        <span className="inline-flex items-center rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-medium text-green-500 ring-1 ring-inset ring-green-500/20">
+          Active
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Only one device can be signed in at a time. Signing in elsewhere will sign this device out.
+      </p>
     </section>
   );
 }
