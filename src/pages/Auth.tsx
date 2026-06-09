@@ -24,7 +24,74 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (!loading && user) navigate("/app", { replace: true }); }, [user, loading, navigate]);
+  // MFA challenge state — set when a signed-in session needs a 2nd factor before /app.
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaBusy, setMfaBusy] = useState(false);
+
+  async function checkAndPrepareMfa(): Promise<boolean> {
+    try {
+      const { data: aal, error: aalErr } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalErr || !aal) return false;
+      if (aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const totp = factors?.totp?.find((f) => f.status === "verified");
+        if (!totp) return false;
+        const { data: chal, error: chalErr } = await supabase.auth.mfa.challenge({ factorId: totp.id });
+        if (chalErr || !chal) {
+          toast.error(chalErr?.message ?? "Could not start 2FA challenge");
+          await supabase.auth.signOut();
+          return false;
+        }
+        setMfaFactorId(totp.id);
+        setMfaChallengeId(chal.id);
+        setMfaCode("");
+        return true;
+      }
+    } catch {
+      // not required
+    }
+    return false;
+  }
+
+  useEffect(() => {
+    if (loading || !user) return;
+    if (mfaFactorId) return;
+    let cancelled = false;
+    (async () => {
+      const needs = await checkAndPrepareMfa();
+      if (cancelled) return;
+      if (!needs) navigate("/app", { replace: true });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading]);
+
+  async function submitMfa(e: React.FormEvent) {
+    e.preventDefault();
+    if (!mfaFactorId || !mfaChallengeId) return;
+    if (!/^\d{6}$/.test(mfaCode)) return toast.error("Enter the 6-digit code");
+    setMfaBusy(true);
+    const { error } = await supabase.auth.mfa.verify({
+      factorId: mfaFactorId,
+      challengeId: mfaChallengeId,
+      code: mfaCode,
+    });
+    setMfaBusy(false);
+    if (error) return toast.error(error.message);
+    setMfaFactorId(null);
+    setMfaChallengeId(null);
+    setMfaCode("");
+    navigate("/app", { replace: true });
+  }
+
+  async function cancelMfa() {
+    setMfaFactorId(null);
+    setMfaChallengeId(null);
+    setMfaCode("");
+    await supabase.auth.signOut();
+  }
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
@@ -118,6 +185,38 @@ export default function AuthPage() {
             </div>
             <span className="text-sm font-semibold">Tradingflow <span className="text-primary">101</span></span>
           </div>
+          {mfaFactorId ? (
+            <>
+              <h2 className="text-2xl font-semibold tracking-tight">Two-factor code</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Enter the 6-digit code from your authenticator app to finish signing in.
+              </p>
+              <form onSubmit={submitMfa} className="space-y-4 mt-6">
+                <div className="space-y-1.5">
+                  <Label htmlFor="mfa-code">Authenticator code</Label>
+                  <Input
+                    id="mfa-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    autoFocus
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    className="ticker-mono tracking-[0.4em] text-lg text-center"
+                  />
+                </div>
+                <Button type="submit" disabled={mfaBusy || mfaCode.length !== 6} className="w-full">
+                  {mfaBusy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Verify
+                </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={cancelMfa}>
+                  Cancel & sign out
+                </Button>
+              </form>
+            </>
+          ) : (
+          <>
           <h2 className="text-2xl font-semibold tracking-tight">Welcome to the desk</h2>
           <p className="text-sm text-muted-foreground mt-1">Sign in or create a new account.</p>
 
@@ -176,6 +275,8 @@ export default function AuthPage() {
               </form>
             </TabsContent>
           </Tabs>
+          </>
+          )}
         </div>
       </div>
     </div>
