@@ -231,7 +231,14 @@ export default function Dashboard() {
   // Top 5 ranked signals for the dashboard hero strip.
   const dashboardTop = useMemo(() => {
     if (!signals) return [];
-    const base = signals.filter((s) => !s.hidden && !s.is_demo && s.status === "LIVE" && !isExpired(s));
+    const base = signals.filter((s) => {
+      if (s.hidden || s.is_demo || s.status !== "LIVE" || isExpired(s)) return false;
+      if (hideZeroBid) {
+        const bid = getContractMeta(s)?.bid;
+        if (bid == null || bid === 0) return false;
+      }
+      return true;
+    });
     const ranked = rankSignals(base);
     const sorted = [...ranked].sort((a, b) => {
       const pa = sourcePriority(a.signal as any);
@@ -240,7 +247,7 @@ export default function Dashboard() {
       return b.rank.total - a.rank.total;
     });
     return sorted.slice(0, 5);
-  }, [signals]);
+  }, [signals, hideZeroBid]);
 
   // Fallback: 1-click approve (used when option chain is unavailable).
   async function fallbackApprove(s: Signal) {
