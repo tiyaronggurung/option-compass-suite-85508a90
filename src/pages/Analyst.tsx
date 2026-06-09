@@ -34,6 +34,8 @@ export default function Analyst() {
   const [selectedId, setSelectedId] = useState<string | null>(focusedId);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [sentiment, setSentiment] = useState<TickerSentiment | null>(null);
+  const [loadingSentiment, setLoadingSentiment] = useState(false);
 
   useEffect(() => {
     supabase.from("signals").select("*").order("created_at", { ascending: false }).limit(50)
