@@ -321,3 +321,98 @@ function Historical({ h }: { h: Analysis["historical"] }) {
     </div>
   );
 }
+
+function fmtCompact(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return n.toFixed(0);
+}
+
+function SentimentPanel({
+  sentiment, loading, signalDirection,
+}: { sentiment: TickerSentiment | null; loading: boolean; signalDirection: "CALL" | "PUT" }) {
+  if (loading) {
+    return (
+      <div className="glass-card p-4">
+        <Skeleton className="h-5 w-48 mb-3" />
+        <Skeleton className="h-3 w-full mb-2" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+  if (!sentiment || (sentiment.call_volume === 0 && sentiment.put_volume === 0)) {
+    return (
+      <div className="glass-card p-4">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-medium text-primary">
+          <Scale className="h-3.5 w-3.5" /> Call vs Put flow
+        </div>
+        <div className="mt-2 text-sm text-muted-foreground">No ticker-wide options volume available.</div>
+      </div>
+    );
+  }
+
+  const { call_volume, put_volume, call_premium, put_premium, put_call_ratio, call_share, put_share, sentiment: senti, reason } = sentiment;
+  const callPct = Math.round(call_share * 100);
+  const putPct = Math.round(put_share * 100);
+
+  const tone =
+    senti === "bullish" ? "bg-bull/15 text-bull border-bull/30"
+    : senti === "bearish" ? "bg-bear/15 text-bear border-bear/30"
+    : "bg-muted text-muted-foreground border-border";
+
+  const aligned =
+    (senti === "bullish" && signalDirection === "CALL") ||
+    (senti === "bearish" && signalDirection === "PUT");
+  const opposing =
+    (senti === "bullish" && signalDirection === "PUT") ||
+    (senti === "bearish" && signalDirection === "CALL");
+
+  return (
+    <div className="glass-card p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-medium text-primary">
+          <Scale className="h-3.5 w-3.5" /> Call vs Put flow (ticker-wide)
+        </div>
+        <Badge className={cn("border capitalize", tone)}>{senti}</Badge>
+      </div>
+
+      <div className="mt-3">
+        <div className="flex h-2 rounded-full overflow-hidden bg-secondary">
+          <div className="bg-bull" style={{ width: `${callPct}%` }} />
+          <div className="bg-bear" style={{ width: `${putPct}%` }} />
+        </div>
+        <div className="mt-1.5 flex justify-between text-[11px] ticker-mono text-muted-foreground">
+          <span className="text-bull">Calls {callPct}% · {fmtCompact(call_volume)}</span>
+          <span className="text-bear">{fmtCompact(put_volume)} · {putPct}% Puts</span>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Stat label="Put/Call ratio" value={put_call_ratio > 0 ? put_call_ratio.toFixed(2) : "—"} />
+        <Stat label="Call premium" value={`$${fmtCompact(call_premium)}`} tone="bull" />
+        <Stat label="Put premium" value={`$${fmtCompact(put_premium)}`} tone="bear" />
+        <Stat label="Total contracts" value={fmtCompact(call_volume + put_volume)} />
+      </div>
+
+      <div className="mt-3 text-xs text-muted-foreground leading-relaxed">
+        Ticker-wide flow looks <span className="text-foreground font-medium capitalize">{senti}</span> ({reason}).{" "}
+        {aligned && <span className="text-bull">This aligns with the {signalDirection} signal — broader market flow supports it.</span>}
+        {opposing && <span className="text-bear">This opposes the {signalDirection} signal — broader market flow is leaning the other way. Be cautious.</span>}
+        {!aligned && !opposing && <span>Mixed read vs the {signalDirection} signal — treat as a neutral confirmation.</span>}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "bull" | "bear" }) {
+  const cls = tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "text-foreground";
+  return (
+    <div className="rounded-md border border-border p-2.5">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className={cn("mt-1 text-sm font-semibold ticker-mono", cls)}>{value}</div>
+    </div>
+  );
+}
