@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Activity, RefreshCw, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeUpdatePaperMarks } from "@/lib/paperMarks";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -66,9 +67,7 @@ export default function MarkingEngineStatus() {
   async function runNow() {
     setRefreshing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("update-paper-marks", {
-        body: { trigger: "manual" },
-      });
+      const { data, error } = await invokeUpdatePaperMarks({ trigger: "manual" });
       if (error) throw error;
       toast.success(`Run complete: ${(data as any)?.status ?? "ok"}`);
       await load();
