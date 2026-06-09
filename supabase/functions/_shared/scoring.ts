@@ -10,7 +10,7 @@ import {
   type FinvizNewsSummary,
   type SectorPerf,
 } from "./finviz-extras.ts";
-import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED } from "./unusual-whales.ts";
+import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED, fetchDealerLevels, type DealerLevels } from "./unusual-whales.ts";
 import { scoreSocialIntelligence } from "./social-intel.ts";
 import { TAPI_CONFIGURED } from "./twitterapi.ts";
 
