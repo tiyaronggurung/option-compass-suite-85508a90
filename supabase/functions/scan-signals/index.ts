@@ -1078,9 +1078,11 @@ Deno.serve(async (req) => {
     }
   }
 
-  const status = errors.length === 0 ? "ok" : created > 0 ? "partial" : "error";
+  const status = budgetSkipped > 0 && created === 0
+    ? "budget_throttled"
+    : errors.length === 0 ? "ok" : created > 0 ? "partial" : "error";
   await admin.from("signal_scan_runs").insert({
-    status, trigger: auth.trigger, tickers_scanned: tickers,
+    status, trigger: auth.trigger, tickers_scanned: dueTickers,
     signals_created: created, skipped_count: skipped,
     would_have_created: wouldHave,
     candidates_scanned: candidates,
@@ -1096,6 +1098,8 @@ Deno.serve(async (req) => {
     watchlist_count: universe.watchlist_count,
     earnings_count: universe.earnings_count,
     skipped_due_to_cap: universe.skipped_due_to_cap,
+    skipped_due_to_cadence: cadenceSkipped,
+    skipped_due_to_budget: budgetSkipped,
   });
 
   return json({
