@@ -448,13 +448,14 @@ export function BuyOptionDialog(props: Props) {
 
             {/* Chain table */}
             <div className="rounded-md border overflow-hidden">
-              <div className="grid grid-cols-6 gap-2 px-3 py-2 text-xs font-semibold bg-muted/40 text-muted-foreground">
+              <div className="grid grid-cols-7 gap-2 px-3 py-2 text-xs font-semibold bg-muted/40 text-muted-foreground">
                 <div>Strike</div>
                 <div>Breakeven</div>
                 <div>To breakeven</div>
                 <div>Mark</div>
                 <div>Bid × Ask</div>
                 <div className="text-right">Ask</div>
+                <div className="text-right">Entry</div>
               </div>
               <div className="max-h-[260px] overflow-y-auto">
                 {rows.length === 0 && !loading && (
