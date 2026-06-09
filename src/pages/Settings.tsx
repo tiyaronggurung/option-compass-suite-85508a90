@@ -90,6 +90,8 @@ export default function Settings() {
         )}
       </section>
 
+      <ActiveSessionPanel />
+
       <TwoFactorPanel />
 
       <InviteUserPanel />
