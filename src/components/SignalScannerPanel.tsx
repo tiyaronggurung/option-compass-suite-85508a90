@@ -37,6 +37,8 @@ type Run = {
   threshold: number | null;
 };
 
+type CronJob = { jobname: string; schedule: string; active: boolean };
+
 
 type ProfileKey = "conservative" | "balanced" | "active_mvp" | "testing";
 const PROFILE_LABEL: Record<ProfileKey, string> = {
