@@ -1,10 +1,20 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, Smartphone, Loader2, Trash2 } from "lucide-react";
+import { ShieldCheck, Smartphone, Loader2, Trash2, Copy, Check, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Factor = { id: string; friendly_name?: string | null; status: string; factor_type: string };
 
