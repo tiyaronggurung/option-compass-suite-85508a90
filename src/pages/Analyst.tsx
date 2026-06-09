@@ -90,28 +90,18 @@ export default function Analyst() {
     setLoadingSentiment(true);
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("uw-ticker-sentiment", {
-          body: null,
-          method: "GET" as any,
-        } as any);
-        // Edge function expects ?ticker= query — fall back to direct fetch.
-        if (error || !data) {
-          const { data: anonSess } = await supabase.auth.getSession();
-          const token = anonSess.session?.access_token;
-          const url = `${(supabase as any).functionsUrl ?? ""}/uw-ticker-sentiment?ticker=${encodeURIComponent(ticker)}`;
-          const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-          if (res.ok) {
-            const j = await res.json();
-            if (!cancel) setSentiment(j);
-          }
-        } else if (!cancel) {
-          setSentiment(data as TickerSentiment);
+        const { data: sess } = await supabase.auth.getSession();
+        const token = sess.session?.access_token;
+        const base = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
+        const res = await fetch(`${base}/uw-ticker-sentiment?ticker=${encodeURIComponent(ticker)}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const j = await res.json();
+          if (!cancel) setSentiment(j as TickerSentiment);
         }
-      } catch {
-        // ignore
-      } finally {
-        if (!cancel) setLoadingSentiment(false);
-      }
+      } catch { /* ignore */ }
+      finally { if (!cancel) setLoadingSentiment(false); }
     })();
     return () => { cancel = true; };
   }, [selected?.ticker]);
