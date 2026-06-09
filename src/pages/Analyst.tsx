@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ArrowDownRight, ArrowUpRight, Brain, Loader2, RefreshCw, Sparkles, TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Brain, Loader2, RefreshCw, Sparkles, TrendingUp, AlertTriangle, BarChart3, Scale } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
