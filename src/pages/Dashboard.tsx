@@ -227,7 +227,9 @@ export default function Dashboard() {
     });
     const isZeroBid = (s: Signal) => {
       const bid = getContractMeta(s)?.bid;
-      return bid == null || bid === 0;
+      if (bid === 0) return true;
+      const reasons = Array.isArray(s.reasons) ? (s.reasons as string[]) : [];
+      return reasons.some((r) => /\$0\s*bid|ask\s*vs\s*\$0/i.test(String(r)));
     };
     const ordered = base.sort((a, b) => {
       const ra = rankSignal(a).total;
