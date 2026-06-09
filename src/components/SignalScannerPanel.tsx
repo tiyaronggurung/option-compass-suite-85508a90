@@ -74,12 +74,23 @@ export default function SignalScannerPanel() {
     }
   }
 
+  async function loadRuns() {
+    const { data } = await supabase.from("signal_scan_runs").select("*").order("ran_at", { ascending: false }).limit(10);
+    setRuns((data ?? []) as unknown as Run[]);
+  }
+
   async function loadCronJobs() {
-    const { data } = await supabase.rpc("get_cron_jobs").catch(() => ({ data: null }));
-    const jobs: CronJob[] = (data ?? []).filter((j: any) =>
-      (j.jobname as string).includes("scan-signals")
-    );
-    setCronJobs(jobs);
+    // Infer auto-scan health from recent cron-triggered runs rather than querying cron schema directly
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data } = await supabase.from("signal_scan_runs")
+      .select("ran_at, status, trigger")
+      .eq("trigger", "cron")
+      .gte("ran_at", fiveMinutesAgo)
+      .order("ran_at", { ascending: false })
+      .limit(1);
+    const lastCron = data?.[0] as any;
+    const isAuto = !!lastCron && lastCron.status !== "error";
+    setCronJobs(isAuto ? [{ jobname: "scan-signals-every-2-min", schedule: "*/2 * * * *", active: true }] : []);
   }
 
   useEffect(() => { if (isAdmin) { loadSettings(); loadRuns(); loadCronJobs(); } }, [isAdmin]);
