@@ -218,6 +218,20 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          {!closed && exitScore && (
+            <Badge
+              className={cn(
+                "border text-[10px] uppercase tracking-wider",
+                bandColor(exitScore.band).bg,
+                bandColor(exitScore.band).text,
+                bandColor(exitScore.band).border,
+                exitScore.band === "EXIT" && "animate-pulse",
+              )}
+              title={exitScore.headline}
+            >
+              Exit {exitScore.score}
+            </Badge>
+          )}
           {!closed && (
             <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
               <span className="relative flex h-1.5 w-1.5">
@@ -231,6 +245,7 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
             {trade.status}
           </Badge>
         </div>
+
       </div>
 
       {/* Safety banner */}
