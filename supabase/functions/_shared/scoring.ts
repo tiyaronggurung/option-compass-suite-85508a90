@@ -1123,6 +1123,7 @@ async function scoreTechnicalWithSnap(
   }
   const snap = fv.row;
   const perfWeek = parsePct(snap["Perf Week"]) ?? 0;
+  const sma20 = parsePct(snap["SMA20"]);
   const sma50 = parsePct(snap["SMA50"]) ?? 0;
   const sma200 = parsePct(snap["SMA200"]) ?? 0;
   const relVol = parseFloat(snap["Rel Volume"] ?? "1") || 1;
@@ -1140,23 +1141,96 @@ async function scoreTechnicalWithSnap(
     sectorNote = ` · ${sectorPerf.sector} ${sectorPerf.perf_week_pct >= 0 ? "+" : ""}${sectorPerf.perf_week_pct.toFixed(1)}%/wk`;
   }
 
+  // ---- Finviz technical sub-signals (each ±2 max, transparent in details) ----
+  const extras: Record<string, unknown> = {};
+  const dirMul = dir === "CALL" ? 1 : -1;
+
+  // 1. SMA stack alignment: price > SMA20 > SMA50 > SMA200 (or all negative for PUT)
+  let smaStackNudge = 0;
+  if (sma20 != null) {
+    const allBull = sma20 > 0 && sma50 > 0 && sma200 > 0;
+    const allBear = sma20 < 0 && sma50 < 0 && sma200 < 0;
+    if (allBull) smaStackNudge = 2 * dirMul;
+    else if (allBear) smaStackNudge = -2 * dirMul;
+    extras.sma20 = sma20;
+    extras.sma_stack = allBull ? "bullish" : allBear ? "bearish" : "mixed";
+  }
+
+  // 2. RSI: penalize overbought entries on CALL / oversold on PUT; reward healthy momentum
+  const rsi = parseFloat(snap["RSI"] ?? "");
+  let rsiNudge = 0;
+  if (Number.isFinite(rsi) && rsi > 0) {
+    if (dir === "CALL") {
+      if (rsi >= 75) rsiNudge = -2;       // overbought
+      else if (rsi >= 50 && rsi <= 65) rsiNudge = 2; // healthy bullish momentum
+      else if (rsi < 30) rsiNudge = -1;   // oversold, weak for calls
+    } else {
+      if (rsi <= 25) rsiNudge = -2;       // oversold, weak for puts
+      else if (rsi >= 35 && rsi <= 50) rsiNudge = 2; // healthy bearish momentum
+      else if (rsi > 70) rsiNudge = -1;
+    }
+    extras.rsi = rsi;
+  }
+
+  // 3. 52W proximity: breakout/breakdown setups
+  const hi52 = parsePct(snap["52W High"]);   // typically negative (% from high)
+  const lo52 = parsePct(snap["52W Low"]);    // typically positive (% above low)
+  let proxNudge = 0;
+  if (dir === "CALL" && hi52 != null && hi52 >= -5) proxNudge = 2;      // within 5% of 52W high
+  if (dir === "PUT"  && lo52 != null && lo52 <= 5)  proxNudge = 2;      // within 5% of 52W low
+  if (hi52 != null) extras.dist_52w_high_pct = hi52;
+  if (lo52 != null) extras.dist_52w_low_pct = lo52;
+
+  // 4. Pattern recognition (Finviz Pattern field)
+  const pattern = (snap["Pattern"] ?? "").trim();
+  let patternNudge = 0;
+  if (pattern) {
+    const p = pattern.toLowerCase();
+    const bullishPatterns = ["channel up", "triangle ascending", "wedge up", "double bottom", "support", "horizontal s/r"];
+    const bearishPatterns = ["channel down", "triangle descending", "wedge down", "double top", "resistance", "head and shoulders"];
+    const isBull = bullishPatterns.some((b) => p.includes(b));
+    const isBear = bearishPatterns.some((b) => p.includes(b));
+    if (isBull) patternNudge = 2 * dirMul;
+    else if (isBear) patternNudge = -2 * dirMul;
+    extras.pattern = pattern;
+    extras.pattern_bias = isBull ? "bullish" : isBear ? "bearish" : "neutral";
+  }
+
+  const techExtrasTotal = smaStackNudge + rsiNudge + proxNudge + patternNudge;
+  blended = clamp100(blended + techExtrasTotal);
+
   // Trendline sub-signal (capped via clamp100). No weight change, no new component.
   blended = clamp100(blended + tl.adjustment);
+
+  const extrasNotes: string[] = [];
+  if (extras.sma_stack) extrasNotes.push(`stack:${extras.sma_stack}`);
+  if (extras.rsi) extrasNotes.push(`RSI ${(extras.rsi as number).toFixed(0)}`);
+  if (extras.pattern) extrasNotes.push(`${extras.pattern}`);
+  const extrasNote = extrasNotes.length ? ` · ${extrasNotes.join(" · ")}` : "";
 
   return {
     score: blended,
     configured: true,
     source: sectorPerf ? "alpaca+finviz+sector" : "alpaca+finviz",
-    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}${tlNote}`,
+    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}${extrasNote}${tlNote}`,
     details: {
       perf_week: perfWeek, sma50, sma200, rel_volume: relVol,
       sector: sectorPerf?.sector ?? null,
       sector_perf_week_pct: sectorPerf?.perf_week_pct ?? null,
       sector_nudge: sectorNudge,
       trendline: tl,
+      technical_extras: {
+        ...extras,
+        sma_stack_nudge: smaStackNudge,
+        rsi_nudge: rsiNudge,
+        proximity_nudge: proxNudge,
+        pattern_nudge: patternNudge,
+        total_extra_nudge: techExtrasTotal,
+      },
     },
   };
 }
+
 
 
 export function tierFor(confidence: number): "elite" | "strong" | "watchlist" | "rejected" {
