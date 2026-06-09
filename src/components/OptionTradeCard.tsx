@@ -121,8 +121,9 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
     | { kind: "target" | "stop" | "expired"; label: string }
     | null
   >(null);
+  const [alertStatusRaw, setAlertStatusRaw] = useState<string | null>(null);
   useEffect(() => {
-    if (closed) { setAlertHint(null); return; }
+    if (closed) { setAlertHint(null); setAlertStatusRaw(null); return; }
     let cancelled = false;
     async function load() {
       const { data } = await (supabase as any)
@@ -134,6 +135,7 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
         .maybeSingle();
       if (cancelled) return;
       const s = data?.alert_status as string | undefined;
+      setAlertStatusRaw(s ?? null);
       if (s === "hit_t3" || s === "hit_t2" || s === "hit_t1") {
         setAlertHint({ kind: "target", label: s === "hit_t3" ? "Target 3 hit" : s === "hit_t2" ? "Target 2 hit" : "Target 1 hit" });
       } else if (s === "stopped") {
@@ -156,6 +158,54 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
       .subscribe();
     return () => { cancelled = true; supabase.removeChannel(ch); };
   }, [trade.id, closed]);
+
+  // ---- Exit Score engine -------------------------------------------------
+  // Tracks trailing peak + last marks per trade in refs (no re-renders).
+  const peakRef = useRef<number | null>(null);
+  const marksRef = useRef<number[]>([]);
+  const lastToastAtRef = useRef<number>(0);
+  const [exitScore, setExitScore] = useState<ExitScore | null>(null);
+
+  useEffect(() => {
+    if (closed || currentPremium == null) return;
+    // Update peak
+    peakRef.current = peakRef.current == null
+      ? currentPremium
+      : Math.max(peakRef.current, currentPremium);
+    // Update recent marks (keep last 5)
+    const last = marksRef.current[marksRef.current.length - 1];
+    if (last !== currentPremium) {
+      marksRef.current = [...marksRef.current, currentPremium].slice(-5);
+    }
+    const optType = (String(t.option_type ?? trade.direction ?? "").toUpperCase() === "PUT" ? "PUT" : "CALL") as "CALL" | "PUT";
+    const score = computeExitScore({
+      optionType: optType,
+      entryPremium,
+      currentPremium,
+      peakPremium: peakRef.current,
+      recentMarks: marksRef.current,
+      plPct,
+      dte: dteFromExpiry(t.expiry),
+      theta: t.theta != null ? Number(t.theta) : null,
+      alertStatus: alertStatusRaw,
+    });
+    setExitScore(score);
+
+    // Toast on EXIT band, with 30-min per-trade cooldown
+    if (score.band === "EXIT") {
+      const now = Date.now();
+      const cooldownMs = 30 * 60 * 1000;
+      if (now - lastToastAtRef.current >= cooldownMs) {
+        lastToastAtRef.current = now;
+        toast.warning(`${trade.ticker}: ${score.headline}`, {
+          description: `Exit Score ${score.score}/100 · ${contracts} contract${contracts === 1 ? "" : "s"}`,
+          duration: 8000,
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPremium, alertStatusRaw, closed]);
+
 
 
   return (
