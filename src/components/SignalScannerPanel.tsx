@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, PlayCircle, Radar, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, PlayCircle, Radar, ChevronDown, ChevronRight, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 type SkippedCandidate = { ticker: string; direction: string; score: number; reasons: string[] };
@@ -37,6 +37,8 @@ type Run = {
   threshold: number | null;
 };
 
+type CronJob = { jobname: string; schedule: string; active: boolean };
+
 
 type ProfileKey = "conservative" | "balanced" | "active_mvp" | "testing";
 const PROFILE_LABEL: Record<ProfileKey, string> = {
@@ -56,6 +58,7 @@ export default function SignalScannerPanel() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [forceRun, setForceRun] = useState(false);
+  const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -76,11 +79,25 @@ export default function SignalScannerPanel() {
     setRuns((data ?? []) as unknown as Run[]);
   }
 
-  useEffect(() => { if (isAdmin) { loadSettings(); loadRuns(); } }, [isAdmin]);
+  async function loadCronJobs() {
+    // Infer auto-scan health from recent cron-triggered runs rather than querying cron schema directly
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data } = await supabase.from("signal_scan_runs")
+      .select("ran_at, status, trigger")
+      .eq("trigger", "cron")
+      .gte("ran_at", fiveMinutesAgo)
+      .order("ran_at", { ascending: false })
+      .limit(1);
+    const lastCron = data?.[0] as any;
+    const isAuto = !!lastCron && lastCron.status !== "error";
+    setCronJobs(isAuto ? [{ jobname: "scan-signals-every-2-min", schedule: "*/2 * * * *", active: true }] : []);
+  }
+
+  useEffect(() => { if (isAdmin) { loadSettings(); loadRuns(); loadCronJobs(); } }, [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) return;
-    const id = setInterval(loadRuns, 30_000);
+    const id = setInterval(() => { loadRuns(); loadCronJobs(); }, 30_000);
     return () => clearInterval(id);
   }, [isAdmin]);
 
@@ -133,6 +150,15 @@ export default function SignalScannerPanel() {
         <div>
           <h2 className="font-semibold flex items-center gap-2">
             <Radar className="h-4 w-4 text-primary" /> Signal Scanner
+            {cronJobs.some((j) => j.active) ? (
+              <Badge variant="outline" className="text-bull border-bull/40 text-[10px] gap-1">
+                <CheckCircle2 className="h-3 w-3" /> Auto-scan on
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground border-border text-[10px]">
+                Auto-scan off / idle
+              </Badge>
+            )}
           </h2>
           <p className="text-xs text-muted-foreground">Backend Alpaca scanner. Runs every 2 min during US market hours (tiered cadence keeps providers within budget).</p>
         </div>
