@@ -1,10 +1,20 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, Smartphone, Loader2, Trash2 } from "lucide-react";
+import { ShieldCheck, Smartphone, Loader2, Trash2, Copy, Check, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Factor = { id: string; friendly_name?: string | null; status: string; factor_type: string };
 
@@ -15,6 +25,9 @@ export default function TwoFactorPanel() {
   const [pending, setPending] = useState<{ factorId: string; qr: string; secret: string } | null>(null);
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [regenerateOpen, setRegenerateOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -84,6 +97,37 @@ export default function TwoFactorPanel() {
     refresh();
   }
 
+  async function copySecret() {
+    if (!pending) return;
+    try {
+      await navigator.clipboard.writeText(pending.secret);
+      setCopied(true);
+      toast.success("Secret copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy — select and copy manually");
+    }
+  }
+
+  async function regenerate() {
+    if (!pending) return;
+    setRegenerating(true);
+    await supabase.auth.mfa.unenroll({ factorId: pending.factorId });
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: `Authenticator ${new Date().toISOString().slice(0, 10)}`,
+    });
+    setRegenerating(false);
+    setRegenerateOpen(false);
+    if (error || !data) {
+      setPending(null);
+      return toast.error(error?.message ?? "Could not regenerate secret");
+    }
+    setPending({ factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret });
+    setCode("");
+    toast.success("New QR code and secret generated");
+  }
+
   return (
     <section className="glass-card p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -104,8 +148,14 @@ export default function TwoFactorPanel() {
         <div className="text-xs text-muted-foreground">Loading…</div>
       ) : pending ? (
         <div className="space-y-3 rounded-md border border-border p-4 bg-background/40">
-          <div className="text-sm font-medium flex items-center gap-2">
-            <Smartphone className="h-4 w-4 text-primary" /> Scan this QR code
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-primary" /> Scan this QR code
+            </div>
+            <Button onClick={() => setRegenerateOpen(true)} disabled={regenerating} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              {regenerating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+              Re-scan / regenerate
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
             Open your authenticator app and scan the QR. Or paste the secret manually. Then enter the 6-digit code below.
@@ -113,7 +163,13 @@ export default function TwoFactorPanel() {
           <div className="flex flex-col sm:flex-row gap-4 items-start">
             <img src={pending.qr} alt="2FA QR code" className="h-40 w-40 rounded bg-white p-2" />
             <div className="space-y-2 flex-1 min-w-0">
-              <Label className="text-xs text-muted-foreground">Manual entry secret</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Manual entry secret</Label>
+                <Button onClick={copySecret} variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground">
+                  {copied ? <Check className="h-3.5 w-3.5 mr-1 text-bull" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
               <Input readOnly value={pending.secret} className="ticker-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
               <Label className="text-xs text-muted-foreground pt-2 block">6-digit code</Label>
               <Input
@@ -134,6 +190,23 @@ export default function TwoFactorPanel() {
               </div>
             </div>
           </div>
+          <AlertDialog open={regenerateOpen} onOpenChange={setRegenerateOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Regenerate QR code and secret?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will invalidate the current QR code and secret. Any authenticator app entries using the old secret will stop working. Continue only if the QR scan failed or you want a fresh secret.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setRegenerateOpen(false)}>Keep current</AlertDialogCancel>
+                <AlertDialogAction onClick={regenerate} disabled={regenerating}>
+                  {regenerating && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                  Regenerate
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       ) : isEnabled ? (
         <div className="space-y-2">
