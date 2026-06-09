@@ -15,6 +15,7 @@ import {
   type TechnicalSnapshot,
 } from "../_shared/lifecycle.ts";
 import { runConfirmationSweep } from "../_shared/crossSourceMatch.ts";
+import { bumpBudget, filterByCadence, markScanned, DEFAULT_CAPS, type Provider } from "../_shared/budget.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -119,6 +120,11 @@ function clamp(v: number, lo = -1, hi = 1) { return Math.max(lo, Math.min(hi, v)
 
 // ---------- Alpaca ----------
 async function fetchBars(symbol: string): Promise<Bar[]> {
+  // Budget guard: skip Alpaca calls once today's cap is exhausted
+  const budget = await bumpBudget(admin, "alpaca");
+  if (!budget.allowed) {
+    throw new Error(`alpaca_budget_exhausted (${budget.calls}/${budget.cap})`);
+  }
   const end = new Date();
   const start = new Date(end.getTime() - 5 * 24 * 60 * 60 * 1000);
   const params = new URLSearchParams({
