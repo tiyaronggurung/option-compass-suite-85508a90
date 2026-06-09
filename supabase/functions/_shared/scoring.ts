@@ -893,15 +893,21 @@ export async function scoreInstitutional(
   // Options Flow priority: Unusual Whales (institutional) → Finviz (aggregate proxy) → neutral.
   // UW runs in parallel with the Finviz adapter so we always have the fallback ready and
   // can store side-by-side metadata for transparency. UW.state !== "active" → fallback used.
-  const [uwFlow, finvizFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
+  // Spot price hint from Finviz snapshot for dealer-levels distance calculations.
+  const spotHint = fv.row?.["Price"] ? parseFloat(fv.row["Price"]) : null;
+  const [uwFlow, finvizFlow, dealerLevels, news, sentiment, volatility, regime, finvizFlowProxy] = await Promise.all([
     UW_CONFIGURED ? scoreOptionsFlowUnusualWhales(ticker, direction) : Promise.resolve(null),
     scoreOptionsFlowFinviz(ticker, direction, fv, extras.insider.data),
-    scoreTechnicalWithSnap(ticker, baseTrendScore, fv, sectorPerf, direction),
+    UW_CONFIGURED ? fetchDealerLevels(ticker, direction, spotHint) : Promise.resolve(null as DealerLevels | null),
     scoreNews(ticker, direction, extras.news.data),
     scoreSentiment(ticker, direction),
     scoreVolatilityFinviz(ticker, fv),
     getRegime(admin),
+    Promise.resolve(null), // placeholder kept for tuple width safety
   ]);
+  // technical is computed after dealerLevels resolves so its nudge can be applied.
+  const technical = await scoreTechnicalWithSnap(ticker, baseTrendScore, fv, sectorPerf, direction, dealerLevels);
+
 
   // Build the unified options_flow ComponentScore.
   // Active UW → use UW score. UW failed/missing → use Finviz proxy. Both missing → neutral 50.
