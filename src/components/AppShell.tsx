@@ -66,6 +66,7 @@ export default function AppShell() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   useBrowserPush();
+  useSingleSession();
 
   const handleSignOut = async () => {
     await signOut();
