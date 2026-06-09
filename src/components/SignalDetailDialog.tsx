@@ -393,6 +393,61 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
   );
 }
 
+function DealerLevelsTransparency({ details }: { details: any }) {
+  if (!details || typeof details !== "object") return null;
+  if (details.state && details.state !== "active") {
+    return (
+      <div className="mt-1.5 ml-24 pl-2 border-l border-border/60 text-[10px] text-muted-foreground">
+        Dealer levels unavailable ({details.state}){details.reason ? ` — ${details.reason}` : ""}
+      </div>
+    );
+  }
+  const spot = Number(details.spot ?? 0);
+  const netGex = Number(details.net_gex ?? 0);
+  const flip = Number(details.gamma_flip ?? 0);
+  const callWall = Number(details.call_wall ?? 0);
+  const putWall = Number(details.put_wall ?? 0);
+  const maxPain = Number(details.max_pain ?? 0);
+  const expiry = String(details.max_pain_expiry ?? "");
+  const human = String(details.human_reason ?? "");
+
+  const fmt = (n: number) => n >= 1_000 ? `$${(n / 1_000).toFixed(1)}K` : `$${n.toFixed(2)}`;
+  const fmtStrike = (n: number) => (n > 0 ? `$${n.toFixed(2)}` : "—");
+
+  return (
+    <div className="mt-1.5 ml-24 pl-2 border-l border-border/60 space-y-1">
+      <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5">
+        <span className="text-bull/90">UW Dealer Levels</span>
+        {spot > 0 && <span>Spot <span className="ticker-mono text-foreground/80">${spot.toFixed(2)}</span></span>}
+        <span>Net GEX <span className={cn("ticker-mono", netGex >= 0 ? "text-bull" : "text-bear")}>{fmt(netGex)}</span></span>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {flip > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-primary/10 text-[10px] text-primary ticker-mono">
+            Γ-Flip {fmtStrike(flip)}
+          </span>
+        )}
+        {callWall > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-[10px] text-emerald-400 ticker-mono">
+            Call Wall {fmtStrike(callWall)}
+          </span>
+        )}
+        {putWall > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-[10px] text-red-400 ticker-mono">
+            Put Wall {fmtStrike(putWall)}
+          </span>
+        )}
+        {maxPain > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-[10px] text-amber-400 ticker-mono">
+            Max Pain {fmtStrike(maxPain)}{expiry ? ` · ${expiry.slice(0, 10)}` : ""}
+          </span>
+        )}
+      </div>
+      {human && <div className="text-[10px] text-muted-foreground/90">↳ {human}</div>}
+    </div>
+  );
+}
+
 function OptionsFlowTransparency({ details, source }: { details: any; source?: string }) {
   if (!details || typeof details !== "object") return null;
   const provider = String(details.provider ?? source ?? "");
