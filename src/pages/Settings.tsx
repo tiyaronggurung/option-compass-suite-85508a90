@@ -140,6 +140,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="pt-4 pb-1 border-b border-border/60">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
+      {subtitle && <p className="text-xs text-muted-foreground/70 mt-0.5">{subtitle}</p>}
+    </div>
+  );
+}
+
 function ResetPaperAccountPanel() {
   const [resetting, setResetting] = useState(false);
 
