@@ -187,17 +187,19 @@ export default function Dashboard() {
         const tags = deriveTags(s, watchSet);
         if (!tags.includes(tagFilter)) return false;
       }
-      if (hideZeroBid) {
-        const bid = getContractMeta(s)?.bid;
-        if (bid == null || bid === 0) return false;
-      }
       return true;
     });
-    if (lifecycleFilter === "fresh") {
-      return base.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }
-    return sortSignalsBySourcePriority(base);
-  }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter, hideZeroBid]);
+    // Push zero-bid (unquotable) signals to the bottom while preserving primary order.
+    const isZeroBid = (s: Signal) => {
+      const bid = getContractMeta(s)?.bid;
+      return bid == null || bid === 0;
+    };
+    const ordered =
+      lifecycleFilter === "fresh"
+        ? base.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        : sortSignalsBySourcePriority(base);
+    return [...ordered].sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
+  }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const openTrades = trades.filter((t) => t.status === "OPEN");
@@ -231,23 +233,23 @@ export default function Dashboard() {
   // Top 5 ranked signals for the dashboard hero strip.
   const dashboardTop = useMemo(() => {
     if (!signals) return [];
-    const base = signals.filter((s) => {
-      if (s.hidden || s.is_demo || s.status !== "LIVE" || isExpired(s)) return false;
-      if (hideZeroBid) {
-        const bid = getContractMeta(s)?.bid;
-        if (bid == null || bid === 0) return false;
-      }
-      return true;
-    });
+    const base = signals.filter((s) => !s.hidden && !s.is_demo && s.status === "LIVE" && !isExpired(s));
     const ranked = rankSignals(base);
+    const isZeroBid = (s: Signal) => {
+      const bid = getContractMeta(s)?.bid;
+      return bid == null || bid === 0;
+    };
     const sorted = [...ranked].sort((a, b) => {
+      const za = Number(isZeroBid(a.signal));
+      const zb = Number(isZeroBid(b.signal));
+      if (za !== zb) return za - zb;
       const pa = sourcePriority(a.signal as any);
       const pb = sourcePriority(b.signal as any);
       if (pa !== pb) return pa - pb;
       return b.rank.total - a.rank.total;
     });
     return sorted.slice(0, 5);
-  }, [signals, hideZeroBid]);
+  }, [signals]);
 
   // Fallback: 1-click approve (used when option chain is unavailable).
   async function fallbackApprove(s: Signal) {

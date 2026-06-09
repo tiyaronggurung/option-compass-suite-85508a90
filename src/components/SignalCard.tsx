@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { getContractMeta } from "@/lib/rankSignals";
 import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
@@ -145,6 +146,22 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
               ) : (
                 <span>· No contract yet</span>
               )}
+              {(() => {
+                const meta = getContractMeta(signal) as any;
+                const bid = meta?.bid;
+                const ask = meta?.ask;
+                if (bid == null && ask == null) return null;
+                const zero = bid == null || bid === 0;
+                return (
+                  <span
+                    className={cn("ticker-mono", zero ? "text-warn" : "text-muted-foreground")}
+                    title={zero ? "Zero bid — quote unavailable, pushed to bottom of list" : "Current bid × ask"}
+                  >
+                    · Bid×Ask ${bid != null ? fmtPrice(Number(bid)) : "—"} × ${ask != null ? fmtPrice(Number(ask)) : "—"}
+                    {zero && <span className="ml-1 text-[10px]">no bid</span>}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         </div>
