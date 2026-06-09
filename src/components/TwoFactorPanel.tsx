@@ -148,8 +148,14 @@ export default function TwoFactorPanel() {
         <div className="text-xs text-muted-foreground">Loading…</div>
       ) : pending ? (
         <div className="space-y-3 rounded-md border border-border p-4 bg-background/40">
-          <div className="text-sm font-medium flex items-center gap-2">
-            <Smartphone className="h-4 w-4 text-primary" /> Scan this QR code
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-primary" /> Scan this QR code
+            </div>
+            <Button onClick={() => setRegenerateOpen(true)} disabled={regenerating} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              {regenerating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+              Re-scan / regenerate
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
             Open your authenticator app and scan the QR. Or paste the secret manually. Then enter the 6-digit code below.
@@ -157,7 +163,13 @@ export default function TwoFactorPanel() {
           <div className="flex flex-col sm:flex-row gap-4 items-start">
             <img src={pending.qr} alt="2FA QR code" className="h-40 w-40 rounded bg-white p-2" />
             <div className="space-y-2 flex-1 min-w-0">
-              <Label className="text-xs text-muted-foreground">Manual entry secret</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Manual entry secret</Label>
+                <Button onClick={copySecret} variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground">
+                  {copied ? <Check className="h-3.5 w-3.5 mr-1 text-bull" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
               <Input readOnly value={pending.secret} className="ticker-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
               <Label className="text-xs text-muted-foreground pt-2 block">6-digit code</Label>
               <Input
@@ -178,6 +190,23 @@ export default function TwoFactorPanel() {
               </div>
             </div>
           </div>
+          <AlertDialog open={regenerateOpen} onOpenChange={setRegenerateOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Regenerate QR code and secret?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will invalidate the current QR code and secret. Any authenticator app entries using the old secret will stop working. Continue only if the QR scan failed or you want a fresh secret.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setRegenerateOpen(false)}>Keep current</AlertDialogCancel>
+                <AlertDialogAction onClick={regenerate} disabled={regenerating}>
+                  {regenerating && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                  Regenerate
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       ) : isEnabled ? (
         <div className="space-y-2">
