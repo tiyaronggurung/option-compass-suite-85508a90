@@ -27,6 +27,23 @@ type Analysis = {
   model: string | null;
 };
 
+type TickerSentiment = {
+  ticker: string;
+  call_volume: number;
+  put_volume: number;
+  call_premium: number;
+  put_premium: number;
+  put_call_ratio: number;
+  call_share: number;
+  put_share: number;
+  avg_30d_call_volume: number;
+  avg_30d_put_volume: number;
+  sentiment: "bullish" | "bearish" | "neutral";
+  reason: string;
+  as_of: string | null;
+};
+
+
 export default function Analyst() {
   const [params] = useSearchParams();
   const focusedId = params.get("signal");
