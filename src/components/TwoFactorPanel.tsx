@@ -25,6 +25,9 @@ export default function TwoFactorPanel() {
   const [pending, setPending] = useState<{ factorId: string; qr: string; secret: string } | null>(null);
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [regenerateOpen, setRegenerateOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   async function refresh() {
     setLoading(true);
