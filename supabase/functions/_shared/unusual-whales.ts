@@ -254,3 +254,164 @@ export async function scoreOptionsFlowUnusualWhales(
 }
 
 export const UW_CONFIGURED = !!UW_KEY;
+
+// ============================================================
+// Dealer Levels: GEX (gamma exposure) + Max Pain
+// Additive sub-signal for technical component (±2 max nudge).
+// Safe-by-design: never throws; returns neutral on any failure.
+// Does NOT change weights, gate, tier thresholds, or guest flows.
+// ============================================================
+
+export type DealerLevels = {
+  state: UWState;
+  source: "unusual_whales";
+  spot_price: number | null;
+  net_gex: number | null;
+  gamma_flip_strike: number | null;
+  call_wall: number | null;
+  put_wall: number | null;
+  max_pain: number | null;
+  max_pain_expiry: string | null;
+  nudge: number;
+  reason_code: string;
+  human_reason: string;
+};
+
+function neutralLevels(state: UWState, code: string, reason: string): DealerLevels {
+  return {
+    state, source: "unusual_whales",
+    spot_price: null, net_gex: null, gamma_flip_strike: null,
+    call_wall: null, put_wall: null,
+    max_pain: null, max_pain_expiry: null,
+    nudge: 0, reason_code: code, human_reason: reason,
+  };
+}
+
+export async function fetchDealerLevels(
+  ticker: string,
+  direction: "CALL" | "PUT",
+  spotHint?: number | null,
+): Promise<DealerLevels> {
+  if (!UW_KEY) return neutralLevels("missing_key", "uw_missing_key", "UW key not configured");
+
+  const [gexRes, maxPainRes] = await Promise.all([
+    uwFetch(`/stock/${encodeURIComponent(ticker)}/greek-exposure`, 6000),
+    uwFetch(`/stock/${encodeURIComponent(ticker)}/max-pain`, 6000),
+  ]);
+
+  let spot: number | null = spotHint ?? null;
+  let netGex: number | null = null;
+  let flipStrike: number | null = null;
+  let callWall: number | null = null;
+  let putWall: number | null = null;
+
+  if (gexRes.state === "active") {
+    const rows: any[] = Array.isArray(gexRes.data?.data) ? gexRes.data.data
+      : Array.isArray(gexRes.data) ? gexRes.data
+      : [];
+    if (rows.length > 0) {
+      const first = rows[0] ?? {};
+      const spotFromRow = num(first.price ?? first.spot ?? first.underlying_price);
+      if (!spot && spotFromRow > 0) spot = spotFromRow;
+
+      let netSum = 0;
+      let topPos = { strike: 0, val: 0 };
+      let topNeg = { strike: 0, val: 0 };
+      const parsed = rows.map((r) => ({
+        strike: num(r.strike ?? r.strike_price),
+        net: num(r.net_gex ?? r.gex ?? r.gamma_exposure ?? (num(r.call_gex) - num(r.put_gex))),
+      })).filter((r) => r.strike > 0).sort((a, b) => a.strike - b.strike);
+
+      for (const r of parsed) {
+        netSum += r.net;
+        if (r.net > topPos.val) topPos = { strike: r.strike, val: r.net };
+        if (r.net < topNeg.val) topNeg = { strike: r.strike, val: r.net };
+      }
+      netGex = netSum;
+      if (spot && spot > 0) {
+        callWall = topPos.strike > spot ? topPos.strike : null;
+        putWall = topNeg.strike < spot && topNeg.strike > 0 ? topNeg.strike : null;
+      } else {
+        callWall = topPos.strike || null;
+        putWall = topNeg.strike || null;
+      }
+      let cum = 0;
+      for (let i = 0; i < parsed.length; i++) {
+        const prev = cum;
+        cum += parsed[i].net;
+        if (i > 0 && Math.sign(prev) !== Math.sign(cum) && Math.sign(cum) !== 0) {
+          flipStrike = parsed[i].strike;
+          break;
+        }
+      }
+    }
+  }
+
+  let maxPain: number | null = null;
+  let maxPainExpiry: string | null = null;
+  if (maxPainRes.state === "active") {
+    const d = maxPainRes.data;
+    const rows: any[] = Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
+    if (rows.length > 0) {
+      const sorted = rows
+        .map((r) => ({ expiry: String(r.expiry ?? r.expiration ?? ""), mp: num(r.max_pain ?? r.strike) }))
+        .filter((r) => r.expiry && r.mp > 0)
+        .sort((a, b) => a.expiry.localeCompare(b.expiry));
+      if (sorted.length > 0) {
+        maxPain = sorted[0].mp;
+        maxPainExpiry = sorted[0].expiry;
+      }
+    } else if (d?.max_pain) {
+      maxPain = num(d.max_pain);
+      maxPainExpiry = d.expiry ?? d.expiration ?? null;
+    }
+  }
+
+  let nudge = 0;
+  const notes: string[] = [];
+
+  if (spot && callWall && direction === "CALL") {
+    const distPct = ((callWall - spot) / spot) * 100;
+    if (distPct > 0 && distPct < 1.5) { nudge -= 1; notes.push(`call wall ${callWall} just above (${distPct.toFixed(1)}%)`); }
+    else if (distPct >= 3) { nudge += 1; notes.push(`call wall ${callWall} ${distPct.toFixed(1)}% away`); }
+  }
+  if (spot && putWall && direction === "PUT") {
+    const distPct = ((spot - putWall) / spot) * 100;
+    if (distPct > 0 && distPct < 1.5) { nudge -= 1; notes.push(`put wall ${putWall} just below (${distPct.toFixed(1)}%)`); }
+    else if (distPct >= 3) { nudge += 1; notes.push(`put wall ${putWall} ${distPct.toFixed(1)}% away`); }
+  }
+  if (spot && flipStrike) {
+    const above = spot > flipStrike;
+    if (direction === "CALL" && above) { nudge += 1; notes.push(`spot above gamma flip ${flipStrike}`); }
+    if (direction === "PUT" && !above) { nudge += 1; notes.push(`spot below gamma flip ${flipStrike}`); }
+  }
+  if (spot && maxPain) {
+    const diffPct = ((maxPain - spot) / spot) * 100;
+    if (direction === "CALL" && diffPct > 1.5) { nudge += 1; notes.push(`max pain ${maxPain} above spot (+${diffPct.toFixed(1)}%)`); }
+    if (direction === "PUT"  && diffPct < -1.5) { nudge += 1; notes.push(`max pain ${maxPain} below spot (${diffPct.toFixed(1)}%)`); }
+    if (direction === "CALL" && diffPct < -2) { nudge -= 1; notes.push(`max pain pulls down (${diffPct.toFixed(1)}%)`); }
+    if (direction === "PUT"  && diffPct > 2)  { nudge -= 1; notes.push(`max pain pulls up (+${diffPct.toFixed(1)}%)`); }
+  }
+  nudge = Math.max(-2, Math.min(2, nudge));
+
+  const state: UWState =
+    gexRes.state === "active" || maxPainRes.state === "active" ? "active"
+    : gexRes.state === "auth_failed" || maxPainRes.state === "auth_failed" ? "auth_failed"
+    : gexRes.state === "rate_limited" || maxPainRes.state === "rate_limited" ? "rate_limited"
+    : "degraded";
+
+  const human = notes.length
+    ? `Dealer levels: ${notes.join(" · ")}`
+    : (state === "active" ? "Dealer levels neutral" : `Dealer levels ${state}`);
+
+  return {
+    state, source: "unusual_whales",
+    spot_price: spot, net_gex: netGex, gamma_flip_strike: flipStrike,
+    call_wall: callWall, put_wall: putWall,
+    max_pain: maxPain, max_pain_expiry: maxPainExpiry,
+    nudge,
+    reason_code: nudge > 0 ? "dealer_levels_aligned" : nudge < 0 ? "dealer_levels_opposing" : "dealer_levels_neutral",
+    human_reason: human,
+  };
+}
+

@@ -10,7 +10,7 @@ import {
   type FinvizNewsSummary,
   type SectorPerf,
 } from "./finviz-extras.ts";
-import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED } from "./unusual-whales.ts";
+import { scoreOptionsFlowUnusualWhales, UW_CONFIGURED, fetchDealerLevels, type DealerLevels } from "./unusual-whales.ts";
 import { scoreSocialIntelligence } from "./social-intel.ts";
 import { TAPI_CONFIGURED } from "./twitterapi.ts";
 
@@ -893,15 +893,21 @@ export async function scoreInstitutional(
   // Options Flow priority: Unusual Whales (institutional) → Finviz (aggregate proxy) → neutral.
   // UW runs in parallel with the Finviz adapter so we always have the fallback ready and
   // can store side-by-side metadata for transparency. UW.state !== "active" → fallback used.
-  const [uwFlow, finvizFlow, technical, news, sentiment, volatility, regime] = await Promise.all([
+  // Spot price hint from Finviz snapshot for dealer-levels distance calculations.
+  const spotHint = fv.row?.["Price"] ? parseFloat(fv.row["Price"]) : null;
+  const [uwFlow, finvizFlow, dealerLevels, news, sentiment, volatility, regime] = await Promise.all([
     UW_CONFIGURED ? scoreOptionsFlowUnusualWhales(ticker, direction) : Promise.resolve(null),
     scoreOptionsFlowFinviz(ticker, direction, fv, extras.insider.data),
-    scoreTechnicalWithSnap(ticker, baseTrendScore, fv, sectorPerf, direction),
+    UW_CONFIGURED ? fetchDealerLevels(ticker, direction, spotHint) : Promise.resolve(null as DealerLevels | null),
     scoreNews(ticker, direction, extras.news.data),
     scoreSentiment(ticker, direction),
     scoreVolatilityFinviz(ticker, fv),
     getRegime(admin),
   ]);
+  // technical runs after so dealerLevels nudge can be applied.
+  const technical = await scoreTechnicalWithSnap(ticker, baseTrendScore, fv, sectorPerf, direction, dealerLevels);
+
+
 
   // Build the unified options_flow ComponentScore.
   // Active UW → use UW score. UW failed/missing → use Finviz proxy. Both missing → neutral 50.
@@ -1096,7 +1102,9 @@ async function scoreTechnicalWithSnap(
   fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
   sectorPerf?: SectorPerf | null,
   direction?: "CALL" | "PUT",
+  dealerLevels?: DealerLevels | null,
 ): Promise<ComponentScore> {
+
   const dir: "CALL" | "PUT" = direction ?? "CALL";
   const [bars] = await Promise.all([fetchDailyBars(ticker, 60)]);
   const tl = detectTrendlines(bars, dir);
@@ -1196,7 +1204,12 @@ async function scoreTechnicalWithSnap(
     extras.pattern_bias = isBull ? "bullish" : isBear ? "bearish" : "neutral";
   }
 
-  const techExtrasTotal = smaStackNudge + rsiNudge + proxNudge + patternNudge;
+  // Dealer levels nudge (UW GEX + max pain, ±2 max). Already direction-aware.
+  const dealerNudge = dealerLevels?.state === "active" ? (dealerLevels.nudge ?? 0) : 0;
+  const dealerNote = dealerLevels?.state === "active" && dealerLevels.nudge !== 0
+    ? ` · ${dealerLevels.human_reason}` : "";
+
+  const techExtrasTotal = smaStackNudge + rsiNudge + proxNudge + patternNudge + dealerNudge;
   blended = clamp100(blended + techExtrasTotal);
 
   // Trendline sub-signal (capped via clamp100). No weight change, no new component.
@@ -1212,7 +1225,7 @@ async function scoreTechnicalWithSnap(
     score: blended,
     configured: true,
     source: sectorPerf ? "alpaca+finviz+sector" : "alpaca+finviz",
-    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}${extrasNote}${tlNote}`,
+    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}${extrasNote}${dealerNote}${tlNote}`,
     details: {
       perf_week: perfWeek, sma50, sma200, rel_volume: relVol,
       sector: sectorPerf?.sector ?? null,
@@ -1225,11 +1238,24 @@ async function scoreTechnicalWithSnap(
         rsi_nudge: rsiNudge,
         proximity_nudge: proxNudge,
         pattern_nudge: patternNudge,
+        dealer_nudge: dealerNudge,
         total_extra_nudge: techExtrasTotal,
       },
+      dealer_levels: dealerLevels && dealerLevels.state === "active" ? {
+        spot: dealerLevels.spot_price,
+        net_gex: dealerLevels.net_gex,
+        gamma_flip: dealerLevels.gamma_flip_strike,
+        call_wall: dealerLevels.call_wall,
+        put_wall: dealerLevels.put_wall,
+        max_pain: dealerLevels.max_pain,
+        max_pain_expiry: dealerLevels.max_pain_expiry,
+        reason_code: dealerLevels.reason_code,
+        human_reason: dealerLevels.human_reason,
+      } : (dealerLevels ? { state: dealerLevels.state, reason: dealerLevels.reason_code } : null),
     },
   };
 }
+
 
 
 
