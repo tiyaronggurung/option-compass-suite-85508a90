@@ -187,17 +187,19 @@ export default function Dashboard() {
         const tags = deriveTags(s, watchSet);
         if (!tags.includes(tagFilter)) return false;
       }
-      if (hideZeroBid) {
-        const bid = getContractMeta(s)?.bid;
-        if (bid == null || bid === 0) return false;
-      }
       return true;
     });
-    if (lifecycleFilter === "fresh") {
-      return base.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }
-    return sortSignalsBySourcePriority(base);
-  }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter, hideZeroBid]);
+    // Push zero-bid (unquotable) signals to the bottom while preserving primary order.
+    const isZeroBid = (s: Signal) => {
+      const bid = getContractMeta(s)?.bid;
+      return bid == null || bid === 0;
+    };
+    const ordered =
+      lifecycleFilter === "fresh"
+        ? base.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        : sortSignalsBySourcePriority(base);
+    return [...ordered].sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
+  }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
   const openTrades = trades.filter((t) => t.status === "OPEN");
