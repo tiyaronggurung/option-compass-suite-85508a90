@@ -24,7 +24,74 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (!loading && user) navigate("/app", { replace: true }); }, [user, loading, navigate]);
+  // MFA challenge state — set when a signed-in session needs a 2nd factor before /app.
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaBusy, setMfaBusy] = useState(false);
+
+  async function checkAndPrepareMfa(): Promise<boolean> {
+    try {
+      const { data: aal, error: aalErr } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalErr || !aal) return false;
+      if (aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const totp = factors?.totp?.find((f) => f.status === "verified");
+        if (!totp) return false;
+        const { data: chal, error: chalErr } = await supabase.auth.mfa.challenge({ factorId: totp.id });
+        if (chalErr || !chal) {
+          toast.error(chalErr?.message ?? "Could not start 2FA challenge");
+          await supabase.auth.signOut();
+          return false;
+        }
+        setMfaFactorId(totp.id);
+        setMfaChallengeId(chal.id);
+        setMfaCode("");
+        return true;
+      }
+    } catch {
+      // not required
+    }
+    return false;
+  }
+
+  useEffect(() => {
+    if (loading || !user) return;
+    if (mfaFactorId) return;
+    let cancelled = false;
+    (async () => {
+      const needs = await checkAndPrepareMfa();
+      if (cancelled) return;
+      if (!needs) navigate("/app", { replace: true });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading]);
+
+  async function submitMfa(e: React.FormEvent) {
+    e.preventDefault();
+    if (!mfaFactorId || !mfaChallengeId) return;
+    if (!/^\d{6}$/.test(mfaCode)) return toast.error("Enter the 6-digit code");
+    setMfaBusy(true);
+    const { error } = await supabase.auth.mfa.verify({
+      factorId: mfaFactorId,
+      challengeId: mfaChallengeId,
+      code: mfaCode,
+    });
+    setMfaBusy(false);
+    if (error) return toast.error(error.message);
+    setMfaFactorId(null);
+    setMfaChallengeId(null);
+    setMfaCode("");
+    navigate("/app", { replace: true });
+  }
+
+  async function cancelMfa() {
+    setMfaFactorId(null);
+    setMfaChallengeId(null);
+    setMfaCode("");
+    await supabase.auth.signOut();
+  }
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
