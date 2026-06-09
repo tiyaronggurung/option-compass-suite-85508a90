@@ -488,7 +488,7 @@ export function BuyOptionDialog(props: Props) {
                         data-contract-symbol={r.symbol}
                         onClick={() => setSelectedSymbol(r.symbol)}
                         className={cn(
-                          "w-full grid grid-cols-6 gap-2 px-3 py-2 text-sm border-t text-left transition",
+                          "w-full grid grid-cols-7 gap-2 px-3 py-2 text-sm border-t text-left transition",
                           isSelected ? "bg-primary/10 border-primary/30" : "hover:bg-muted/30"
                         )}
                       >
@@ -506,6 +506,21 @@ export function BuyOptionDialog(props: Props) {
                             "inline-block rounded border px-2 py-0.5 text-xs font-semibold",
                             isSelected ? "border-primary text-primary" : "border-border"
                           )}>{fmtMoney(r.ask)}</span>
+                        </div>
+                        <div className="text-right flex items-center justify-end">
+                          {(() => {
+                            const q = computeEntryQuality(r);
+                            const color =
+                              q.band === "excellent" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" :
+                              q.band === "good" ? "bg-bull/15 text-bull border-bull/30" :
+                              q.band === "fair" ? "bg-amber-500/15 text-amber-500 border-amber-500/30" :
+                              "bg-muted text-muted-foreground border-border";
+                            return (
+                              <span className={cn("inline-block rounded border px-2 py-0.5 text-[11px] font-semibold", color)}>
+                                {q.score}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </button>
                     </div>
