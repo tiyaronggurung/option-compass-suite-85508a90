@@ -60,8 +60,10 @@ export default function Trades() {
 
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user]);
 
-  // Trigger a live mark recompute on mount and every 30s while visible,
+  // Trigger a live mark recompute on mount and every 60s while visible,
   // but only if there are open trades. Then re-read from DB.
+  // 60s cadence keeps us comfortably under the Unusual Whales 20k/day budget
+  // across multiple users (5s polling burned through it too fast).
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -75,9 +77,9 @@ export default function Trades() {
       } catch { /* swallow — UI will retry next tick */ }
       if (!cancelled) refreshRef.current?.();
     }
-    // Kick immediately so the user sees fresh prices fast, then poll every 5s.
+    // Kick immediately so the user sees fresh prices fast, then poll every 60s.
     tick();
-    const id = setInterval(tick, 5_000);
+    const id = setInterval(tick, 60_000);
     return () => { cancelled = true; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, trades?.length]);
