@@ -1,156 +1,126 @@
-# Contract Selection Engine — Plan (paper-only)
+# Goal
 
-## Goal
+Run `scan-signals` every **2 minutes** during US market hours (9:30–16:00 ET, Mon–Fri) without blowing through Unusual Whales / Finviz / Finnhub / Alpaca quotas.
 
-Turn a signal (`NVDA CALL`) into a concrete, defensible paper contract:
+# Current state (measured)
 
-> NVDA 225C · 28 DTE · Δ 0.58 · spread 4.1% · OI 8,420 · vol 1,210 · score 82 · rationale: "Near-money, balanced delta, tight spread, healthy liquidity"
+- Cron today: every **5 min** → ~78 runs/day
+- Per-ticker calls inside scan-signals (worst case): Alpaca bars + Finviz CSV + Finnhub sentiment + Finnhub company-news + UW flow (+ UW chain if a candidate qualifies) ≈ **5–6 calls/ticker**
+- Universe = `base_8` (SPY, QQQ, NVDA, TSLA, AMD, AAPL, META, MSFT) → ~40–48 calls per run
+- Today's daily cost ≈ 78 × ~45 = **~3,500 calls/provider/day**
 
-Paper-only. No live orders. No scoring/threshold/scanner/lifecycle/hidden/guest/signal-generation changes.
+# Going to 2-min
 
-## Provider priority (gracefully degrades)
+- 2-min cron → **195 runs/day** (2.5×)
+- Naive cost ≈ **~8,800 calls/provider/day** → risky for Finviz Elite and Finnhub free tiers; UW is fine but flow endpoint rate-limits at burst.
 
-1. **Unusual Whales** — chain, greeks, OI, volume, IV (primary)
-2. **Alpaca Options** — snapshot/quote fallback when UW chain is empty/unavailable
-3. **Unavailable** — do NOT invent data. Block approval with reason `contract_chain_unavailable`. Never fake premium/strike/delta/expiry.
+# Strategy: keep 2-min cadence, cut work per run
 
-Stamp `contract_source` on every snapshot: `unusual_whales` | `alpaca` | `unavailable`.
+Four layered guardrails, all toggleable from `scanner_settings` (no UI rebuild — reuses existing row).
 
-## Schema changes
-
-Single new table (cleaner than bloating `signals` or `paper_trades`):
-
-```text
-contract_selection_snapshots
-  id uuid pk
-  signal_id uuid (nullable, indexed)
-  paper_trade_id uuid (nullable, indexed)
-  user_id uuid (nullable — null for system pre-selections)
-  underlying text
-  option_type text  -- CALL | PUT
-  contract_symbol text
-  strike numeric
-  expiry date
-  dte int
-  delta numeric
-  gamma numeric
-  theta numeric
-  vega numeric
-  iv numeric
-  iv_rank numeric (nullable)
-  bid numeric
-  ask numeric
-  mid numeric
-  spread_pct numeric
-  volume bigint
-  open_interest bigint
-  premium numeric        -- entry premium snapshot
-  contract_score int     -- 0..100
-  liquidity_score int    -- 0..100
-  rationale text         -- short human sentence
-  rationale_factors jsonb -- {dte_fit, delta_fit, spread, liquidity, oi, vol, iv, affordability}
-  contract_source text   -- unusual_whales | alpaca | unavailable
-  candidates_considered int
-  risk_profile text      -- developing|near_watchlist|watchlist|strong|elite
-  selected_at timestamptz default now()
-  created_at timestamptz default now()
-```
-
-Plus on `paper_trades`: add `contract_snapshot_id uuid` (nullable, FK soft). Optional on `signals`: `suggested_contract_snapshot_id uuid` (nullable) — only written by the selector, never by scanner.
-
-RLS: SELECT auth (snapshots are non-sensitive analytics). INSERT/UPDATE service_role + owner via edge function. GRANTs for `authenticated` (SELECT) and `service_role` (ALL).
-
-## Default contract preferences by confidence band — Hybrid philosophy
-
-Lower confidence → safer (higher delta, more intrinsic, tighter liquidity). Higher confidence → allow more leverage.
-
-| Band | Conf | DTE | Delta | Max spread % | Min OI | Min Vol |
-|---|---|---|---|---|---|---|
-| Developing | 50–64 | 30–45 | 0.65–0.75 | 5% | 500 | 100 |
-| Near Watchlist | 65–69 | 28–45 | 0.55–0.70 | 6% | 400 | 100 |
-| Watchlist | 70–79 | 21–40 | 0.50–0.65 | 7% | 300 | 75 |
-| Strong | 80–89 | 14–35 | 0.45–0.60 | 8% | 250 | 50 |
-| Elite | 90+ | 14–30 | 0.40–0.55 | 10% | 200 | 50 |
-
-Universal v1 guards: contracts=1, no 0–6 DTE unless user manually overrides later, skip if `bid<=0` or `ask<=0`, skip if `premium*100 > 5000` (affordability cap for paper sanity), prefer monthly expiries when within DTE window.
-
-## Scoring formula (0–100)
+## 1. Cron — every 2 min, market hours only
 
 ```text
-score =
-  0.25 * dte_fit          // triangular: 1.0 at center of band, 0 at edges
-+ 0.25 * delta_fit        // triangular over band
-+ 0.20 * liquidity        // log-scaled OI + volume vs band mins
-+ 0.15 * spread_quality   // 1.0 if spread_pct <= half max, linear to 0 at max
-+ 0.10 * affordability    // 1.0 if premium*100 <= 1000, linear to 0 at 5000
-+ 0.05 * iv_sanity        // penalize IV in top decile vs underlying history when available
+*/2 13-20 * * 1-5   (UTC = 9–16 ET, covers DST both ways with existing market-hours guard)
 ```
 
-Tiebreak: higher OI, then tighter spread, then closer-to-target delta.
+`scan-signals` already early-exits with `outside_hours` when market closed (45ms, ~0 calls). So weekends/nights cost nothing.
 
-Reject candidate if: spread_pct > band max, OI < band min, volume < band min, expiry within 6 DTE, bid<=0, ask<=0.
+## 2. Tiered cadence per ticker (biggest saving)
 
-Engine returns top-1 plus up to 4 alternates for UI.
+Not every ticker needs a fresh scan every 2 min. Split universe into 3 tiers stored as a column on `tradable_universe` (or computed from existing rank):
 
-## Approval flow
+| Tier | Tickers | Scanned every |
+|---|---|---|
+| Hot | SPY, QQQ + top 5 by today's UW flow | 2 min (every run) |
+| Warm | rest of base_8 + watchlists | 6 min (every 3rd run) |
+| Cold | top_100 mode tail | 10 min (every 5th run) |
 
-1. User clicks Approve on a signal.
-2. `approveSignal.ts` checks: does signal have `suggested_contract_snapshot_id`?
-   - Yes → reuse snapshot (re-validate freshness; if >5 min old re-fetch quote).
-   - No → call new edge function `select-contract`.
-3. `select-contract`:
-   - Try UW chain for underlying → score candidates → pick best.
-   - If UW empty → try Alpaca options chain.
-   - If both empty → return `{ ok:false, reason:'contract_chain_unavailable' }`.
-4. On success: insert `contract_selection_snapshots` row, then create `paper_trades` row with `contract_snapshot_id`, `entry_premium`, `strike`, `expiry`, `option_type`, `contracts=1`, `multiplier=100`, `total_cost`, `paper_test_class`, `confidence_at_approval`.
-5. On failure: surface a non-blocking toast + dialog: "No tradable contract found for NVDA right now (chain unavailable). Paper trade not created." No fake fallback.
+Implementation: add `tier_cadence_minutes` int column; scanner skips a ticker if `now() - last_scanned_at < cadence`. Track `last_scanned_at` per ticker in a tiny `scanner_ticker_state` table (ticker pk, last_scanned_at).
 
-## UI changes (paper-only, additive)
+**Effect:** at 2-min cadence with base_8, real per-run work ≈ 2 hot + (8/3) warm ≈ ~5 tickers × ~5 calls = **~25 calls/run** instead of 45. Daily ≈ 195 × 25 = **~4,900 calls/day** (only +40% vs today, not +150%).
 
-- **SignalDetailDialog**: new `ContractRecommendationPanel` showing top pick + 2 alternates: strike, DTE, Δ, spread %, OI, vol, score, one-line rationale. "Use this contract" button. Three safety badges: Paper Option Trade · Simulation Only · No real money executed.
-- **OptionTradeCard**: when `contract_snapshot_id` present, render small "Why this contract" expandable with factor bars (dte fit, delta fit, liquidity, spread).
-- **Trades page**: existing card unchanged behaviorally; just gains rationale section.
+## 3. Provider-level caching inside one run
 
-No changes to: scanner UI, lifecycle UI, hidden signals, guest /join /status /booking flows.
+- **Finviz CSV**: already per-ticker; add 90-second in-memory + Supabase KV cache (`scanner_cache` table, key=`finviz:TICKER`, expires_at). At 2-min cadence ~50% of Finviz calls become cache hits.
+- **Finnhub news**: cache 5 min per ticker (news doesn't change that fast).
+- **UW flow**: keep fresh (this is the alpha) — no cache.
+- **Alpaca bars**: cache 60 s (bars are 1-min anyway).
 
-## Validation plan
+Expected reduction: another **~40%** on Finviz/Finnhub, **0%** on UW.
 
-Run `select-contract` for: NVDA CALL, AMD CALL, TSLA PUT, SPY CALL, QQQ PUT (all paper-only, hidden+demo seeded if needed). Report a table:
+## 4. Hard daily budget caps (circuit breaker)
 
-```text
-ticker  dir  strike  DTE  Δ      spread%  OI      vol    score  source  reason
-NVDA    C    225     28   0.58   3.9%     8420    1210   82     uw      "Balanced near-money, tight spread"
-AMD     C    ...
-TSLA    P    ...
-SPY     C    ...
-QQQ     P    ...
+New table `provider_budget_counters` (provider text pk, date date, calls int, daily_cap int).
+
+Each provider wrapper increments the counter; if `calls >= daily_cap` the wrapper returns `null` with reason `budget_exhausted` and the scan run logs `skipped_due_to_budget`. Defaults:
+
+| Provider | Daily cap |
+|---|---|
+| Unusual Whales | 8,000 |
+| Finviz | 5,000 |
+| Finnhub | 5,000 |
+| Alpaca | 20,000 |
+
+User can edit caps in Diagnostics later — for now hardcode + show in scan-run row.
+
+## Combined projection
+
+- Without tiering or cache: 8,800/provider/day → **OVER** Finnhub free
+- With tiering + cache: **~3,000–4,000/provider/day** → comfortably under all current limits, even on `top_100` universe mode.
+
+# Schema changes (one small migration)
+
+```sql
+create table public.scanner_ticker_state (
+  ticker text primary key,
+  last_scanned_at timestamptz,
+  last_tier text
+);
+create table public.provider_budget_counters (
+  provider text not null,
+  date date not null,
+  calls int not null default 0,
+  daily_cap int not null,
+  primary key (provider, date)
+);
+create table public.scanner_cache (
+  cache_key text primary key,
+  payload jsonb not null,
+  expires_at timestamptz not null
+);
+-- grants + RLS service_role only; UI doesn't read these directly
 ```
 
-Then approve one (NVDA dev-band, hidden/demo), confirm `contract_selection_snapshots` row + `paper_trades.contract_snapshot_id` linkage, run `update-paper-marks`, close, verify realized P/L + analytics card still excludes demo.
+Plus add `tier_cadence_minutes int default 2` to `tradable_universe`.
 
-## Protected / untouched
+# Code changes
 
-- Live trading, real orders
-- Scoring weights, thresholds, scanner logic, signal generation, lifecycle, hidden logic
-- Guest flows (join, status, booking)
-- `update-paper-marks` math (only reads new snapshot, doesn't change P/L logic)
+- `supabase/functions/scan-signals/index.ts`: tier filter loop, wrap provider calls with `withBudget()` + `withCache()` helpers
+- `supabase/functions/_shared/budget.ts` (NEW): `incrementAndCheck(provider, cap)` + cache get/set
+- Cron: update existing pg_cron entry from `*/5` to `*/2` (insert via supabase--insert because URL/anon-key specific)
+- `SignalScannerPanel.tsx`: change subtitle "Runs every 5 min" → "Runs every 2 min", add small "Budget" badge showing today's call counts (read-only, reuses `provider_budget_counters`)
 
-## Files to be created / edited (preview only — no edits yet)
+# Untouched (per your rules)
 
-- NEW migration: `contract_selection_snapshots` + `paper_trades.contract_snapshot_id`
-- NEW `supabase/functions/select-contract/index.ts`
-- NEW `src/lib/contractSelection/scoring.ts` (pure scoring helpers, used by edge + UI preview)
-- NEW `src/lib/contractSelection/bands.ts` (the hybrid table above)
-- NEW `src/components/ContractRecommendationPanel.tsx`
-- EDIT `src/lib/approveSignal.ts` — wire selector + snapshot linkage
-- EDIT `src/components/OptionTradeCard.tsx` — render rationale section
-- EDIT `src/components/SignalDetailDialog.tsx` — mount panel
+- Guest flows (`/join`, `/status`, `/booking`) — no changes
+- `update-paper-marks` cron and logic — no changes
+- Scoring weights, signal thresholds, lifecycle, hidden logic — no changes
+- Existing 5-min run history rows stay intact
 
-## Decisions needed from you before code
+# Validation
 
-1. Approve the **Hybrid** band table as-is, or send edits.
-2. Approve **contracts=1** default and **$5,000 max premium** affordability cap for paper v1.
-3. Approve a **new `contract_selection_snapshots` table** (vs cramming into `paper_trades`).
-4. Approve the **block-on-unavailable** behavior (no synthetic fallback).
+1. Run migration → confirm tables/grants
+2. Manually trigger `scan-signals` 3 times in a row → confirm 2nd/3rd hit cache, counters increment
+3. Force `daily_cap = 5` on Finviz → confirm next call returns `budget_exhausted` and `signal_scan_runs.skipped_due_to_budget > 0`
+4. Flip cron to `*/2` → watch 4 runs over 8 min, confirm tier skipping works
+5. Compare 24h call totals vs today (should be ~+40%, not +150%)
 
-On your "go" I will implement exactly this — nothing more, nothing less.
+# Decisions I need from you before coding
+
+1. Approve **2-min cadence** with tiering (hot=2m, warm=6m, cold=10m) — or do you want everything every 2 min and trust the daily caps alone?
+2. Approve the **default daily caps** (UW 8k / Finviz 5k / Finnhub 5k / Alpaca 20k), or set your own?
+3. Approve the **3 new tables** (`scanner_ticker_state`, `provider_budget_counters`, `scanner_cache`)?
+4. Should the panel keep showing "ok" status when a run is partially skipped due to budget, or surface a new `budget_throttled` status?
+
+Say "go" and I implement exactly this — nothing more, nothing less.
