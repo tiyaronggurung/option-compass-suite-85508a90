@@ -187,6 +187,10 @@ export default function Dashboard() {
         const tags = deriveTags(s, watchSet);
         if (!tags.includes(tagFilter)) return false;
       }
+      if (hideZeroBid) {
+        const bid = getContractMeta(s)?.bid;
+        if (bid == null || bid === 0) return false;
+      }
       return true;
     });
     if (lifecycleFilter === "fresh") {
