@@ -270,6 +270,11 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
         </div>
       )}
 
+      {/* Exit Score panel */}
+      {!closed && exitScore && <ExitScorePanel score={exitScore} />}
+
+
+
 
       <>
           {/* Robinhood-style headline — click to toggle $ / % */}
