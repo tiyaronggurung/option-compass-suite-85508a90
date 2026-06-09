@@ -15,6 +15,7 @@ import {
   type TechnicalSnapshot,
 } from "../_shared/lifecycle.ts";
 import { runConfirmationSweep } from "../_shared/crossSourceMatch.ts";
+import { bumpBudget, filterByCadence, markScanned, DEFAULT_CAPS, type Provider } from "../_shared/budget.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -119,6 +120,11 @@ function clamp(v: number, lo = -1, hi = 1) { return Math.max(lo, Math.min(hi, v)
 
 // ---------- Alpaca ----------
 async function fetchBars(symbol: string): Promise<Bar[]> {
+  // Budget guard: skip Alpaca calls once today's cap is exhausted
+  const budget = await bumpBudget(admin, "alpaca");
+  if (!budget.allowed) {
+    throw new Error(`alpaca_budget_exhausted (${budget.calls}/${budget.cap})`);
+  }
   const end = new Date();
   const start = new Date(end.getTime() - 5 * 24 * 60 * 60 * 1000);
   const params = new URLSearchParams({
@@ -672,6 +678,12 @@ Deno.serve(async (req) => {
     return json({ ok: true, status: "empty_universe", signals_created: 0 });
   }
 
+  // Tiered cadence filter (hot=2m, warm=6m, cold=10m) — biggest cost saver at 2-min cron.
+  // Admin "force" bypasses the filter so manual runs always scan everything.
+  const cadence = await filterByCadence(admin, tickers, settings.universe_mode, force);
+  const dueTickers = cadence.due;
+  const cadenceSkipped = cadence.skipped.length;
+
   // Overlap lock — prevent two scans running at once
   const gotLock = await acquireScanLock(auth.trigger);
   if (!gotLock) {
@@ -688,6 +700,7 @@ Deno.serve(async (req) => {
   };
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
+  let budgetSkipped = 0;
 
   // Lifecycle: capture fresh per-(ticker,direction) scoring this scan, used
   // after the per-ticker loop to re-evaluate state of existing non-terminal signals.
@@ -946,19 +959,26 @@ Deno.serve(async (req) => {
       }
       created++;
     } catch (e) {
-      errors.push(`${sym}: ${(e as Error).message}`);
+      const msg = (e as Error).message;
+      if (msg.includes("budget_exhausted")) {
+        budgetSkipped++;
+      } else {
+        errors.push(`${sym}: ${msg}`);
+      }
       skipped++;
     }
   }
 
 
-  // Parallel batches of 20
+  // Parallel batches of 20 — process only the cadence-due tickers
   const BATCH_SIZE = 20;
   try {
-    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
-      const batch = tickers.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < dueTickers.length; i += BATCH_SIZE) {
+      const batch = dueTickers.slice(i, i + BATCH_SIZE);
       await Promise.allSettled(batch.map((sym) => processTicker(sym)));
     }
+    // Record last-scanned-at watermark for the tickers we actually processed
+    await markScanned(admin, dueTickers, cadence.states);
   } finally {
     await releaseScanLock();
   }
@@ -1058,9 +1078,11 @@ Deno.serve(async (req) => {
     }
   }
 
-  const status = errors.length === 0 ? "ok" : created > 0 ? "partial" : "error";
+  const status = budgetSkipped > 0 && created === 0
+    ? "budget_throttled"
+    : errors.length === 0 ? "ok" : created > 0 ? "partial" : "error";
   await admin.from("signal_scan_runs").insert({
-    status, trigger: auth.trigger, tickers_scanned: tickers,
+    status, trigger: auth.trigger, tickers_scanned: dueTickers,
     signals_created: created, skipped_count: skipped,
     would_have_created: wouldHave,
     candidates_scanned: candidates,
@@ -1076,6 +1098,8 @@ Deno.serve(async (req) => {
     watchlist_count: universe.watchlist_count,
     earnings_count: universe.earnings_count,
     skipped_due_to_cap: universe.skipped_due_to_cap,
+    skipped_due_to_cadence: cadenceSkipped,
+    skipped_due_to_budget: budgetSkipped,
   });
 
   return json({
