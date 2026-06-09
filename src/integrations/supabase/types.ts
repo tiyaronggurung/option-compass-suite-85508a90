@@ -742,6 +742,30 @@ export type Database = {
         }
         Relationships: []
       }
+      provider_budget_counters: {
+        Row: {
+          calls: number
+          daily_cap: number
+          date: string
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          calls?: number
+          daily_cap: number
+          date?: string
+          provider: string
+          updated_at?: string
+        }
+        Update: {
+          calls?: number
+          daily_cap?: number
+          date?: string
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       provider_configs: {
         Row: {
           enabled: boolean
@@ -844,6 +868,24 @@ export type Database = {
           profile?: Database["public"]["Enums"]["scanner_profile"]
           universe_mode?: Database["public"]["Enums"]["scanner_universe_mode"]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      scanner_ticker_state: {
+        Row: {
+          last_scanned_at: string | null
+          last_tier: string | null
+          ticker: string
+        }
+        Insert: {
+          last_scanned_at?: string | null
+          last_tier?: string | null
+          ticker: string
+        }
+        Update: {
+          last_scanned_at?: string | null
+          last_tier?: string | null
+          ticker?: string
         }
         Relationships: []
       }
@@ -1053,6 +1095,8 @@ export type Database = {
           signals_created: number
           skipped_candidates: Json
           skipped_count: number
+          skipped_due_to_budget: number
+          skipped_due_to_cadence: number
           skipped_due_to_cap: number | null
           status: string
           threshold: number | null
@@ -1076,6 +1120,8 @@ export type Database = {
           signals_created?: number
           skipped_candidates?: Json
           skipped_count?: number
+          skipped_due_to_budget?: number
+          skipped_due_to_cadence?: number
           skipped_due_to_cap?: number | null
           status: string
           threshold?: number | null
@@ -1099,6 +1145,8 @@ export type Database = {
           signals_created?: number
           skipped_candidates?: Json
           skipped_count?: number
+          skipped_due_to_budget?: number
+          skipped_due_to_cadence?: number
           skipped_due_to_cap?: number | null
           status?: string
           threshold?: number | null
@@ -1509,6 +1557,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bump_provider_budget: {
+        Args: { p_amount: number; p_default_cap: number; p_provider: string }
+        Returns: {
+          allowed: boolean
+          calls: number
+          daily_cap: number
+        }[]
+      }
       get_leaderboard: {
         Args: { _window?: string }
         Returns: {
