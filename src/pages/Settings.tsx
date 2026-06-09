@@ -46,6 +46,7 @@ export default function Settings() {
         <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Risk controls, data sources, and compliance.</p>
       </header>
+      <SectionHeader title="Account & Security" subtitle="Risk limits, two-factor auth, invites, and paper account." />
 
       <section className="glass-card p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /> Risk controls</h2>
