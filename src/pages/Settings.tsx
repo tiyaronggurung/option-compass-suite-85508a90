@@ -95,13 +95,9 @@ export default function Settings() {
 
       <ResetPaperAccountPanel />
 
+      <SectionHeader title="Signal Engine" subtitle="Mode, audit, learning, scanning, and confirmations." />
+
       <SignalModePanel />
-
-
-      <ProviderEnginesPanel />
-
-      <EarningsCalendarPanel />
-
 
       <SignalAuditPanel />
 
@@ -115,7 +111,15 @@ export default function Settings() {
 
       <ConfirmationProvidersPanel />
 
+      <SectionHeader title="Data & Integrations" subtitle="Provider engines, earnings calendar, and options chain." />
+
+      <ProviderEnginesPanel />
+
+      <EarningsCalendarPanel />
+
       <OptionsChainPanel />
+
+      <SectionHeader title="Compliance" subtitle="Legal disclaimer and acknowledgements." />
 
       <section className="glass-card p-5 space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-warn" /> Compliance</h2>
