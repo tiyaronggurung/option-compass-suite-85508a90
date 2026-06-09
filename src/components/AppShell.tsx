@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Activity, BookmarkCheck, ClipboardList, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBrowserPush } from "@/hooks/useBrowserPush";
+import { useSingleSession } from "@/hooks/useSingleSession";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
