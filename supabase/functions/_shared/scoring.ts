@@ -579,11 +579,18 @@ export async function finvizSnapshotChecked(ticker: string): Promise<FinvizSnap>
     "Volatility (Month)":             "Volatility M",
     "Analyst Recom":                  "Recom",
     "Recommendation":                 "Recom",
+    "Relative Strength Index (14)":   "RSI",
+    "RSI (14)":                       "RSI",
+    "52-Week High (Relative)":        "52W High",
+    "52-Week Low (Relative)":         "52W Low",
+    "52W High":                       "52W High",
+    "52W Low":                        "52W Low",
   };
   const row: Record<string, string> = { ...rawRow };
   for (const [long, short] of Object.entries(HEADER_ALIASES)) {
     if (long in rawRow && !(short in row)) row[short] = rawRow[long];
   }
+
   // Synthesize combined "Volatility" string ("W M") to match legacy snapshot field.
   if (!row["Volatility"] && (row["Volatility W"] || row["Volatility M"])) {
     row["Volatility"] = `${row["Volatility W"] ?? ""} ${row["Volatility M"] ?? ""}`.trim();
