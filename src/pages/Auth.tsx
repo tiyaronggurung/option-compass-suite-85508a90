@@ -25,7 +25,7 @@ export default function AuthPage() {
 
   useEffect(() => { if (!loading && user) navigate("/app", { replace: true }); }, [user, loading, navigate]);
 
-  async function submit(e: React.FormEvent) {
+  async function signIn(e: React.FormEvent) {
     e.preventDefault();
     const parsed = schema.safeParse({ email, password });
     if (!parsed.success) {
@@ -41,6 +41,29 @@ export default function AuthPage() {
       if (error) throw error;
     } catch (err: any) {
       toast.error(err?.message ?? "Authentication failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signUp(e: React.FormEvent) {
+    e.preventDefault();
+    const parsed = schema.safeParse({ email, password });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0].message);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: parsed.data.email,
+        password: parsed.data.password,
+        options: { emailRedirectTo: `${window.location.origin}/app` },
+      });
+      if (error) throw error;
+      toast.success("Account created — you're signed in.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Sign up failed");
     } finally {
       setBusy(false);
     }
@@ -80,30 +103,57 @@ export default function AuthPage() {
             </div>
             <span className="text-sm font-semibold">Tradingflow <span className="text-primary">101</span></span>
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Sign in to the desk</h2>
-          <p className="text-sm text-muted-foreground mt-1">Invite-only. Use the link from your invite email to set your password.</p>
+          <h2 className="text-2xl font-semibold tracking-tight">Welcome to the desk</h2>
+          <p className="text-sm text-muted-foreground mt-1">Sign in or create a new account.</p>
 
-          <form onSubmit={submit} className="space-y-4 mt-6">
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" autoComplete="email" value={email}
-                onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" autoComplete="current-password"
-                value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <Button type="submit" disabled={busy} className="w-full">
-              {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Sign in
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              New sign-ups are disabled. Ask an admin for an invite.
-            </p>
-          </form>
+          <Tabs defaultValue="signin" className="mt-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="signin">Sign in</TabsTrigger>
+              <TabsTrigger value="signup">Sign up</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="signin">
+              <form onSubmit={signIn} className="space-y-4 mt-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email-in">Email</Label>
+                  <Input id="email-in" type="email" autoComplete="email" value={email}
+                    onChange={(e) => setEmail(e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="password-in">Password</Label>
+                  <Input id="password-in" type="password" autoComplete="current-password"
+                    value={password} onChange={(e) => setPassword(e.target.value)} required />
+                </div>
+                <Button type="submit" disabled={busy} className="w-full">
+                  {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Sign in
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="signup">
+              <form onSubmit={signUp} className="space-y-4 mt-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email-up">Email</Label>
+                  <Input id="email-up" type="email" autoComplete="email" value={email}
+                    onChange={(e) => setEmail(e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="password-up">Password</Label>
+                  <Input id="password-up" type="password" autoComplete="new-password"
+                    value={password} onChange={(e) => setPassword(e.target.value)} required />
+                  <p className="text-[11px] text-muted-foreground">At least 8 characters.</p>
+                </div>
+                <Button type="submit" disabled={busy} className="w-full">
+                  {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Create account
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
   );
 }
+
