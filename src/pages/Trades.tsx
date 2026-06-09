@@ -111,12 +111,15 @@ export default function Trades() {
 
   async function refreshMarks() {
     setRefreshingMarks(true);
-    const { data, error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
-    setRefreshingMarks(false);
-    if (error) return toast.error(error.message);
-    const updated = (data as any)?.updated ?? 0;
-    toast.success(`Marks refreshed · ${updated} trade${updated === 1 ? "" : "s"} updated`);
-    refresh();
+    try {
+      const { data, error } = await invokeUpdatePaperMarks();
+      if (error) return toast.error(error.message);
+      const updated = (data as any)?.updated ?? 0;
+      toast.success(`Marks refreshed · ${updated} trade${updated === 1 ? "" : "s"} updated`);
+      refresh();
+    } finally {
+      setRefreshingMarks(false);
+    }
   }
 
   const open = trades?.filter((t) => t.status === "OPEN") ?? [];
@@ -270,26 +273,28 @@ function CloseTradeDialog({
   async function useLiveMark() {
     if (!trade) return;
     setFetchingMark(true);
-    const { error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
-    if (error) {
+    try {
+      const { error } = await invokeUpdatePaperMarks();
+      if (error) {
+        return toast.error(error.message);
+      }
+      const { data: fresh } = await supabase
+        .from("paper_trades")
+        .select("current_premium,last_mark_at")
+        .eq("id", trade.id)
+        .maybeSingle();
+      const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
+      if (mark == null) {
+        toast.error("No live mark available for this contract");
+        return;
+      }
+      setLivePremium(mark);
+      setLiveMarkAt((fresh as any)?.last_mark_at ?? new Date().toISOString());
+      setExitPremiumStr(String(mark));
+      toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+    } finally {
       setFetchingMark(false);
-      return toast.error(error.message);
     }
-    const { data: fresh } = await supabase
-      .from("paper_trades")
-      .select("current_premium,last_mark_at")
-      .eq("id", trade.id)
-      .maybeSingle();
-    setFetchingMark(false);
-    const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
-    if (mark == null) {
-      toast.error("No live mark available for this contract");
-      return;
-    }
-    setLivePremium(mark);
-    setLiveMarkAt((fresh as any)?.last_mark_at ?? new Date().toISOString());
-    setExitPremiumStr(String(mark));
-    toast.success(`Live mark applied · $${fmtPrice(mark)}`);
   }
 
   if (!trade) return null;
@@ -555,16 +560,19 @@ function PartialCloseDialog({
   async function useLiveMark() {
     if (!trade) return;
     setFetchingMark(true);
-    const { error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
-    if (error) { setFetchingMark(false); return toast.error(error.message); }
-    const { data: fresh } = await supabase
-      .from("paper_trades").select("current_premium").eq("id", trade.id).maybeSingle();
-    setFetchingMark(false);
-    const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
-    if (mark == null) return toast.error("No live mark available");
-    setLivePremium(mark);
-    setExitPremiumStr(String(mark));
-    toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+    try {
+      const { error } = await invokeUpdatePaperMarks();
+      if (error) { return toast.error(error.message); }
+      const { data: fresh } = await supabase
+        .from("paper_trades").select("current_premium").eq("id", trade.id).maybeSingle();
+      const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
+      if (mark == null) return toast.error("No live mark available");
+      setLivePremium(mark);
+      setExitPremiumStr(String(mark));
+      toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+    } finally {
+      setFetchingMark(false);
+    }
   }
 
   if (!trade) return null;
@@ -788,16 +796,19 @@ function AddMoreDialog({
   async function useLiveMark() {
     if (!trade) return;
     setFetchingMark(true);
-    const { error } = await supabase.functions.invoke("update-paper-marks", { body: {} });
-    if (error) { setFetchingMark(false); return toast.error(error.message); }
-    const { data: fresh } = await supabase
-      .from("paper_trades").select("current_premium").eq("id", trade.id).maybeSingle();
-    setFetchingMark(false);
-    const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
-    if (mark == null) return toast.error("No live mark available");
-    setLivePremium(mark);
-    setEntryStr(String(mark));
-    toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+    try {
+      const { error } = await invokeUpdatePaperMarks();
+      if (error) { return toast.error(error.message); }
+      const { data: fresh } = await supabase
+        .from("paper_trades").select("current_premium").eq("id", trade.id).maybeSingle();
+      const mark = fresh?.current_premium != null ? Number(fresh.current_premium) : null;
+      if (mark == null) return toast.error("No live mark available");
+      setLivePremium(mark);
+      setEntryStr(String(mark));
+      toast.success(`Live mark applied · $${fmtPrice(mark)}`);
+    } finally {
+      setFetchingMark(false);
+    }
   }
 
   if (!trade) return null;
