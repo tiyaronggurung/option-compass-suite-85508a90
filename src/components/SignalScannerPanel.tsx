@@ -58,6 +58,7 @@ export default function SignalScannerPanel() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [forceRun, setForceRun] = useState(false);
+  const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
 
   useEffect(() => {
     if (!user) return;
