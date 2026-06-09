@@ -224,16 +224,16 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
           {!closed && exitScore && (
             <div
               className={cn(
-                "inline-flex items-center justify-center rounded-full border-2 text-[11px] font-bold tabular-nums",
-                "aspect-square min-w-[30px] min-h-[30px] shrink-0",
+                "inline-flex items-center justify-center rounded-full border-2 text-[11px] font-bold tabular-nums leading-none",
+                "min-h-[34px] min-w-[34px] shrink-0",
                 bandColor(exitScore.band).bg,
                 bandColor(exitScore.band).text,
                 bandColor(exitScore.band).border,
-                exitScore.band === "EXIT" && "animate-pulse",
+                exitScore.band === "EXIT" && "animate-pulse ring-2 ring-bear/30",
               )}
               title={exitScore.headline}
             >
-              <span className="block pt-[1px]">{exitScore.score}</span>
+              {exitScore.score}
             </div>
           )}
           {!closed && (
