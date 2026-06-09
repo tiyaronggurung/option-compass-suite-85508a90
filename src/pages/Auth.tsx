@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { DisclaimerBar } from "@/components/Disclaimer";
@@ -69,6 +70,20 @@ export default function AuthPage() {
     }
   }
 
+  async function signInWithGoogle() {
+    setBusy(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: `${window.location.origin}/app`,
+      });
+      if (result.error) throw new Error(result.error.message ?? "Google sign-in failed");
+      if (result.redirected) return;
+    } catch (err: any) {
+      toast.error(err?.message ?? "Google sign-in failed");
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between p-10 relative overflow-hidden border-r border-border"
@@ -106,7 +121,17 @@ export default function AuthPage() {
           <h2 className="text-2xl font-semibold tracking-tight">Welcome to the desk</h2>
           <p className="text-sm text-muted-foreground mt-1">Sign in or create a new account.</p>
 
-          <Tabs defaultValue="signin" className="mt-6">
+          <Button type="button" variant="outline" disabled={busy} onClick={signInWithGoogle} className="w-full mt-6">
+            <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.5-1.7 4.4-5.5 4.4-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.9 3.7 14.7 2.8 12 2.8 6.9 2.8 2.8 6.9 2.8 12s4.1 9.2 9.2 9.2c5.3 0 8.8-3.7 8.8-9 0-.6-.1-1-.2-1.5H12z"/>
+            </svg>
+            Continue with Google
+          </Button>
+          <div className="my-4 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="h-px flex-1 bg-border" /> OR <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <Tabs defaultValue="signin">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign in</TabsTrigger>
               <TabsTrigger value="signup">Sign up</TabsTrigger>
