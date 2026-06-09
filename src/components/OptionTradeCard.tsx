@@ -7,14 +7,16 @@
 //
 // Pure presentation — no mutations.
 
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ChevronDown, Sparkles, TrendingDown } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtPrice, fmtPL, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
 import { TradeTimelinePanel } from "@/components/TradeTimelinePanel";
+import { computeExitScore, dteFromExpiry, bandColor, type ExitScore } from "@/lib/exitScore";
 
 type Props = {
   trade: PaperTrade;
