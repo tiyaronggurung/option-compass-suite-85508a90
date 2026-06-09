@@ -538,3 +538,44 @@ function FactorBar({ label, value }: { label: string; value: number }) {
     </div>
   );
 }
+
+function ExitScorePanel({ score }: { score: ExitScore }) {
+  const [open, setOpen] = useState(false);
+  const c = bandColor(score.band);
+  return (
+    <div className={cn("rounded-md border", c.border, c.bg)}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-2.5 py-2 text-xs"
+      >
+        <span className="flex items-center gap-2">
+          <TrendingDown className={cn("h-3.5 w-3.5", c.text)} />
+          <span className={cn("font-semibold uppercase tracking-wider", c.text)}>
+            Exit Score {score.score} · {score.band}
+          </span>
+          <span className="text-muted-foreground hidden sm:inline">— {score.headline}</span>
+        </span>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", c.text, open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="px-2.5 pb-2.5 space-y-1.5">
+          {score.hardTrigger ? (
+            <div className="text-[11px] text-muted-foreground">
+              Hard trigger fired — {score.headline}.
+            </div>
+          ) : score.factors.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground">No factor data yet.</div>
+          ) : (
+            score.factors.map((f) => (
+              <FactorBar key={f.key} label={f.label} value={f.value} />
+            ))
+          )}
+          <div className="text-[10px] text-muted-foreground pt-1">
+            Signal only — you decide when to close. Re-fires every 30 min while ≥75.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
