@@ -150,6 +150,15 @@ export default function SignalScannerPanel() {
         <div>
           <h2 className="font-semibold flex items-center gap-2">
             <Radar className="h-4 w-4 text-primary" /> Signal Scanner
+            {cronJobs.some((j) => j.active) ? (
+              <Badge variant="outline" className="text-bull border-bull/40 text-[10px] gap-1">
+                <CheckCircle2 className="h-3 w-3" /> Auto-scan on
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground border-border text-[10px]">
+                Auto-scan off / idle
+              </Badge>
+            )}
           </h2>
           <p className="text-xs text-muted-foreground">Backend Alpaca scanner. Runs every 2 min during US market hours (tiered cadence keeps providers within budget).</p>
         </div>
