@@ -74,16 +74,19 @@ export default function SignalScannerPanel() {
     }
   }
 
-  async function loadRuns() {
-    const { data } = await supabase.from("signal_scan_runs").select("*").order("ran_at", { ascending: false }).limit(10);
-    setRuns((data ?? []) as unknown as Run[]);
+  async function loadCronJobs() {
+    const { data } = await supabase.rpc("get_cron_jobs").catch(() => ({ data: null }));
+    const jobs: CronJob[] = (data ?? []).filter((j: any) =>
+      (j.jobname as string).includes("scan-signals")
+    );
+    setCronJobs(jobs);
   }
 
-  useEffect(() => { if (isAdmin) { loadSettings(); loadRuns(); } }, [isAdmin]);
+  useEffect(() => { if (isAdmin) { loadSettings(); loadRuns(); loadCronJobs(); } }, [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) return;
-    const id = setInterval(loadRuns, 30_000);
+    const id = setInterval(() => { loadRuns(); loadCronJobs(); }, 30_000);
     return () => clearInterval(id);
   }, [isAdmin]);
 
