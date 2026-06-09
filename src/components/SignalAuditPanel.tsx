@@ -83,7 +83,7 @@ export function SignalAuditPanel() {
 
       {rows === null ? <Skeleton className="h-40" /> :
        rows.length === 0 ? <div className="text-xs text-muted-foreground py-6 text-center">No live signals yet.</div> : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
           <table className="w-full text-xs">
             <thead className="text-muted-foreground">
               <tr className="text-left">
