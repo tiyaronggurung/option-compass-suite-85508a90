@@ -97,6 +97,37 @@ export default function TwoFactorPanel() {
     refresh();
   }
 
+  async function copySecret() {
+    if (!pending) return;
+    try {
+      await navigator.clipboard.writeText(pending.secret);
+      setCopied(true);
+      toast.success("Secret copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy — select and copy manually");
+    }
+  }
+
+  async function regenerate() {
+    if (!pending) return;
+    setRegenerating(true);
+    await supabase.auth.mfa.unenroll({ factorId: pending.factorId });
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: `Authenticator ${new Date().toISOString().slice(0, 10)}`,
+    });
+    setRegenerating(false);
+    setRegenerateOpen(false);
+    if (error || !data) {
+      setPending(null);
+      return toast.error(error?.message ?? "Could not regenerate secret");
+    }
+    setPending({ factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret });
+    setCode("");
+    toast.success("New QR code and secret generated");
+  }
+
   return (
     <section className="glass-card p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
