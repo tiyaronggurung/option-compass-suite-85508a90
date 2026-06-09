@@ -1102,7 +1102,9 @@ async function scoreTechnicalWithSnap(
   fv: { row: Record<string, string> | null; state: string; reason: string; detail?: string },
   sectorPerf?: SectorPerf | null,
   direction?: "CALL" | "PUT",
+  dealerLevels?: DealerLevels | null,
 ): Promise<ComponentScore> {
+
   const dir: "CALL" | "PUT" = direction ?? "CALL";
   const [bars] = await Promise.all([fetchDailyBars(ticker, 60)]);
   const tl = detectTrendlines(bars, dir);
