@@ -164,6 +164,7 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
   const peakRef = useRef<number | null>(null);
   const marksRef = useRef<number[]>([]);
   const lastToastAtRef = useRef<number>(0);
+  const firstEvalRef = useRef<boolean>(true);
   const [exitScore, setExitScore] = useState<ExitScore | null>(null);
 
   useEffect(() => {
