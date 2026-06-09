@@ -147,7 +147,7 @@ export default function OptionsChainPanel() {
         </Button>
       </div>
 
-      <div className="overflow-x-auto border border-border rounded-md">
+      <div className="overflow-x-auto max-h-96 overflow-y-auto border border-border rounded-md">
         {loading ? (
           <div className="p-3 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-6" />)}</div>
         ) : rows.length === 0 ? (
