@@ -7,7 +7,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 export type Provider = "unusual_whales" | "finviz" | "finnhub" | "alpaca";
 
 export const DEFAULT_CAPS: Record<Provider, number> = {
-  unusual_whales: 8000,
+  unusual_whales: 15000,
   finviz: 5000,
   finnhub: 5000,
   alpaca: 20000,
