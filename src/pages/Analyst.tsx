@@ -81,6 +81,41 @@ export default function Analyst() {
     return () => { cancel = true; };
   }, [selectedId]);
 
+  // Fetch ticker-wide call/put sentiment whenever selected ticker changes.
+  useEffect(() => {
+    const ticker = selected?.ticker;
+    if (!ticker) { setSentiment(null); return; }
+    let cancel = false;
+    setSentiment(null);
+    setLoadingSentiment(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("uw-ticker-sentiment", {
+          body: null,
+          method: "GET" as any,
+        } as any);
+        // Edge function expects ?ticker= query — fall back to direct fetch.
+        if (error || !data) {
+          const { data: anonSess } = await supabase.auth.getSession();
+          const token = anonSess.session?.access_token;
+          const url = `${(supabase as any).functionsUrl ?? ""}/uw-ticker-sentiment?ticker=${encodeURIComponent(ticker)}`;
+          const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+          if (res.ok) {
+            const j = await res.json();
+            if (!cancel) setSentiment(j);
+          }
+        } else if (!cancel) {
+          setSentiment(data as TickerSentiment);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancel) setLoadingSentiment(false);
+      }
+    })();
+    return () => { cancel = true; };
+  }, [selected?.ticker]);
+
   async function generate(force = false) {
     if (!selectedId) return;
     setLoadingAnalysis(true);
