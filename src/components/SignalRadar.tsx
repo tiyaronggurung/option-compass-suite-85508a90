@@ -42,7 +42,7 @@ export function deriveRadarMetrics(s: Signal, now = Date.now()): RadarMetrics {
   const liquidity =
     contract?.liquidity_score != null
       ? Math.round(clamp(Number(contract.liquidity_score)))
-      : readComponentScore(components, "liquidity") ?? 50;
+      : Math.round(clamp(readComponentScore(components, "liquidity") ?? 50));
 
   // Freshness — fraction of TTL remaining, 0..100.
   const created = new Date(s.created_at).getTime();
@@ -51,10 +51,11 @@ export function deriveRadarMetrics(s: Signal, now = Date.now()): RadarMetrics {
   const remaining = Math.max(0, expiry - now);
   const freshness = Math.round(clamp((remaining / total) * 100));
 
-  const trend =
+  const trend = Math.round(clamp(
     readComponentScore(components, "trend", "technical", "tech") ??
     readComponentScore(components, "macro") ??
-    50;
+    50
+  ));
 
   const risk = s.risk_level === "LOW" ? 80 : s.risk_level === "MEDIUM" ? 55 : 30;
 
