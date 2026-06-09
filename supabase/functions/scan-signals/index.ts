@@ -700,6 +700,7 @@ Deno.serve(async (req) => {
   };
   const skippedList: Array<{ ticker: string; direction: string; score: number; reasons: string[] }> = [];
   const errors: string[] = [];
+  let budgetSkipped = 0;
 
   // Lifecycle: capture fresh per-(ticker,direction) scoring this scan, used
   // after the per-ticker loop to re-evaluate state of existing non-terminal signals.
@@ -958,7 +959,12 @@ Deno.serve(async (req) => {
       }
       created++;
     } catch (e) {
-      errors.push(`${sym}: ${(e as Error).message}`);
+      const msg = (e as Error).message;
+      if (msg.includes("budget_exhausted")) {
+        budgetSkipped++;
+      } else {
+        errors.push(`${sym}: ${msg}`);
+      }
       skipped++;
     }
   }
