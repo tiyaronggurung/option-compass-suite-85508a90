@@ -246,7 +246,9 @@ export default function Dashboard() {
     const ranked = rankSignals(base);
     const isZeroBid = (s: Signal) => {
       const bid = getContractMeta(s)?.bid;
-      return bid == null || bid === 0;
+      if (bid === 0) return true;
+      const reasons = Array.isArray(s.reasons) ? (s.reasons as string[]) : [];
+      return reasons.some((r) => /\$0\s*bid|ask\s*vs\s*\$0/i.test(String(r)));
     };
     const sorted = [...ranked].sort((a, b) => {
       const za = Number(isZeroBid(a.signal));
