@@ -224,8 +224,8 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
           {!closed && exitScore && (
             <div
               className={cn(
-                "inline-flex items-center justify-center rounded-full border text-[11px] font-bold tabular-nums leading-none",
-                "h-8 w-8 shrink-0",
+                "inline-flex items-center justify-center rounded-full border-2 text-[11px] font-bold tabular-nums",
+                "aspect-square min-w-[30px] min-h-[30px] shrink-0",
                 bandColor(exitScore.band).bg,
                 bandColor(exitScore.band).text,
                 bandColor(exitScore.band).border,
@@ -233,7 +233,7 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
               )}
               title={exitScore.headline}
             >
-              {exitScore.score}
+              <span className="block pt-[1px]">{exitScore.score}</span>
             </div>
           )}
           {!closed && (
