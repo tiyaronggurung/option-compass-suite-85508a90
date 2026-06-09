@@ -678,6 +678,12 @@ Deno.serve(async (req) => {
     return json({ ok: true, status: "empty_universe", signals_created: 0 });
   }
 
+  // Tiered cadence filter (hot=2m, warm=6m, cold=10m) — biggest cost saver at 2-min cron.
+  // Admin "force" bypasses the filter so manual runs always scan everything.
+  const cadence = await filterByCadence(admin, tickers, settings.universe_mode, force);
+  const dueTickers = cadence.due;
+  const cadenceSkipped = cadence.skipped.length;
+
   // Overlap lock — prevent two scans running at once
   const gotLock = await acquireScanLock(auth.trigger);
   if (!gotLock) {
@@ -958,13 +964,15 @@ Deno.serve(async (req) => {
   }
 
 
-  // Parallel batches of 20
+  // Parallel batches of 20 — process only the cadence-due tickers
   const BATCH_SIZE = 20;
   try {
-    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
-      const batch = tickers.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < dueTickers.length; i += BATCH_SIZE) {
+      const batch = dueTickers.slice(i, i + BATCH_SIZE);
       await Promise.allSettled(batch.map((sym) => processTicker(sym)));
     }
+    // Record last-scanned-at watermark for the tickers we actually processed
+    await markScanned(admin, dueTickers, cadence.states);
   } finally {
     await releaseScanLock();
   }
