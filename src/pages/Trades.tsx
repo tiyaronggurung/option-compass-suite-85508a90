@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeUpdatePaperMarks } from "@/lib/paperMarks";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Button } from "@/components/ui/button";
