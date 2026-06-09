@@ -185,6 +185,38 @@ export default function AuthPage() {
             </div>
             <span className="text-sm font-semibold">Tradingflow <span className="text-primary">101</span></span>
           </div>
+          {mfaFactorId ? (
+            <>
+              <h2 className="text-2xl font-semibold tracking-tight">Two-factor code</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Enter the 6-digit code from your authenticator app to finish signing in.
+              </p>
+              <form onSubmit={submitMfa} className="space-y-4 mt-6">
+                <div className="space-y-1.5">
+                  <Label htmlFor="mfa-code">Authenticator code</Label>
+                  <Input
+                    id="mfa-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    autoFocus
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    className="ticker-mono tracking-[0.4em] text-lg text-center"
+                  />
+                </div>
+                <Button type="submit" disabled={mfaBusy || mfaCode.length !== 6} className="w-full">
+                  {mfaBusy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Verify
+                </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={cancelMfa}>
+                  Cancel & sign out
+                </Button>
+              </form>
+            </>
+          ) : (
+          <>
           <h2 className="text-2xl font-semibold tracking-tight">Welcome to the desk</h2>
           <p className="text-sm text-muted-foreground mt-1">Sign in or create a new account.</p>
 
