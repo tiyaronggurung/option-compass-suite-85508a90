@@ -30,9 +30,12 @@ export default function Performance() {
   const [signals, setSignals] = useState<Record<string, Signal>>({});
 
   useEffect(() => {
-    (async () => {
+    if (!user) return;
+    let cancelled = false;
+
+    const load = async () => {
       const { data: t } = await supabase
-        .from("paper_trades").select("*").eq("user_id", user!.id);
+        .from("paper_trades").select("*").eq("user_id", user.id);
       const ids = (t ?? []).map((x) => x.signal_id).filter(Boolean) as string[];
       const { data: s } = ids.length
         ? await supabase.from("signals").select("*").in("id", ids)
@@ -48,11 +51,33 @@ export default function Performance() {
       const cleanSignals = ((s ?? []) as Signal[]).filter((sig) => !excludedIds.has(sig.id));
       const cleanTrades = (t ?? []).filter((trade) => !trade.signal_id || !excludedIds.has(trade.signal_id));
 
+      if (cancelled) return;
       const map: Record<string, Signal> = {};
       cleanSignals.forEach((x) => { map[x.id] = x; });
       setSignals(map);
       setTrades(cleanTrades);
-    })();
+    };
+
+    void load();
+
+    // Live refresh: subscribe to this user's paper_trades changes (marks, closes, new trades).
+    const channel = supabase
+      .channel(`perf-trades-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "paper_trades", filter: `user_id=eq.${user.id}` },
+        () => { void load(); },
+      )
+      .subscribe();
+
+    // Safety net: poll every 30s in case realtime drops.
+    const poll = setInterval(() => { void load(); }, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const [fromDate, setFromDate] = useState<string>("");
