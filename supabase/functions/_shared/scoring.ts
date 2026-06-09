@@ -1204,7 +1204,12 @@ async function scoreTechnicalWithSnap(
     extras.pattern_bias = isBull ? "bullish" : isBear ? "bearish" : "neutral";
   }
 
-  const techExtrasTotal = smaStackNudge + rsiNudge + proxNudge + patternNudge;
+  // Dealer levels nudge (UW GEX + max pain, ±2 max). Already direction-aware.
+  const dealerNudge = dealerLevels?.state === "active" ? (dealerLevels.nudge ?? 0) : 0;
+  const dealerNote = dealerLevels?.state === "active" && dealerLevels.nudge !== 0
+    ? ` · ${dealerLevels.human_reason}` : "";
+
+  const techExtrasTotal = smaStackNudge + rsiNudge + proxNudge + patternNudge + dealerNudge;
   blended = clamp100(blended + techExtrasTotal);
 
   // Trendline sub-signal (capped via clamp100). No weight change, no new component.
@@ -1220,7 +1225,7 @@ async function scoreTechnicalWithSnap(
     score: blended,
     configured: true,
     source: sectorPerf ? "alpaca+finviz+sector" : "alpaca+finviz",
-    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}${extrasNote}${tlNote}`,
+    reason: `SMA50 ${sma50.toFixed(1)}% · SMA200 ${sma200.toFixed(1)}% · RelVol ${relVol.toFixed(1)}x${sectorNote}${extrasNote}${dealerNote}${tlNote}`,
     details: {
       perf_week: perfWeek, sma50, sma200, rel_volume: relVol,
       sector: sectorPerf?.sector ?? null,
@@ -1233,11 +1238,24 @@ async function scoreTechnicalWithSnap(
         rsi_nudge: rsiNudge,
         proximity_nudge: proxNudge,
         pattern_nudge: patternNudge,
+        dealer_nudge: dealerNudge,
         total_extra_nudge: techExtrasTotal,
       },
+      dealer_levels: dealerLevels && dealerLevels.state === "active" ? {
+        spot: dealerLevels.spot_price,
+        net_gex: dealerLevels.net_gex,
+        gamma_flip: dealerLevels.gamma_flip_strike,
+        call_wall: dealerLevels.call_wall,
+        put_wall: dealerLevels.put_wall,
+        max_pain: dealerLevels.max_pain,
+        max_pain_expiry: dealerLevels.max_pain_expiry,
+        reason_code: dealerLevels.reason_code,
+        human_reason: dealerLevels.human_reason,
+      } : (dealerLevels ? { state: dealerLevels.state, reason: dealerLevels.reason_code } : null),
     },
   };
 }
+
 
 
 
