@@ -46,6 +46,7 @@ export default function Settings() {
         <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Risk controls, data sources, and compliance.</p>
       </header>
+      <SectionHeader title="Account & Security" subtitle="Risk limits, two-factor auth, invites, and paper account." />
 
       <section className="glass-card p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /> Risk controls</h2>
@@ -95,13 +96,9 @@ export default function Settings() {
 
       <ResetPaperAccountPanel />
 
+      <SectionHeader title="Signal Engine" subtitle="Mode, audit, learning, scanning, and confirmations." />
+
       <SignalModePanel />
-
-
-      <ProviderEnginesPanel />
-
-      <EarningsCalendarPanel />
-
 
       <SignalAuditPanel />
 
@@ -115,7 +112,15 @@ export default function Settings() {
 
       <ConfirmationProvidersPanel />
 
+      <SectionHeader title="Data & Integrations" subtitle="Provider engines, earnings calendar, and options chain." />
+
+      <ProviderEnginesPanel />
+
+      <EarningsCalendarPanel />
+
       <OptionsChainPanel />
+
+      <SectionHeader title="Compliance" subtitle="Legal disclaimer and acknowledgements." />
 
       <section className="glass-card p-5 space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-warn" /> Compliance</h2>
@@ -131,6 +136,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="pt-4 pb-1 border-b border-border/60">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
+      {subtitle && <p className="text-xs text-muted-foreground/70 mt-0.5">{subtitle}</p>}
     </div>
   );
 }
