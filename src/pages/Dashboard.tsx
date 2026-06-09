@@ -75,7 +75,6 @@ export default function Dashboard() {
   const [buySignal, setBuySignal] = useState<Signal | null>(null);
   const [cashBalance, setCashBalance] = useState<number>(0);
   const [minDevelopingScore, setMinDevelopingScore] = useState(0);
-  const [hideZeroBid, setHideZeroBid] = useState(true);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   const reloadAlerts = async () => {
@@ -189,15 +188,15 @@ export default function Dashboard() {
       }
       return true;
     });
-    // Push zero-bid (unquotable) signals to the bottom while preserving primary order.
     const isZeroBid = (s: Signal) => {
       const bid = getContractMeta(s)?.bid;
       return bid == null || bid === 0;
     };
-    const ordered =
-      lifecycleFilter === "fresh"
-        ? base.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        : sortSignalsBySourcePriority(base);
+    const ordered = base.sort((a, b) => {
+      const ra = rankSignal(a).total;
+      const rb = rankSignal(b).total;
+      return rb - ra;
+    });
     return [...ordered].sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
   }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
@@ -220,15 +219,21 @@ export default function Dashboard() {
 
   const filteredDeveloping = useMemo(() => {
     if (!developing) return [];
-    return developing.filter((s) => {
+    const base = developing.filter((s) => {
       if ((s.confidence ?? 0) < minDevelopingScore) return false;
-      if (hideZeroBid) {
-        const bid = getContractMeta(s)?.bid;
-        if (bid == null || bid === 0) return false;
-      }
       return true;
     });
-  }, [developing, minDevelopingScore, hideZeroBid]);
+    const isZeroBid = (s: Signal) => {
+      const bid = getContractMeta(s)?.bid;
+      return bid == null || bid === 0;
+    };
+    const ordered = base.sort((a, b) => {
+      const ra = rankSignal(a).total;
+      const rb = rankSignal(b).total;
+      return rb - ra;
+    });
+    return [...ordered].sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
+  }, [developing, minDevelopingScore]);
 
   // Top 5 ranked signals for the dashboard hero strip.
   const dashboardTop = useMemo(() => {
@@ -539,15 +544,6 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={hideZeroBid}
-                  onChange={(e) => setHideZeroBid(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-border accent-primary"
-                />
-                Hide $0 bid
-              </label>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Min score</span>
                 <input
