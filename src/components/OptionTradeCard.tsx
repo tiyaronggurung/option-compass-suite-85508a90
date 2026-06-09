@@ -7,14 +7,16 @@
 //
 // Pure presentation — no mutations.
 
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ChevronDown, Sparkles, TrendingDown } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtPrice, fmtPL, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
 import { TradeTimelinePanel } from "@/components/TradeTimelinePanel";
+import { computeExitScore, dteFromExpiry, bandColor, type ExitScore } from "@/lib/exitScore";
 
 type Props = {
   trade: PaperTrade;
@@ -119,8 +121,9 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
     | { kind: "target" | "stop" | "expired"; label: string }
     | null
   >(null);
+  const [alertStatusRaw, setAlertStatusRaw] = useState<string | null>(null);
   useEffect(() => {
-    if (closed) { setAlertHint(null); return; }
+    if (closed) { setAlertHint(null); setAlertStatusRaw(null); return; }
     let cancelled = false;
     async function load() {
       const { data } = await (supabase as any)
@@ -132,6 +135,7 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
         .maybeSingle();
       if (cancelled) return;
       const s = data?.alert_status as string | undefined;
+      setAlertStatusRaw(s ?? null);
       if (s === "hit_t3" || s === "hit_t2" || s === "hit_t1") {
         setAlertHint({ kind: "target", label: s === "hit_t3" ? "Target 3 hit" : s === "hit_t2" ? "Target 2 hit" : "Target 1 hit" });
       } else if (s === "stopped") {
@@ -155,6 +159,57 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
     return () => { cancelled = true; supabase.removeChannel(ch); };
   }, [trade.id, closed]);
 
+  // ---- Exit Score engine -------------------------------------------------
+  // Tracks trailing peak + last marks per trade in refs (no re-renders).
+  const peakRef = useRef<number | null>(null);
+  const marksRef = useRef<number[]>([]);
+  const lastToastAtRef = useRef<number>(0);
+  const firstEvalRef = useRef<boolean>(true);
+  const [exitScore, setExitScore] = useState<ExitScore | null>(null);
+
+  useEffect(() => {
+    if (closed || currentPremium == null) return;
+    // Update peak
+    peakRef.current = peakRef.current == null
+      ? currentPremium
+      : Math.max(peakRef.current, currentPremium);
+    // Update recent marks (keep last 5)
+    const last = marksRef.current[marksRef.current.length - 1];
+    if (last !== currentPremium) {
+      marksRef.current = [...marksRef.current, currentPremium].slice(-5);
+    }
+    const optType = (String(t.option_type ?? trade.direction ?? "").toUpperCase() === "PUT" ? "PUT" : "CALL") as "CALL" | "PUT";
+    const score = computeExitScore({
+      optionType: optType,
+      entryPremium,
+      currentPremium,
+      peakPremium: peakRef.current,
+      recentMarks: marksRef.current,
+      plPct,
+      dte: dteFromExpiry(t.expiry),
+      theta: t.theta != null ? Number(t.theta) : null,
+      alertStatus: alertStatusRaw,
+    });
+    setExitScore(score);
+
+    // Toast on EXIT band, with 30-min per-trade cooldown.
+    // Skip first eval on mount so we don't spam toasts for already-elevated trades.
+    if (score.band === "EXIT" && !firstEvalRef.current) {
+      const now = Date.now();
+      const cooldownMs = 30 * 60 * 1000;
+      if (now - lastToastAtRef.current >= cooldownMs) {
+        lastToastAtRef.current = now;
+        toast.warning(`${trade.ticker}: ${score.headline}`, {
+          description: `Exit Score ${score.score}/100 · ${contracts} contract${contracts === 1 ? "" : "s"}`,
+          duration: 8000,
+        });
+      }
+    }
+    firstEvalRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPremium, alertStatusRaw, closed]);
+
+
 
   return (
     <div className={cn("glass-card border p-4 space-y-3 transition-colors", tint)}>
@@ -166,6 +221,20 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          {!closed && exitScore && (
+            <Badge
+              className={cn(
+                "border text-[10px] uppercase tracking-wider",
+                bandColor(exitScore.band).bg,
+                bandColor(exitScore.band).text,
+                bandColor(exitScore.band).border,
+                exitScore.band === "EXIT" && "animate-pulse",
+              )}
+              title={exitScore.headline}
+            >
+              Exit {exitScore.score}
+            </Badge>
+          )}
           {!closed && (
             <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
               <span className="relative flex h-1.5 w-1.5">
@@ -179,6 +248,7 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
             {trade.status}
           </Badge>
         </div>
+
       </div>
 
       {/* Safety banner */}
@@ -202,6 +272,11 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
           <span className="opacity-80">— consider closing manually.</span>
         </div>
       )}
+
+      {/* Exit Score panel */}
+      {!closed && exitScore && <ExitScorePanel score={exitScore} />}
+
+
 
 
       <>
@@ -463,6 +538,47 @@ function FactorBar({ label, value }: { label: string; value: number }) {
         <div className="h-full bg-primary/70" style={{ width: `${pct}%` }} />
       </div>
       <span className="w-8 text-right ticker-mono text-muted-foreground">{Math.round(pct)}</span>
+    </div>
+  );
+}
+
+function ExitScorePanel({ score }: { score: ExitScore }) {
+  const [open, setOpen] = useState(false);
+  const c = bandColor(score.band);
+  return (
+    <div className={cn("rounded-md border", c.border, c.bg)}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-2.5 py-2 text-xs"
+      >
+        <span className="flex items-center gap-2">
+          <TrendingDown className={cn("h-3.5 w-3.5", c.text)} />
+          <span className={cn("font-semibold uppercase tracking-wider", c.text)}>
+            Exit Score {score.score} · {score.band}
+          </span>
+          <span className="text-muted-foreground hidden sm:inline">— {score.headline}</span>
+        </span>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", c.text, open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="px-2.5 pb-2.5 space-y-1.5">
+          {score.hardTrigger ? (
+            <div className="text-[11px] text-muted-foreground">
+              Hard trigger fired — {score.headline}.
+            </div>
+          ) : score.factors.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground">No factor data yet.</div>
+          ) : (
+            score.factors.map((f) => (
+              <FactorBar key={f.key} label={f.label} value={f.value} />
+            ))
+          )}
+          <div className="text-[10px] text-muted-foreground pt-1">
+            Signal only — you decide when to close. Re-fires every 30 min while ≥75.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
