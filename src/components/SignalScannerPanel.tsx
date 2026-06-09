@@ -134,7 +134,7 @@ export default function SignalScannerPanel() {
           <h2 className="font-semibold flex items-center gap-2">
             <Radar className="h-4 w-4 text-primary" /> Signal Scanner
           </h2>
-          <p className="text-xs text-muted-foreground">Backend Alpaca scanner. Runs every 5 min during US market hours.</p>
+          <p className="text-xs text-muted-foreground">Backend Alpaca scanner. Runs every 2 min during US market hours (tiered cadence keeps providers within budget).</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
