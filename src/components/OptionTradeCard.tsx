@@ -192,8 +192,9 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
     });
     setExitScore(score);
 
-    // Toast on EXIT band, with 30-min per-trade cooldown
-    if (score.band === "EXIT") {
+    // Toast on EXIT band, with 30-min per-trade cooldown.
+    // Skip first eval on mount so we don't spam toasts for already-elevated trades.
+    if (score.band === "EXIT" && !firstEvalRef.current) {
       const now = Date.now();
       const cooldownMs = 30 * 60 * 1000;
       if (now - lastToastAtRef.current >= cooldownMs) {
@@ -204,6 +205,7 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
         });
       }
     }
+    firstEvalRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPremium, alertStatusRaw, closed]);
 
