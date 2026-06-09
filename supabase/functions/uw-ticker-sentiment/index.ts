@@ -39,8 +39,8 @@ Deno.serve(async (req) => {
 
   // UW endpoint: per-ticker daily options-volume aggregates
   const r = await uwFetch(`/stock/${encodeURIComponent(ticker)}/options-volume`);
-  if (r.state !== "ok") {
-    return new Response(JSON.stringify({ error: "uw fetch failed", detail: r.error ?? r.state }), {
+  if (r.state !== "active") {
+    return new Response(JSON.stringify({ error: "uw fetch failed", detail: r.error ?? r.state, state: r.state }), {
       status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
