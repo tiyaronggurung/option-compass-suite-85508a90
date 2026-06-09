@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, PlayCircle, Radar, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, PlayCircle, Radar, ChevronDown, ChevronRight, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 type SkippedCandidate = { ticker: string; direction: string; score: number; reasons: string[] };
