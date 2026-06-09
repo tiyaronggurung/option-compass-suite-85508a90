@@ -377,6 +377,7 @@ function InstitutionalBreakdown({ sc, tier }: { sc: any; tier?: string | null })
                   ↳ {(c.details as any).trendline.human_reason}
                 </div>
               )}
+              {row.key === "technical" && configured && <DealerLevelsTransparency details={(c.details as any)?.dealer_levels} />}
               {row.key === "options_flow" && configured && <OptionsFlowTransparency details={c.details} source={c.source} />}
               {row.key === "sentiment" && configured && <SocialIntelTransparency details={c.details} source={c.source} />}
             </div>
