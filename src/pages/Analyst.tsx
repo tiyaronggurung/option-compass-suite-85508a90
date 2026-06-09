@@ -192,6 +192,10 @@ export default function Analyst() {
                 </div>
               </div>
 
+              <SentimentPanel sentiment={sentiment} loading={loadingSentiment} signalDirection={selected.direction as "CALL" | "PUT"} />
+
+
+
               {!analysis && !loadingAnalysis && (
                 <div className="glass-card p-10 text-center">
                   <Sparkles className="h-8 w-8 mx-auto text-primary" />
