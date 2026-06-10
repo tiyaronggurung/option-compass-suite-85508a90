@@ -8,7 +8,7 @@
 // Pure presentation — no mutations.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, Sparkles, TrendingDown } from "lucide-react";
+import { AlertTriangle, ChevronDown, Info, Sparkles, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
