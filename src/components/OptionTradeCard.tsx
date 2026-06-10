@@ -48,7 +48,7 @@ function optionLabel(t: PaperTrade): string {
   return `${t.ticker} ${strikeStr} ${type} ${fmtExpiry((t as any).expiry)}`.trim();
 }
 
-export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onReview, hasReview, live }: Props) {
+export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onReview, onShowSignal, hasReview, live }: Props) {
   const t = trade as any;
   const closedTrade = trade.status !== "OPEN";
   const hasClosedPricing = closedTrade && (t.exit_premium != null || t.realized_pl != null);
