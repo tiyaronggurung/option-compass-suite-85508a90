@@ -6,15 +6,27 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { signalNotifStore } from "@/lib/signalNotificationsStore";
 
-function useNotifStore() {
-  return useSyncExternalStore(
-    signalNotifStore.subscribe,
-    () => ({
+let cachedSnap = {
+  items: signalNotifStore.items,
+  unread: signalNotifStore.unreadCount(),
+  sound: signalNotifStore.soundEnabled,
+};
+let cachedKey = "";
+function getSnapshot() {
+  const key = `${signalNotifStore.items.length}|${signalNotifStore.items[0]?.id ?? ""}|${signalNotifStore.lastSeen}|${signalNotifStore.soundEnabled ? 1 : 0}`;
+  if (key !== cachedKey) {
+    cachedKey = key;
+    cachedSnap = {
       items: signalNotifStore.items,
       unread: signalNotifStore.unreadCount(),
       sound: signalNotifStore.soundEnabled,
-    }),
-  );
+    };
+  }
+  return cachedSnap;
+}
+
+function useNotifStore() {
+  return useSyncExternalStore(signalNotifStore.subscribe, getSnapshot, getSnapshot);
 }
 
 function relTime(ms: number) {
