@@ -88,6 +88,20 @@ export default function Calendar() {
     return m;
   }, [trades]);
 
+  const tradesByDay = useMemo(() => {
+    const m = new Map<string, Trade[]>();
+    if (!trades) return m;
+    for (const t of trades) {
+      const when = t.closed_at ?? t.opened_at;
+      if (!when) continue;
+      const key = dayKey(new Date(when));
+      const arr = m.get(key) ?? [];
+      arr.push(t);
+      m.set(key, arr);
+    }
+    return m;
+  }, [trades]);
+
   const byMonth = useMemo(() => {
     const m = new Map<string, number>();
     for (const [k, v] of byDay) {
