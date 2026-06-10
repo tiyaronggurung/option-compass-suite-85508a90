@@ -4,6 +4,7 @@ import { TechnicalChart } from "@/components/TechnicalChart";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
+import MarketBreadthMarquee from "@/components/MarketBreadthMarquee";
 
 const SUGGESTIONS = ["SPY", "QQQ", "NVDA", "TSLA", "AMD", "AAPL", "META", "MSFT", "AMZN", "GOOGL"];
 
@@ -20,6 +21,7 @@ export default function Technical() {
 
   return (
     <div className="space-y-4 p-3 sm:p-4 max-w-5xl mx-auto">
+      <MarketBreadthMarquee />
       <div className="space-y-1">
         <h1 className="text-xl sm:text-2xl font-semibold tracking-tight font-display">Technical Trend</h1>
         <p className="text-xs sm:text-sm text-muted-foreground">
