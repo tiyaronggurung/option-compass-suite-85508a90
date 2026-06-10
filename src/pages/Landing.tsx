@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Activity, ArrowRight, Brain, LineChart, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DisclaimerBar } from "@/components/Disclaimer";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function Landing() {
   return (
@@ -14,6 +15,7 @@ export default function Landing() {
           <span className="text-sm font-semibold">Tradingflow <span className="text-primary">101</span></span>
         </Link>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Link to="/auth"><Button variant="ghost" size="sm">Sign in</Button></Link>
           <Link to="/auth"><Button size="sm">Get started</Button></Link>
         </div>

@@ -6,6 +6,7 @@ import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { useSingleSession } from "@/hooks/useSingleSession";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -53,7 +54,10 @@ function SidebarBody({ email, onSignOut, onNavigate }: { email?: string | null; 
         ))}
       </nav>
       <div className="px-3 py-3 border-t border-sidebar-border">
-        <div className="text-[11px] text-muted-foreground truncate ticker-mono">{email}</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[11px] text-muted-foreground truncate ticker-mono flex-1 min-w-0">{email}</div>
+          <ThemeToggle />
+        </div>
         <Button variant="ghost" size="sm" className="mt-1.5 w-full justify-start h-7 text-[12px]" onClick={onSignOut}>
           <LogOut className="h-3.5 w-3.5 mr-1.5" /> Sign out
         </Button>
@@ -102,9 +106,12 @@ export default function AppShell() {
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSignOut} aria-label="Sign out">
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSignOut} aria-label="Sign out">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </header>
         <main className="flex-1 overflow-auto">
           <div className="container max-w-7xl py-5 md:py-6">
