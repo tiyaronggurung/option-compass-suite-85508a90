@@ -168,6 +168,16 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
 
           <InsiderActivity ticker={s.ticker} />
 
+          <div className="pt-2 border-t border-border space-y-1.5">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Technical trend</div>
+            <TechnicalTrendCard
+              ticker={s.ticker}
+              signalDirection={s.direction as "CALL" | "PUT"}
+              baseConfidence={s.confidence ?? null}
+            />
+          </div>
+
+
 
 
 
