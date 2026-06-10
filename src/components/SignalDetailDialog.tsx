@@ -99,7 +99,41 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
 
 
         <div className="space-y-3 text-sm">
-          <ConfidenceRow signal={s} />
+          {(() => {
+            const eff = effectiveConfidence(s as any);
+            const raw = s.confidence;
+            const adj = (s as any).tech_adjusted_confidence as number | null | undefined;
+            const verdict = (s as any).tech_verdict as "bullish" | "neutral" | "bearish" | null | undefined;
+            const align = alignment(s.direction as "CALL" | "PUT", verdict ?? null);
+            const showDelta = adj != null && raw != null && adj !== raw;
+            return (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground text-xs">Confidence</span>
+                <span className="flex items-center gap-2">
+                  {showDelta ? (
+                    <>
+                      <span className="text-muted-foreground text-xs line-through ticker-mono">{raw}</span>
+                      <span className={cn(
+                        "ticker-mono font-medium",
+                        align === "aligned" && "text-emerald-500",
+                        align === "opposed" && "text-rose-500",
+                      )}>{adj}/100</span>
+                      <Badge variant="outline" className={cn(
+                        "text-[10px] gap-1 px-1.5 py-0",
+                        align === "aligned" && "border-emerald-500/40 text-emerald-500",
+                        align === "opposed" && "border-rose-500/40 text-rose-500",
+                      )}>
+                        <Sparkles className="h-2.5 w-2.5" />
+                        tech-adj
+                      </Badge>
+                    </>
+                  ) : (
+                    <span className="ticker-mono">{eff ?? "—"}/100</span>
+                  )}
+                </span>
+              </div>
+            );
+          })()}
           <Row label="Risk" value={s.risk_level} />
           <Row label="DTE" value={s.dte != null ? String(s.dte) : "—"} />
           <Row label="Price" value={s.price != null ? `$${Number(s.price).toFixed(2)}` : "—"} />
