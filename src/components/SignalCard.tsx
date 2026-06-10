@@ -15,6 +15,7 @@ import { getLifecycleState, LIFECYCLE_META } from "@/lib/signalLifecycle";
 import { classifySignalSource } from "@/lib/signalSource";
 import { useLiveQuote } from "@/hooks/useLiveQuote";
 import { SignalRadar } from "@/components/SignalRadar";
+import { effectiveConfidence } from "@/lib/techAdjust";
 
 
 type Props = {
@@ -49,7 +50,8 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const lifecycleMeta = LIFECYCLE_META[lifecycleState];
   const showLifecycleBadge = lifecycleState !== "active";
 
-  const isHot = (signal.confidence ?? 0) >= 70;
+  const effConf = effectiveConfidence(signal as any) ?? 0;
+  const isHot = effConf >= 70;
   return (
     <div className={cn("glass-card p-3 sm:p-4 ring-1 transition hover:ring-primary/40", ring, isHot && "animate-buzz ring-primary/60")}>
 
@@ -159,7 +161,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <RiskBadge level={signal.risk_level} />
-        {signal.confidence >= 80 && (
+        {effConf >= 80 && (
           <Badge className="bg-primary/15 text-primary border-0 gap-1 text-[10px] px-1.5 py-0">
             <Flame className="h-3 w-3" /> High conviction
           </Badge>
