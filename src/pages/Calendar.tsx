@@ -59,13 +59,14 @@ export default function Calendar() {
   const [trades, setTrades] = useState<Trade[] | null>(null);
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState<Date>(startOfMonth(new Date()));
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       const { data } = await supabase
         .from("paper_trades")
-        .select("id,status,closed_at,opened_at,current_pl,ticker")
+        .select("id,status,closed_at,opened_at,current_pl,ticker,direction,option_type,strike,expiry,contracts,entry_premium,exit_premium,entry_price,exit_price")
         .eq("user_id", user.id)
         .in("status", ["WIN", "LOSS"])
         .order("closed_at", { ascending: false })
