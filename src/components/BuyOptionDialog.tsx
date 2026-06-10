@@ -645,8 +645,8 @@ export function BuyOptionDialog(props: Props) {
                   <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
                     Cancel
                   </Button>
-                  <Button onClick={handleBuy} disabled={submitting || !buyingPowerOk || selectedMid <= 0}>
-                    {submitting ? "Submitting…" : `Buy for ${fmtMoney(totalCost)}`}
+                  <Button onClick={handleBuy} disabled={submitting || !buyingPowerOk || selectedMid <= 0 || !Number.isFinite(qty) || qty < 1}>
+                    {submitting ? "Submitting…" : !Number.isFinite(qty) || qty < 1 ? "Enter quantity" : `Buy for ${fmtMoney(totalCost)}`}
                   </Button>
                 </div>
               </div>
