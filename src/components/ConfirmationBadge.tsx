@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ShieldCheck, ShieldAlert, ShieldQuestion } from "lucide-react";
-import { SOURCE_META, SOURCE_ORDER, summarize, type ConfirmationMatrix, type SourceKey } from "@/lib/confirmations";
+import { SOURCE_META, SOURCE_ORDER, summarize, isWired, type ConfirmationMatrix, type SourceKey } from "@/lib/confirmations";
 
 type Props = {
   matrix: ConfirmationMatrix | null | undefined;
