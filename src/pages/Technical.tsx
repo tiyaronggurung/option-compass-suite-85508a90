@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { TechnicalTrendCard } from "@/components/TechnicalTrendCard";
+import { TechnicalTrendCard, type TechSnapshot } from "@/components/TechnicalTrendCard";
+import { TechnicalChart } from "@/components/TechnicalChart";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
@@ -9,6 +10,7 @@ const SUGGESTIONS = ["SPY", "QQQ", "NVDA", "TSLA", "AMD", "AAPL", "META", "MSFT"
 export default function Technical() {
   const [input, setInput] = useState("");
   const [ticker, setTicker] = useState<string | null>(null);
+  const [snap, setSnap] = useState<TechSnapshot | null>(null);
 
   const submit = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -17,7 +19,7 @@ export default function Technical() {
   };
 
   return (
-    <div className="space-y-4 p-3 sm:p-4 max-w-3xl mx-auto">
+    <div className="space-y-4 p-3 sm:p-4 max-w-5xl mx-auto">
       <div className="space-y-1">
         <h1 className="text-xl sm:text-2xl font-semibold tracking-tight font-display">Technical Trend</h1>
         <p className="text-xs sm:text-sm text-muted-foreground">
@@ -43,7 +45,7 @@ export default function Technical() {
         {SUGGESTIONS.map((t) => (
           <button
             key={t}
-            onClick={() => { setInput(t); setTicker(t); }}
+            onClick={() => { setInput(t); setTicker(t); setSnap(null); }}
             className="text-[11px] px-2 py-1 rounded border border-border hover:bg-accent ticker-mono"
           >
             {t}
@@ -52,7 +54,20 @@ export default function Technical() {
       </div>
 
       {ticker ? (
-        <TechnicalTrendCard ticker={ticker} />
+        <div className="grid gap-4 lg:grid-cols-5">
+          <div className="lg:col-span-3 space-y-4">
+            {snap?.payload?.recent_bars && snap.payload.recent_bars.length > 0 ? (
+              <TechnicalChart bars={snap.payload.recent_bars} />
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                Loading chart…
+              </div>
+            )}
+          </div>
+          <div className="lg:col-span-2">
+            <TechnicalTrendCard ticker={ticker} onSnapshot={setSnap} />
+          </div>
+        </div>
       ) : (
         <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
           Pick a ticker above to see its technical readout.
