@@ -29,6 +29,7 @@ export interface TechSnapshot {
       last_volume: number;
       volume_ratio: number;
     };
+    recent_bars?: { t: string; o: number; h: number; l: number; c: number; v: number }[];
   };
 }
 

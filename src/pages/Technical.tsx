@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { TechnicalTrendCard } from "@/components/TechnicalTrendCard";
+import { TechnicalTrendCard, type TechSnapshot } from "@/components/TechnicalTrendCard";
+import { TechnicalChart } from "@/components/TechnicalChart";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
@@ -9,6 +10,7 @@ const SUGGESTIONS = ["SPY", "QQQ", "NVDA", "TSLA", "AMD", "AAPL", "META", "MSFT"
 export default function Technical() {
   const [input, setInput] = useState("");
   const [ticker, setTicker] = useState<string | null>(null);
+  const [snap, setSnap] = useState<TechSnapshot | null>(null);
 
   const submit = (e?: React.FormEvent) => {
     e?.preventDefault();
