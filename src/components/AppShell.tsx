@@ -33,7 +33,7 @@ function SidebarBody({ email, onSignOut, onNavigate, collapsed = false }: { emai
         </div>
         {!collapsed && (
           <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-tight font-display">Tradingflow</div>
+            <div className="text-sm font-semibold tracking-tight font-display">Xalgoflow</div>
             <div className="text-[9px] uppercase tracking-[0.2em] text-primary font-medium">AI Pro</div>
           </div>
         )}
@@ -155,7 +155,7 @@ export default function AppShell() {
                 <Activity className="h-3 w-3" />
               </div>
               <div className="text-sm font-semibold font-display tracking-tight">
-                Tradingflow <span className="text-primary text-[10px] uppercase tracking-[0.18em] ml-0.5">101</span>
+                Xalgoflow
               </div>
             </div>
           </div>
@@ -171,7 +171,7 @@ export default function AppShell() {
             <Outlet />
           </div>
           <footer className="container max-w-7xl pb-6 text-[10.5px] text-muted-foreground hairline pt-4 leading-relaxed">
-            Tradingflow 101 is educational software for research and paper trading. Signals are not financial advice.
+            Xalgoflow is educational software for research and paper trading. Signals are not financial advice.
             Options are risky and can expire worthless. Past performance and backtests do not guarantee future results.
           </footer>
         </main>
