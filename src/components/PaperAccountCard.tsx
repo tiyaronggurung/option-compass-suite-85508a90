@@ -113,6 +113,21 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
   const dayPLPct = dayStart > 0 ? (dayPL / dayStart) * 100 : 0;
   const buyingPower = Math.max(0, cash);
 
+  // Roll over day_start_equity once per NY day so "today" reflects only today's change.
+  useEffect(() => {
+    if (!user || !account || loading) return;
+    const todayNY = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    if (account.day_start_date === todayNY) return;
+    (async () => {
+      await (supabase as any)
+        .from("paper_accounts")
+        .update({ day_start_equity: equity, day_start_date: todayNY })
+        .eq("user_id", user.id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, account?.day_start_date, loading]);
+
+
   return (
     <div className="glass-card border border-border p-4 md:p-5 space-y-4">
       <div className="flex items-start justify-between gap-2">
