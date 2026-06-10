@@ -190,7 +190,7 @@ export default function Performance() {
 
           <section className="grid lg:grid-cols-2 gap-4">
             <Card title="Equity curve (paper)">
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={180} className="sm:!h-[220px]">
                 <AreaChart data={metrics.equityCurve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
