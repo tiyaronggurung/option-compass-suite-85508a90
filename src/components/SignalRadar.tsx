@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { Signal } from "@/lib/signalHelpers";
 import { getContractMeta } from "@/lib/rankSignals";
 import { getExpiryMs } from "@/lib/signalFreshness";
+import { effectiveConfidence } from "@/lib/techAdjust";
 
 export type RadarMetrics = {
   flow: number;       // 0..100
@@ -59,7 +60,7 @@ export function deriveRadarMetrics(s: Signal, now = Date.now()): RadarMetrics {
 
   const risk = s.risk_level === "LOW" ? 80 : s.risk_level === "MEDIUM" ? 55 : 30;
 
-  const composite = Math.round(clamp(Number(s.confidence ?? 0)));
+  const composite = Math.round(clamp(Number(effectiveConfidence(s as any) ?? 0)));
 
   return {
     flow: clamp(flow),
