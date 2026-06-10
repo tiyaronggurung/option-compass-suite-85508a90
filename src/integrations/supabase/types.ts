@@ -1327,6 +1327,30 @@ export type Database = {
         }
         Relationships: []
       }
+      technical_snapshots: {
+        Row: {
+          computed_at: string
+          created_at: string
+          id: string
+          payload: Json
+          ticker: string
+        }
+        Insert: {
+          computed_at?: string
+          created_at?: string
+          id?: string
+          payload: Json
+          ticker: string
+        }
+        Update: {
+          computed_at?: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          ticker?: string
+        }
+        Relationships: []
+      }
       tradable_universe: {
         Row: {
           active: boolean

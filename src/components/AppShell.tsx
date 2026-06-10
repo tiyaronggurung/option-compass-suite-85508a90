@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, BookmarkCheck, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
+import { Activity, BookmarkCheck, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Gauge, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { useSingleSession } from "@/hooks/useSingleSession";
@@ -19,6 +19,7 @@ const NAV = [
   { to: "/app/analyst", label: "AI Analyst", icon: Sparkles, soon: true },
   { to: "/app/alerts", label: "Alerts", icon: Activity, soon: true },
   { to: "/app/performance", label: "Performance", icon: LineChart, soon: true },
+  { to: "/app/technical", label: "Technical", icon: Gauge },
   { to: "/app/settings", label: "Settings", icon: Settings, soon: true },
 ];
 
