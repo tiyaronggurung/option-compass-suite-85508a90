@@ -5,7 +5,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { fmtPrice } from "@/lib/signalHelpers";
 
 type Trade = {
   id: string;
@@ -14,6 +17,15 @@ type Trade = {
   opened_at: string | null;
   current_pl: number | null;
   ticker: string | null;
+  direction: string | null;
+  option_type: string | null;
+  strike: number | null;
+  expiry: string | null;
+  contracts: number | null;
+  entry_premium: number | null;
+  exit_premium: number | null;
+  entry_price: number | null;
+  exit_price: number | null;
 };
 
 type View = "month" | "year";
@@ -47,13 +59,14 @@ export default function Calendar() {
   const [trades, setTrades] = useState<Trade[] | null>(null);
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState<Date>(startOfMonth(new Date()));
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       const { data } = await supabase
         .from("paper_trades")
-        .select("id,status,closed_at,opened_at,current_pl,ticker")
+        .select("id,status,closed_at,opened_at,current_pl,ticker,direction,option_type,strike,expiry,contracts,entry_premium,exit_premium,entry_price,exit_price")
         .eq("user_id", user.id)
         .in("status", ["WIN", "LOSS"])
         .order("closed_at", { ascending: false })
@@ -71,6 +84,20 @@ export default function Calendar() {
       if (!when) continue;
       const key = dayKey(new Date(when));
       m.set(key, (m.get(key) ?? 0) + Number(t.current_pl ?? 0));
+    }
+    return m;
+  }, [trades]);
+
+  const tradesByDay = useMemo(() => {
+    const m = new Map<string, Trade[]>();
+    if (!trades) return m;
+    for (const t of trades) {
+      const when = t.closed_at ?? t.opened_at;
+      if (!when) continue;
+      const key = dayKey(new Date(when));
+      const arr = m.get(key) ?? [];
+      arr.push(t);
+      m.set(key, arr);
     }
     return m;
   }, [trades]);
@@ -155,15 +182,21 @@ export default function Calendar() {
       {trades === null ? (
         <Skeleton className="h-72 w-full" />
       ) : view === "month" ? (
-        <MonthGrid cursor={cursor} byDay={byDay} />
+        <MonthGrid cursor={cursor} byDay={byDay} onPickDay={(k) => setSelectedDay(k)} />
       ) : (
         <YearGrid year={cursor.getFullYear()} byMonth={byMonth} onPickMonth={(m) => { setCursor(new Date(cursor.getFullYear(), m, 1)); setView("month"); }} />
       )}
+
+      <DayTradesDialog
+        dayKey={selectedDay}
+        trades={selectedDay ? tradesByDay.get(selectedDay) ?? [] : []}
+        onClose={() => setSelectedDay(null)}
+      />
     </div>
   );
 }
 
-function MonthGrid({ cursor, byDay }: { cursor: Date; byDay: Map<string, number> }) {
+function MonthGrid({ cursor, byDay, onPickDay }: { cursor: Date; byDay: Map<string, number>; onPickDay: (key: string) => void }) {
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
   const leadingBlanks = monthStart.getDay();
@@ -218,16 +251,22 @@ function MonthGrid({ cursor, byDay }: { cursor: Date; byDay: Map<string, number>
           const isToday = key === today;
           const pos = pl !== undefined && pl > 0;
           const neg = pl !== undefined && pl < 0;
+          const hasTrades = pl !== undefined && inMonth;
           return (
-            <div
+            <button
+              type="button"
               key={i}
+              onClick={hasTrades ? () => onPickDay(key) : undefined}
+              disabled={!hasTrades}
               className={cn(
-                "min-h-[54px] sm:min-h-[78px] p-1 sm:p-1.5 flex flex-col gap-0.5 transition-colors",
+                "min-h-[54px] sm:min-h-[78px] p-1 sm:p-1.5 flex flex-col gap-0.5 transition-colors text-left",
                 "bg-card",
                 pos && "bg-bull/15",
                 neg && "bg-bear/15",
                 !inMonth && "opacity-50",
                 isToday && "ring-1 ring-primary ring-inset",
+                hasTrades && "hover:bg-card-elevated/60 cursor-pointer",
+                !hasTrades && "cursor-default",
               )}
             >
 
@@ -244,7 +283,7 @@ function MonthGrid({ cursor, byDay }: { cursor: Date; byDay: Map<string, number>
               )}>
                 {pl === undefined ? "—" : fmtAmount(pl)}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -294,5 +333,94 @@ function YearGrid({ year, byMonth, onPickMonth }: { year: number; byMonth: Map<s
         })}
       </div>
     </div>
+  );
+}
+
+function DayTradesDialog({ dayKey: key, trades, onClose }: { dayKey: string | null; trades: Trade[]; onClose: () => void }) {
+  const open = key !== null;
+  const total = trades.reduce((a, t) => a + Number(t.current_pl ?? 0), 0);
+  const titleDate = key
+    ? new Date(key + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" })
+    : "";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between gap-3 pr-6">
+            <span className="text-sm sm:text-base">{titleDate}</span>
+            <span className={cn(
+              "ticker-mono text-sm font-semibold",
+              total > 0 ? "text-bull" : total < 0 ? "text-bear" : "text-muted-foreground",
+            )}>
+              {(total >= 0 ? "+$" : "−$") + Math.abs(total).toFixed(2)}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+
+        {trades.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-6 text-center">No closed trades on this day.</div>
+        ) : (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {trades
+              .slice()
+              .sort((a, b) => {
+                const ta = new Date(a.closed_at ?? a.opened_at ?? 0).getTime();
+                const tb = new Date(b.closed_at ?? b.opened_at ?? 0).getTime();
+                return tb - ta;
+              })
+              .map((t) => {
+                const pl = Number(t.current_pl ?? 0);
+                const win = t.status === "WIN";
+                const entry = Number(t.entry_premium ?? t.entry_price ?? 0);
+                const exit = Number(t.exit_premium ?? t.exit_price ?? 0);
+                const qty = Number(t.contracts ?? 1);
+                const contractLabel = t.option_type && t.strike != null
+                  ? `${t.strike} ${String(t.option_type).toUpperCase()}${t.expiry ? ` ${t.expiry}` : ""}`
+                  : null;
+                return (
+                  <div key={t.id} className="rounded-md border border-border bg-card-elevated/30 p-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="ticker-mono font-semibold">{t.ticker ?? "—"}</span>
+                        {t.direction && (
+                          <Badge variant="outline" className="text-[10px] uppercase border-border text-muted-foreground">
+                            {t.direction}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className={cn(
+                          "text-[10px]",
+                          win ? "border-bull/40 text-bull" : "border-bear/40 text-bear",
+                        )}>
+                          {t.status}
+                        </Badge>
+                      </div>
+                      <div className={cn(
+                        "ticker-mono text-sm font-semibold",
+                        pl >= 0 ? "text-bull" : "text-bear",
+                      )}>
+                        {(pl >= 0 ? "+$" : "−$") + Math.abs(pl).toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="mt-1.5 text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5">
+                      {contractLabel && <span className="ticker-mono">{contractLabel}</span>}
+                      <span>qty <span className="ticker-mono text-foreground/80">{qty}</span></span>
+                      <span>entry <span className="ticker-mono text-foreground/80">${fmtPrice(entry)}</span></span>
+                      <span>exit <span className="ticker-mono text-foreground/80">${fmtPrice(exit)}</span></span>
+                      {t.closed_at && (
+                        <span>
+                          closed <span className="ticker-mono text-foreground/80">
+                            {new Date(t.closed_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
