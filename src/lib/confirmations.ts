@@ -47,6 +47,7 @@ export const SOURCE_ORDER: SourceKey[] = [
 export const WIRED_SOURCES: ReadonlySet<SourceKey> = new Set<SourceKey>([
   "alpaca",
   "options_flow",
+  "x_twitter",
   "news",
   "earnings",
 ]);
