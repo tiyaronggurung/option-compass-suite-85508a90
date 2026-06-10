@@ -5,7 +5,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { fmtPrice } from "@/lib/signalHelpers";
 
 type Trade = {
   id: string;
@@ -14,6 +17,15 @@ type Trade = {
   opened_at: string | null;
   current_pl: number | null;
   ticker: string | null;
+  direction: string | null;
+  option_type: string | null;
+  strike: number | null;
+  expiry: string | null;
+  contracts: number | null;
+  entry_premium: number | null;
+  exit_premium: number | null;
+  entry_price: number | null;
+  exit_price: number | null;
 };
 
 type View = "month" | "year";
