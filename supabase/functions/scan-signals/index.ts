@@ -897,10 +897,29 @@ Deno.serve(async (req) => {
 
       // Institutional was already computed BEFORE the gate (A2).
       // Reuse those values here for the insert — do not score twice.
-      const finalScore = institutionalConfidence;
+      const baseScore = institutionalConfidence;
       const tier = institutionalTier;
 
-      const allReasons = Array.from(new Set([...reasonsWithContract, ...institutionalReasons]));
+      // Confirmation-driven confidence nudge: +5 when all 4 configured sources agree,
+      // -5 when 2+ sources conflict. Bounded ±5 so noisy sources can't dominate Alpaca.
+      let confirmationAdjust = 0;
+      let confirmationReason: string | null = null;
+      if (confirmations) {
+        if (confirmations.agreeing >= 4 && confirmations.conflicting === 0) {
+          confirmationAdjust = 5;
+          confirmationReason = "Confidence +5 — 4/4 sources agree";
+        } else if (confirmations.conflicting >= 2) {
+          confirmationAdjust = -5;
+          confirmationReason = `Confidence -5 — ${confirmations.conflicting} sources conflict`;
+        }
+      }
+      const finalScore = Math.max(0, Math.min(100, baseScore + confirmationAdjust));
+
+      const allReasons = Array.from(new Set([
+        ...reasonsWithContract,
+        ...institutionalReasons,
+        ...(confirmationReason ? [confirmationReason] : []),
+      ]));
       const hideForRejected = tier === "rejected";
 
       // ---- Technical trend hydration (defensive — never blocks signal insert) ----
