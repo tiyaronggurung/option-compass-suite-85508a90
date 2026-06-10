@@ -1228,6 +1228,9 @@ export type Database = {
           status: Database["public"]["Enums"]["signal_status"]
           strike: number | null
           suggested_contract_snapshot_id: string | null
+          tech_adjusted_confidence: number | null
+          tech_score: number | null
+          tech_verdict: string | null
           technical_at_birth: Json
           technical_metrics: Json
           ticker: string
@@ -1274,6 +1277,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
           suggested_contract_snapshot_id?: string | null
+          tech_adjusted_confidence?: number | null
+          tech_score?: number | null
+          tech_verdict?: string | null
           technical_at_birth?: Json
           technical_metrics?: Json
           ticker: string
@@ -1320,6 +1326,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["signal_status"]
           strike?: number | null
           suggested_contract_snapshot_id?: string | null
+          tech_adjusted_confidence?: number | null
+          tech_score?: number | null
+          tech_verdict?: string | null
           technical_at_birth?: Json
           technical_metrics?: Json
           ticker?: string
