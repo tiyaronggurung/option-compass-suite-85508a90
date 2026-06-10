@@ -19,6 +19,7 @@ const NAV = [
   { to: "/app/analyst", label: "AI Analyst", icon: Sparkles, soon: true },
   { to: "/app/alerts", label: "Alerts", icon: Activity, soon: true },
   { to: "/app/performance", label: "Performance", icon: LineChart, soon: true },
+  { to: "/app/technical", label: "Technical", icon: Gauge },
   { to: "/app/settings", label: "Settings", icon: Settings, soon: true },
 ];
 
