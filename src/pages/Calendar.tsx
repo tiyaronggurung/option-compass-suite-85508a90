@@ -196,7 +196,7 @@ export default function Calendar() {
   );
 }
 
-function MonthGrid({ cursor, byDay }: { cursor: Date; byDay: Map<string, number> }) {
+function MonthGrid({ cursor, byDay, onPickDay }: { cursor: Date; byDay: Map<string, number>; onPickDay: (key: string) => void }) {
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
   const leadingBlanks = monthStart.getDay();
