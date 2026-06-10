@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type Trade = {
@@ -16,7 +16,7 @@ type Trade = {
   ticker: string | null;
 };
 
-type Range = "1M" | "3M" | "YTD" | "ALL";
+type View = "month" | "year";
 
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
@@ -26,15 +26,26 @@ function dayKey(d: Date) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-function fmtMoney(n: number) {
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function fmtAmount(n: number) {
+  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
+  const abs = Math.abs(n);
+  const digits = abs >= 1000 ? 0 : 2;
+  return `${sign}${abs.toFixed(digits)}`;
+}
+function fmtMoneyFull(n: number) {
   const sign = n >= 0 ? "+" : "−";
   return `${sign}$${Math.abs(n).toFixed(Math.abs(n) >= 100 ? 0 : 2)}`;
 }
 
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
 export default function Calendar() {
   const { user } = useAuth();
   const [trades, setTrades] = useState<Trade[] | null>(null);
-  const [range, setRange] = useState<Range>("1M");
+  const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState<Date>(startOfMonth(new Date()));
 
   useEffect(() => {
@@ -51,179 +62,236 @@ export default function Calendar() {
     })();
   }, [user]);
 
-  // Aggregate P/L by local-day for closed trades
+  // Aggregate P/L by local-day
   const byDay = useMemo(() => {
-    const m = new Map<string, { pl: number; count: number; tickers: string[] }>();
+    const m = new Map<string, number>();
     if (!trades) return m;
     for (const t of trades) {
       const when = t.closed_at ?? t.opened_at;
       if (!when) continue;
       const key = dayKey(new Date(when));
-      const pl = Number(t.current_pl ?? 0);
-      const cur = m.get(key) ?? { pl: 0, count: 0, tickers: [] };
-      cur.pl += pl;
-      cur.count += 1;
-      if (t.ticker && cur.tickers.length < 6 && !cur.tickers.includes(t.ticker)) cur.tickers.push(t.ticker);
-      m.set(key, cur);
+      m.set(key, (m.get(key) ?? 0) + Number(t.current_pl ?? 0));
     }
     return m;
   }, [trades]);
 
-  // Window filter for the summary tiles
-  const windowStart = useMemo(() => {
-    const now = new Date();
-    if (range === "1M") return new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-    if (range === "3M") return new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-    if (range === "YTD") return new Date(now.getFullYear(), 0, 1);
-    return new Date(2000, 0, 1);
-  }, [range]);
-
-  const summary = useMemo(() => {
-    let total = 0, winDays = 0, lossDays = 0, flatDays = 0;
+  const byMonth = useMemo(() => {
+    const m = new Map<string, number>();
     for (const [k, v] of byDay) {
-      const d = new Date(k + "T00:00:00");
-      if (d < windowStart) continue;
-      total += v.pl;
-      if (v.pl > 0) winDays++;
-      else if (v.pl < 0) lossDays++;
-      else flatDays++;
+      const mk = k.slice(0, 7);
+      m.set(mk, (m.get(mk) ?? 0) + v);
     }
-    return { total, winDays, lossDays, flatDays };
-  }, [byDay, windowStart]);
+    return m;
+  }, [byDay]);
 
-  // Build month grid
-  const monthStart = startOfMonth(cursor);
-  const monthEnd = endOfMonth(cursor);
-  const leadingBlanks = monthStart.getDay(); // 0 = Sun
-  const totalCells = Math.ceil((leadingBlanks + monthEnd.getDate()) / 7) * 7;
-  const cells: Array<Date | null> = [];
-  for (let i = 0; i < leadingBlanks; i++) cells.push(null);
-  for (let d = 1; d <= monthEnd.getDate(); d++) cells.push(new Date(cursor.getFullYear(), cursor.getMonth(), d));
-  while (cells.length < totalCells) cells.push(null);
-
-  const monthLabel = cursor.toLocaleString(undefined, { month: "long", year: "numeric" });
-  const today = dayKey(new Date());
-
-  const monthTotals = useMemo(() => {
-    let pl = 0, days = 0;
-    for (const c of cells) {
-      if (!c) continue;
-      const v = byDay.get(dayKey(c));
-      if (!v) continue;
-      pl += v.pl;
-      days += 1;
-    }
-    return { pl, days };
-  }, [cells, byDay]);
+  // Year picker options (current year ± 4)
+  const nowYear = new Date().getFullYear();
+  const yearOptions = useMemo(() => {
+    const start = nowYear - 4;
+    return Array.from({ length: 9 }, (_, i) => start + i);
+  }, [nowYear]);
 
   return (
-    <div className="space-y-5">
-      <header className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <CalendarDays className="h-5 w-5 text-primary" />
-          <div>
-            <h1 className="text-xl font-semibold font-display tracking-tight">P/L Calendar</h1>
-            <p className="text-xs text-muted-foreground">Realized P/L from closed paper trades, grouped by day.</p>
-          </div>
-        </div>
-        <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
-          <TabsList className="h-8">
-            <TabsTrigger value="1M" className="text-xs px-3">1M</TabsTrigger>
-            <TabsTrigger value="3M" className="text-xs px-3">3M</TabsTrigger>
-            <TabsTrigger value="YTD" className="text-xs px-3">YTD</TabsTrigger>
-            <TabsTrigger value="ALL" className="text-xs px-3">All</TabsTrigger>
-          </TabsList>
-        </Tabs>
+    <div className="space-y-4">
+      <header className="flex items-center gap-2">
+        <CalendarDays className="h-5 w-5 text-primary" />
+        <h1 className="text-lg sm:text-xl font-semibold font-display tracking-tight">P&amp;L Calendar</h1>
       </header>
 
-      {/* Summary tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <SummaryTile label={`${range} P/L`} value={fmtMoney(summary.total)} positive={summary.total >= 0} />
-        <SummaryTile label="Win days" value={String(summary.winDays)} tone="bull" />
-        <SummaryTile label="Loss days" value={String(summary.lossDays)} tone="bear" />
-        <SummaryTile label="Flat days" value={String(summary.flatDays)} tone="muted" />
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <Tabs value={view} onValueChange={(v) => setView(v as View)}>
+          <TabsList className="h-8">
+            <TabsTrigger value="month" className="text-xs px-3">Month</TabsTrigger>
+            <TabsTrigger value="year" className="text-xs px-3">Year</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {view === "month" ? (
+          <div className="flex items-center gap-1.5">
+            <Select
+              value={String(cursor.getMonth())}
+              onValueChange={(v) => setCursor(new Date(cursor.getFullYear(), Number(v), 1))}
+            >
+              <SelectTrigger className="h-8 w-[120px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTHS.map((m, i) => (
+                  <SelectItem key={m} value={String(i)} className="text-xs">{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={String(cursor.getFullYear())}
+              onValueChange={(v) => setCursor(new Date(Number(v), cursor.getMonth(), 1))}
+            >
+              <SelectTrigger className="h-8 w-[88px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((y) => (
+                  <SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <Select
+            value={String(cursor.getFullYear())}
+            onValueChange={(v) => setCursor(new Date(Number(v), 0, 1))}
+          >
+            <SelectTrigger className="h-8 w-[100px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
-      {/* Month nav */}
-      <div className="glass-card p-4 md:p-5">
-        <div className="flex items-center justify-between mb-3">
-          <Button variant="ghost" size="sm" className="h-8" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="text-sm font-medium font-display flex items-center gap-3">
-            <span>{monthLabel}</span>
-            <span className={cn("ticker-mono text-xs", monthTotals.pl >= 0 ? "text-bull" : "text-bear")}>
-              {fmtMoney(monthTotals.pl)} · {monthTotals.days}d
-            </span>
-          </div>
-          <Button variant="ghost" size="sm" className="h-8" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+      {trades === null ? (
+        <Skeleton className="h-72 w-full" />
+      ) : view === "month" ? (
+        <MonthGrid cursor={cursor} byDay={byDay} />
+      ) : (
+        <YearGrid year={cursor.getFullYear()} byMonth={byMonth} onPickMonth={(m) => { setCursor(new Date(cursor.getFullYear(), m, 1)); setView("month"); }} />
+      )}
+    </div>
+  );
+}
 
-        <div className="grid grid-cols-7 gap-1 text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => (
-            <div key={d} className="px-2 py-1">{d}</div>
-          ))}
-        </div>
+function MonthGrid({ cursor, byDay }: { cursor: Date; byDay: Map<string, number> }) {
+  const monthStart = startOfMonth(cursor);
+  const monthEnd = endOfMonth(cursor);
+  const leadingBlanks = monthStart.getDay();
+  const totalCells = Math.ceil((leadingBlanks + monthEnd.getDate()) / 7) * 7;
+  const today = dayKey(new Date());
 
-        {trades === null ? (
-          <Skeleton className="h-72 w-full" />
-        ) : (
-          <div className="grid grid-cols-7 gap-1">
-            {cells.map((c, i) => {
-              if (!c) return <div key={i} className="aspect-square rounded-sm bg-muted/10" />;
-              const key = dayKey(c);
-              const entry = byDay.get(key);
-              const isToday = key === today;
-              const pos = entry && entry.pl > 0;
-              const neg = entry && entry.pl < 0;
-              return (
-                <div
-                  key={i}
-                  title={entry ? `${entry.count} trade${entry.count > 1 ? "s" : ""} · ${entry.tickers.join(", ")}` : undefined}
-                  className={cn(
-                    "aspect-square rounded-sm border p-1.5 flex flex-col justify-between transition-colors",
-                    "border-border/60",
-                    pos && "bg-bull/15 border-bull/40 hover:bg-bull/25",
-                    neg && "bg-bear/15 border-bear/40 hover:bg-bear/25",
-                    !entry && "bg-card-elevated/30",
-                    isToday && "ring-1 ring-primary",
-                  )}
-                >
-                  <div className="flex items-start justify-between">
-                    <span className={cn("text-[11px] ticker-mono", isToday ? "text-primary font-semibold" : "text-foreground/80")}>
-                      {c.getDate()}
-                    </span>
-                    {entry && (
-                      <span className="text-[9px] text-muted-foreground">{entry.count}</span>
-                    )}
-                  </div>
-                  {entry && (
-                    <div className={cn("ticker-mono text-[10.5px] md:text-xs font-semibold leading-tight", pos ? "text-bull" : neg ? "text-bear" : "text-muted-foreground")}>
-                      {fmtMoney(entry.pl)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+  const cells: Array<Date> = [];
+  // leading: previous month days
+  for (let i = leadingBlanks - 1; i >= 0; i--) {
+    cells.push(new Date(cursor.getFullYear(), cursor.getMonth(), -i));
+  }
+  for (let d = 1; d <= monthEnd.getDate(); d++) {
+    cells.push(new Date(cursor.getFullYear(), cursor.getMonth(), d));
+  }
+  while (cells.length < totalCells) {
+    const last = cells[cells.length - 1];
+    cells.push(new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1));
+  }
+
+  // Month total
+  let monthTotal = 0, monthDays = 0;
+  for (let d = 1; d <= monthEnd.getDate(); d++) {
+    const v = byDay.get(dayKey(new Date(cursor.getFullYear(), cursor.getMonth(), d)));
+    if (v !== undefined) { monthTotal += v; monthDays++; }
+  }
+
+  return (
+    <div className="glass-card p-2 sm:p-4">
+      <div className="flex items-center justify-between px-1 pb-2">
+        <div className="text-xs text-muted-foreground">
+          {monthDays} trading day{monthDays === 1 ? "" : "s"}
+        </div>
+        <div className={cn("ticker-mono text-sm font-semibold", monthTotal > 0 ? "text-bull" : monthTotal < 0 ? "text-bear" : "text-muted-foreground")}>
+          {fmtMoneyFull(monthTotal)}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-px sm:gap-1 text-[10px] uppercase tracking-wider text-muted-foreground mb-px sm:mb-1">
+        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d, i) => (
+          <div key={d} className="px-1 py-1 text-center sm:text-left">
+            <span className="sm:hidden">{["S","M","T","W","T","F","S"][i]}</span>
+            <span className="hidden sm:inline">{d}</span>
           </div>
-        )}
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-px sm:gap-1">
+        {cells.map((c, i) => {
+          const inMonth = c.getMonth() === cursor.getMonth();
+          const key = dayKey(c);
+          const pl = byDay.get(key);
+          const isToday = key === today;
+          const pos = pl !== undefined && pl > 0;
+          const neg = pl !== undefined && pl < 0;
+          return (
+            <div
+              key={i}
+              className={cn(
+                "min-h-[54px] sm:min-h-[78px] rounded-sm border p-1 sm:p-1.5 flex flex-col gap-0.5 transition-colors",
+                "border-border/40 bg-card-elevated/20",
+                pos && "bg-bull/15 border-bull/40",
+                neg && "bg-bear/15 border-bear/40",
+                !inMonth && "opacity-40",
+                isToday && "ring-1 ring-primary",
+              )}
+            >
+              <div className={cn(
+                "text-[11px] sm:text-xs ticker-mono leading-none",
+                isToday ? "text-primary font-semibold" : inMonth ? "text-foreground/85" : "text-muted-foreground",
+              )}>
+                {c.getDate()}
+              </div>
+              <div className={cn(
+                "ticker-mono leading-tight mt-auto",
+                "text-[10px] sm:text-[12px] font-semibold",
+                pos ? "text-bull" : neg ? "text-bear" : "text-muted-foreground/60",
+              )}>
+                {pl === undefined ? "—" : fmtAmount(pl)}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function SummaryTile({ label, value, positive, tone }: { label: string; value: string; positive?: boolean; tone?: "bull" | "bear" | "muted" }) {
-  const color =
-    tone === "bull" ? "text-bull" :
-    tone === "bear" ? "text-bear" :
-    tone === "muted" ? "text-muted-foreground" :
-    positive ? "text-bull" : "text-bear";
+function YearGrid({ year, byMonth, onPickMonth }: { year: number; byMonth: Map<string, number>; onPickMonth: (m: number) => void }) {
+  let yearTotal = 0;
+  const months = MONTHS.map((name, i) => {
+    const v = byMonth.get(`${year}-${String(i + 1).padStart(2, "0")}`);
+    if (v !== undefined) yearTotal += v;
+    return { name, idx: i, pl: v };
+  });
   return (
-    <div className="glass-card p-3">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn("text-lg font-semibold ticker-mono mt-1", color)}>{value}</div>
+    <div className="glass-card p-3 sm:p-4">
+      <div className="flex items-center justify-between px-1 pb-3">
+        <div className="text-xs text-muted-foreground">Year {year}</div>
+        <div className={cn("ticker-mono text-sm font-semibold", yearTotal > 0 ? "text-bull" : yearTotal < 0 ? "text-bear" : "text-muted-foreground")}>
+          {fmtMoneyFull(yearTotal)}
+        </div>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2">
+        {months.map((m) => {
+          const pos = m.pl !== undefined && m.pl > 0;
+          const neg = m.pl !== undefined && m.pl < 0;
+          return (
+            <button
+              key={m.name}
+              onClick={() => onPickMonth(m.idx)}
+              className={cn(
+                "rounded-sm border p-2 sm:p-3 text-left transition-colors",
+                "border-border/40 bg-card-elevated/20 hover:bg-card-elevated/40",
+                pos && "bg-bull/15 border-bull/40 hover:bg-bull/25",
+                neg && "bg-bear/15 border-bear/40 hover:bg-bear/25",
+              )}
+            >
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{m.name.slice(0, 3)}</div>
+              <div className={cn(
+                "ticker-mono text-sm sm:text-base font-semibold mt-1",
+                pos ? "text-bull" : neg ? "text-bear" : "text-muted-foreground/60",
+              )}>
+                {m.pl === undefined ? "—" : fmtAmount(m.pl)}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
