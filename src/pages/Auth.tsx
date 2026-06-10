@@ -11,6 +11,7 @@ import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { DisclaimerBar } from "@/components/Disclaimer";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const schema = z.object({
   email: z.string().trim().email("Enter a valid email").max(255),
@@ -152,7 +153,10 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
+    <div className="min-h-screen grid lg:grid-cols-2 relative">
+      <div className="absolute top-3 right-3 z-20">
+        <ThemeToggle />
+      </div>
       <div className="hidden lg:flex flex-col justify-between p-10 relative overflow-hidden border-r border-border"
         style={{ backgroundImage: "var(--gradient-hero)" }}>
         <Link to="/" className="flex items-center gap-2">
