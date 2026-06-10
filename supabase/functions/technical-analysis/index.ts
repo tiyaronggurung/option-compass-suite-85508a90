@@ -345,7 +345,7 @@ Deno.serve(async (req) => {
 
     const payload = buildVerdict(bars);
 
-    const recentBars = bars.slice(-120).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+    const recentBars = bars.slice(-200).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
     const fullPayload = { ...payload, recent_bars: recentBars };
 
     const { data: saved } = await supabase
