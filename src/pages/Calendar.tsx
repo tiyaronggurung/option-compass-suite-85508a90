@@ -335,3 +335,92 @@ function YearGrid({ year, byMonth, onPickMonth }: { year: number; byMonth: Map<s
     </div>
   );
 }
+
+function DayTradesDialog({ dayKey: key, trades, onClose }: { dayKey: string | null; trades: Trade[]; onClose: () => void }) {
+  const open = key !== null;
+  const total = trades.reduce((a, t) => a + Number(t.current_pl ?? 0), 0);
+  const titleDate = key
+    ? new Date(key + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" })
+    : "";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between gap-3 pr-6">
+            <span className="text-sm sm:text-base">{titleDate}</span>
+            <span className={cn(
+              "ticker-mono text-sm font-semibold",
+              total > 0 ? "text-bull" : total < 0 ? "text-bear" : "text-muted-foreground",
+            )}>
+              {(total >= 0 ? "+$" : "−$") + Math.abs(total).toFixed(2)}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+
+        {trades.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-6 text-center">No closed trades on this day.</div>
+        ) : (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {trades
+              .slice()
+              .sort((a, b) => {
+                const ta = new Date(a.closed_at ?? a.opened_at ?? 0).getTime();
+                const tb = new Date(b.closed_at ?? b.opened_at ?? 0).getTime();
+                return tb - ta;
+              })
+              .map((t) => {
+                const pl = Number(t.current_pl ?? 0);
+                const win = t.status === "WIN";
+                const entry = Number(t.entry_premium ?? t.entry_price ?? 0);
+                const exit = Number(t.exit_premium ?? t.exit_price ?? 0);
+                const qty = Number(t.contracts ?? 1);
+                const contractLabel = t.option_type && t.strike != null
+                  ? `${t.strike} ${String(t.option_type).toUpperCase()}${t.expiry ? ` ${t.expiry}` : ""}`
+                  : null;
+                return (
+                  <div key={t.id} className="rounded-md border border-border bg-card-elevated/30 p-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="ticker-mono font-semibold">{t.ticker ?? "—"}</span>
+                        {t.direction && (
+                          <Badge variant="outline" className="text-[10px] uppercase border-border text-muted-foreground">
+                            {t.direction}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className={cn(
+                          "text-[10px]",
+                          win ? "border-bull/40 text-bull" : "border-bear/40 text-bear",
+                        )}>
+                          {t.status}
+                        </Badge>
+                      </div>
+                      <div className={cn(
+                        "ticker-mono text-sm font-semibold",
+                        pl >= 0 ? "text-bull" : "text-bear",
+                      )}>
+                        {(pl >= 0 ? "+$" : "−$") + Math.abs(pl).toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="mt-1.5 text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5">
+                      {contractLabel && <span className="ticker-mono">{contractLabel}</span>}
+                      <span>qty <span className="ticker-mono text-foreground/80">{qty}</span></span>
+                      <span>entry <span className="ticker-mono text-foreground/80">${fmtPrice(entry)}</span></span>
+                      <span>exit <span className="ticker-mono text-foreground/80">${fmtPrice(exit)}</span></span>
+                      {t.closed_at && (
+                        <span>
+                          closed <span className="ticker-mono text-foreground/80">
+                            {new Date(t.closed_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
