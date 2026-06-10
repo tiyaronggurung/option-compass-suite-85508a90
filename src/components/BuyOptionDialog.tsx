@@ -575,8 +575,14 @@ export function BuyOptionDialog(props: Props) {
                       type="number"
                       min={1}
                       max={999}
-                      value={qty}
-                      onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                      placeholder="Qty"
+                      value={Number.isFinite(qty) && qty > 0 ? qty : ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") { setQty(NaN); return; }
+                        const n = Math.floor(Number(raw));
+                        setQty(Number.isFinite(n) && n > 0 ? Math.min(999, n) : NaN);
+                      }}
                       className="w-24"
                     />
                   </div>
