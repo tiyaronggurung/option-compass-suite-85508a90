@@ -251,16 +251,22 @@ function MonthGrid({ cursor, byDay, onPickDay }: { cursor: Date; byDay: Map<stri
           const isToday = key === today;
           const pos = pl !== undefined && pl > 0;
           const neg = pl !== undefined && pl < 0;
+          const hasTrades = pl !== undefined && inMonth;
           return (
-            <div
+            <button
+              type="button"
               key={i}
+              onClick={hasTrades ? () => onPickDay(key) : undefined}
+              disabled={!hasTrades}
               className={cn(
-                "min-h-[54px] sm:min-h-[78px] p-1 sm:p-1.5 flex flex-col gap-0.5 transition-colors",
+                "min-h-[54px] sm:min-h-[78px] p-1 sm:p-1.5 flex flex-col gap-0.5 transition-colors text-left",
                 "bg-card",
                 pos && "bg-bull/15",
                 neg && "bg-bear/15",
                 !inMonth && "opacity-50",
                 isToday && "ring-1 ring-primary ring-inset",
+                hasTrades && "hover:bg-card-elevated/60 cursor-pointer",
+                !hasTrades && "cursor-default",
               )}
             >
 
@@ -277,7 +283,7 @@ function MonthGrid({ cursor, byDay, onPickDay }: { cursor: Date; byDay: Map<stri
               )}>
                 {pl === undefined ? "—" : fmtAmount(pl)}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
