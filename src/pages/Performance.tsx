@@ -122,51 +122,55 @@ export default function Performance() {
         <Badge className="border-0 bg-emerald-500/15 text-emerald-400">Real paper data</Badge>
       </header>
 
-      <section className="glass-card p-3 grid grid-cols-2 sm:flex sm:flex-wrap sm:items-end gap-2 sm:gap-3">
-        <div className="space-y-1 min-w-0">
-          <label className="text-[11px] uppercase tracking-wider text-muted-foreground">From</label>
-          <Input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="h-9 w-full sm:w-[150px]"
-          />
+      <section className="glass-card p-3 space-y-2 lg:space-y-0 lg:flex lg:flex-wrap lg:items-end lg:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:contents">
+          <div className="space-y-1 min-w-0">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">From</label>
+            <Input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="h-9 w-full lg:w-[150px] px-2 text-sm"
+            />
+          </div>
+          <div className="space-y-1 min-w-0">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">To</label>
+            <Input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="h-9 w-full lg:w-[150px] px-2 text-sm"
+            />
+          </div>
+          <div className="space-y-1 min-w-0">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Ticker</label>
+            <Select value={tickerFilter} onValueChange={setTickerFilter}>
+              <SelectTrigger className="h-9 w-full lg:w-[140px] px-2 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All tickers</SelectItem>
+                {availableTickers.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="space-y-1 min-w-0">
-          <label className="text-[11px] uppercase tracking-wider text-muted-foreground">To</label>
-          <Input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="h-9 w-full sm:w-[150px]"
-          />
-        </div>
-        <div className="space-y-1 min-w-0 col-span-2 sm:col-auto">
-          <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Ticker</label>
-          <Select value={tickerFilter} onValueChange={setTickerFilter}>
-            <SelectTrigger className="h-9 w-full sm:w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All tickers</SelectItem>
-              {availableTickers.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {filtersActive && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 gap-1 col-span-2 sm:col-auto justify-center"
-            onClick={() => { setFromDate(""); setToDate(""); setTickerFilter("__all__"); }}
-          >
-            <X className="h-3.5 w-3.5" /> Clear
-          </Button>
-        )}
-        <div className="col-span-2 sm:ml-auto text-xs text-muted-foreground text-right">
-          {filteredTrades?.length ?? 0} of {trades?.length ?? 0} trades
+        <div className="flex items-center justify-between gap-2 lg:contents">
+          {filtersActive ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 lg:h-9 gap-1 px-2"
+              onClick={() => { setFromDate(""); setToDate(""); setTickerFilter("__all__"); }}
+            >
+              <X className="h-3.5 w-3.5" /> Clear
+            </Button>
+          ) : <span className="lg:hidden" />}
+          <div className="lg:ml-auto text-xs text-muted-foreground whitespace-nowrap">
+            {filteredTrades?.length ?? 0} of {trades?.length ?? 0} trades
+          </div>
         </div>
       </section>
 
