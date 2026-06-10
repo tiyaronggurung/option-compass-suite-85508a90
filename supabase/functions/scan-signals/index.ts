@@ -900,6 +900,26 @@ Deno.serve(async (req) => {
       const allReasons = Array.from(new Set([...reasonsWithContract, ...institutionalReasons]));
       const hideForRejected = tier === "rejected";
 
+      // ---- Technical trend hydration (defensive — never blocks signal insert) ----
+      let techVerdict: "bullish" | "neutral" | "bearish" | null = null;
+      let techScore: number | null = null;
+      let techAdjConf: number | null = null;
+      try {
+        const { techAdjustConfidence } = await import("../_shared/techAdjust.ts");
+        const techRes = await admin.functions.invoke("technical-analysis", {
+          body: { ticker: draft.ticker },
+        });
+        const payload = (techRes?.data as any)?.snapshot?.payload;
+        if (payload && (payload.verdict === "bullish" || payload.verdict === "neutral" || payload.verdict === "bearish")) {
+          techVerdict = payload.verdict;
+          techScore = typeof payload.tech_score === "number" ? payload.tech_score : null;
+          techAdjConf = techAdjustConfidence(finalScore, draft.direction as "CALL" | "PUT", techVerdict);
+        }
+      } catch (e) {
+        // Non-fatal — signal still inserts with raw confidence
+        errors.push(`${sym} tech-trend: ${(e as Error).message}`);
+      }
+
       const { error } = await admin.from("signals").insert({
         ticker: draft.ticker,
         direction: draft.direction,
@@ -920,6 +940,9 @@ Deno.serve(async (req) => {
         confirmation_score: confirmations?.score ?? null,
         confirmation_label: confirmations?.label ?? null,
         tier,
+        tech_verdict: techVerdict,
+        tech_score: techScore,
+        tech_adjusted_confidence: techAdjConf,
         score_components: institutional ? {
           final: institutional.final,
           base: institutional.base,
