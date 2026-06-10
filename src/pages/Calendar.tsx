@@ -182,10 +182,16 @@ export default function Calendar() {
       {trades === null ? (
         <Skeleton className="h-72 w-full" />
       ) : view === "month" ? (
-        <MonthGrid cursor={cursor} byDay={byDay} />
+        <MonthGrid cursor={cursor} byDay={byDay} onPickDay={(k) => setSelectedDay(k)} />
       ) : (
         <YearGrid year={cursor.getFullYear()} byMonth={byMonth} onPickMonth={(m) => { setCursor(new Date(cursor.getFullYear(), m, 1)); setView("month"); }} />
       )}
+
+      <DayTradesDialog
+        dayKey={selectedDay}
+        trades={selectedDay ? tradesByDay.get(selectedDay) ?? [] : []}
+        onClose={() => setSelectedDay(null)}
+      />
     </div>
   );
 }
