@@ -134,6 +134,12 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
         </table>
         </div>
       )}
+      <UserTradeCalendarDialog
+        open={!!openUser}
+        onOpenChange={(v) => !v && setOpenUser(null)}
+        userId={openUser?.id ?? null}
+        displayName={openUser?.name ?? ""}
+      />
     </section>
   );
 }
