@@ -74,7 +74,7 @@ export default function Dashboard() {
   const [buyOpen, setBuyOpen] = useState(false);
   const [buySignal, setBuySignal] = useState<Signal | null>(null);
   const [cashBalance, setCashBalance] = useState<number>(0);
-  const [minDevelopingScore, setMinDevelopingScore] = useState(0);
+  const [minDevelopingScore, setMinDevelopingScore] = useState(60);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   const reloadAlerts = async () => {
@@ -93,7 +93,7 @@ export default function Dashboard() {
     (async () => {
       const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }, { data: pa }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
-        supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 50).order("created_at", { ascending: false }).limit(30),
+        supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 60).order("created_at", { ascending: false }).limit(30),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
@@ -119,10 +119,17 @@ export default function Dashboard() {
       .channel("signals-stream")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "signals" }, (payload) => {
         const ns = payload.new as Signal;
+        const conf = ns.confidence ?? 0;
         if (ns.hidden) {
-          if (ns.tier === "rejected" && (ns.confidence ?? 0) >= 50) {
+          if (ns.tier === "rejected" && conf >= 60) {
             setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
           }
+          return;
+        }
+        // Visible signals: 70+ go to top grid, 60-69 surface in developing, <60 dropped.
+        if (conf < 60) return;
+        if (conf < 70) {
+          setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
           return;
         }
         setSignals((prev) => (prev ? [ns, ...prev] : [ns]));
@@ -165,7 +172,7 @@ export default function Dashboard() {
     if (!signals) return [];
     const base = signals.filter((s) => {
       if (dismissedIds.has(s.id)) return false;
-      if (!s.is_demo && (s.confidence ?? 0) < 50) return false;
+      if (!s.is_demo && (s.confidence ?? 0) < 70) return false;
       const lc = getLifecycleState(s);
       // Default view hides expired/invalidated unless filter selected explicitly.
       if (lifecycleFilter === "all") {
