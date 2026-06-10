@@ -208,7 +208,7 @@ export default function Performance() {
             </Card>
 
             <Card title="Daily P/L">
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={180} className="sm:!h-[220px]">
                 <BarChart data={metrics.dailyPL} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="label" stroke={MUTED} fontSize={11} />
