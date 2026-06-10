@@ -178,7 +178,7 @@ export default function Performance() {
         <Stat label="Max drawdown" value={`$${fmtPL(metrics.maxDD)}`} icon={TrendingDown} accent="text-bear" />
         <Stat label="High-conviction hit rate" value={`${metrics.highConvHit.toFixed(0)}%`} icon={Target} accent="text-primary" />
         <Stat label="Open positions" value={metrics.open} icon={Activity} accent="text-info" />
-        <Stat label="Avg MFE / MAE" value={`${metrics.avgMfe.toFixed(0)} / ${metrics.avgMae.toFixed(0)}`} icon={Activity} accent="text-muted-foreground" />
+        <Stat label="Avg MFE / MAE" value={`${metrics.avgMfe.toFixed(2)} / ${metrics.avgMae.toFixed(2)}`} icon={Activity} accent="text-muted-foreground" />
       </section>
 
       <DisclaimerBar />
@@ -314,7 +314,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: BRow[] }) {
                 {r.winRate.toFixed(0)}%
               </td>
               <td className={cn("px-4 py-1.5 text-right ticker-mono", r.avgPl >= 0 ? "text-bull" : "text-bear")}>
-                {r.avgPl >= 0 ? "+" : ""}{r.avgPl.toFixed(0)}
+                {r.avgPl >= 0 ? "+" : ""}{r.avgPl.toFixed(2)}
               </td>
             </tr>
           ))}

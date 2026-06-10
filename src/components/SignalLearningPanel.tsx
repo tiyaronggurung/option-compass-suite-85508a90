@@ -110,7 +110,7 @@ function LearningTable({ title, rows }: { title: string; rows: Row[] }) {
                 {r.winRate.toFixed(0)}%
               </td>
               <td className={cn("px-3 py-1.5 text-right ticker-mono", r.avgPl >= 0 ? "text-bull" : "text-bear")}>
-                {r.avgPl >= 0 ? "+" : ""}{r.avgPl.toFixed(0)}
+                {r.avgPl >= 0 ? "+" : ""}{r.avgPl.toFixed(2)}
               </td>
             </tr>
           ))}
