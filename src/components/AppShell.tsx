@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, BookmarkCheck, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Gauge, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
+import { BookmarkCheck, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Gauge, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy, Activity } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { useSignalNotifications } from "@/hooks/useSignalNotifications";
@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
+import logoAsset from "@/assets/xalgoflow-logo.png.asset.json";
 
 const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -28,9 +29,7 @@ function SidebarBody({ email, onSignOut, onNavigate, collapsed = false }: { emai
   return (
     <>
       <div className={cn("py-4 flex items-center gap-2 border-b border-sidebar-border", collapsed ? "px-2 justify-center" : "px-4")}>
-        <div className="h-7 w-7 rounded-sm bg-primary/15 text-primary grid place-items-center ring-1 ring-primary/30 shrink-0">
-          <Activity className="h-3.5 w-3.5" />
-        </div>
+        <img src={logoAsset.url} alt="Xalgoflow" className="h-8 w-8 object-contain shrink-0" />
         {!collapsed && (
           <div className="leading-tight">
             <div className="text-sm font-semibold tracking-tight font-display">Xalgoflow</div>
@@ -151,9 +150,7 @@ export default function AppShell() {
               </SheetContent>
             </Sheet>
             <div className="flex items-center gap-1.5">
-              <div className="h-6 w-6 rounded-sm bg-primary/15 text-primary grid place-items-center ring-1 ring-primary/30">
-                <Activity className="h-3 w-3" />
-              </div>
+              <img src={logoAsset.url} alt="Xalgoflow" className="h-7 w-7 object-contain" />
               <div className="text-sm font-semibold font-display tracking-tight">
                 Xalgoflow
               </div>
