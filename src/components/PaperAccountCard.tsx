@@ -44,18 +44,36 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
   const { user } = useAuth();
   const [account, setAccount] = useState<PaperAccount | null>(null);
   const [openTrades, setOpenTrades] = useState<OpenTradeMark[]>([]);
+  const [todayRealized, setTodayRealized] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
+    // Start of NY day in ISO for filtering closed_at
+    function startOfNYDayIso() {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/New_York",
+        year: "numeric", month: "2-digit", day: "2-digit",
+      }).formatToParts(new Date());
+      const y = parts.find(p => p.type === "year")!.value;
+      const m = parts.find(p => p.type === "month")!.value;
+      const d = parts.find(p => p.type === "day")!.value;
+      // Treat NY midnight as UTC-4 (DST) — close enough for a daily filter
+      return new Date(`${y}-${m}-${d}T00:00:00-04:00`).toISOString();
+    }
+
     async function loadAll() {
-      const [accRes, tradesRes] = await Promise.all([
+      const startIso = startOfNYDayIso();
+      const [accRes, tradesRes, closedRes] = await Promise.all([
         (supabase as any).from("paper_accounts").select("*").eq("user_id", user!.id).maybeSingle(),
         supabase.from("paper_trades")
           .select("id,status,current_value,entry_premium,entry_price,multiplier,contracts,total_cost")
           .eq("user_id", user!.id).eq("status", "OPEN"),
+        supabase.from("paper_trades")
+          .select("current_pl,closed_at,status")
+          .eq("user_id", user!.id).neq("status", "OPEN").gte("closed_at", startIso),
       ]);
       if (cancelled) return;
       if (accRes.data) setAccount(accRes.data as PaperAccount);
@@ -66,8 +84,10 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
         if (!cancelled && re) setAccount(re as PaperAccount);
       }
       setOpenTrades((tradesRes.data ?? []) as OpenTradeMark[]);
+      setTodayRealized(((closedRes.data ?? []) as any[]).reduce((s, t) => s + Number(t.current_pl ?? 0), 0));
       setLoading(false);
     }
+
     loadAll();
 
     const accCh = supabase
