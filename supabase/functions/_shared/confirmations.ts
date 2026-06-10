@@ -227,17 +227,12 @@ export async function buildConfirmations(
   matrix.earnings = await earningsConfirmation(admin, args.ticker);
   matrix.options_flow = optionsFlowConfirmation(args.componentData);
   matrix.news = newsConfirmation(args.componentData);
+  matrix.x_twitter = xTwitterConfirmation(args.componentData);
 
-  for (const key of ["x_twitter", "reddit", "polymarket", "kalshi"] as SourceKey[]) {
-    if (enabled.has(key)) {
-      matrix[key] = {
-        score: 0, stance: "neutral",
-        reason: "configured · awaiting data wiring",
-        configured: true,
-        last_updated: new Date().toISOString(),
-      };
-    }
-  }
+  // Reddit / Polymarket / Kalshi: leave as not-configured (no data providers wired).
+  // Surfacing them as "configured · awaiting data wiring" inflates the denominator
+  // and dilutes the agree/configured ratio.
+
 
   const signalStance: Stance = args.direction === "CALL" ? "bullish" : "bearish";
   let agreeing = 0;
