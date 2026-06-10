@@ -69,7 +69,7 @@ export function useBrowserPush() {
         const body = `${sig.direction} · ${sig.confidence}/100 · ${sig.risk_level} risk` +
           (sig.contract_symbol ? ` · ${sig.contract_symbol}` : "");
         try {
-          new Notification(`Tradingflow 101 alert: ${sig.ticker}`, {
+          new Notification(`Xalgoflow alert: ${sig.ticker}`, {
             body,
             tag: `signal-${sig.id}`,
           });
