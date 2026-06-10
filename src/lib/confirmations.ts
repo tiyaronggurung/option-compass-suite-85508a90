@@ -44,12 +44,14 @@ export const SOURCE_ORDER: SourceKey[] = [
 // configured but awaiting data-wiring — we exclude them from the public
 // confirmation badge math so the denominator stays honest.
 // Flip a source to wired by adding its key here once its integration ships.
+// Earnings is intentionally excluded — it's a catalyst flag (always neutral
+// stance), so it can never "agree" and would make 4/4 unreachable. It still
+// renders in the matrix as informational context.
 export const WIRED_SOURCES: ReadonlySet<SourceKey> = new Set<SourceKey>([
   "alpaca",
   "options_flow",
   "x_twitter",
   "news",
-  "earnings",
 ]);
 
 export function isWired(key: SourceKey): boolean {
