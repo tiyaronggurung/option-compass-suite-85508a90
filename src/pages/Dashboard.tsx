@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { isExpired } from "@/lib/signalFreshness";
 import { getLifecycleState, LIFECYCLE_META, LIFECYCLE_ORDER, type LifecycleState } from "@/lib/signalLifecycle";
 import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
+import { effectiveConfidence } from "@/lib/techAdjust";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
 import MarketOverviewStrip from "@/components/MarketOverviewStrip";
@@ -229,10 +230,16 @@ export default function Dashboard() {
   const dailyPL = todayRealizedPL + unrealizedPL;
   const effective = useMemo(() => effectiveRisk(risk), [risk]);
 
-  const filteredDeveloping = useMemo(() => {
-    if (!developing) return [];
+  const developingGroups = useMemo(() => {
+    if (!developing) return [] as { key: string; label: string; items: Signal[] }[];
+    const now = Date.now();
+    const cutoff = now - 24 * 60 * 60_000;
     const base = developing.filter((s) => {
-      if ((s.confidence ?? 0) < minDevelopingScore) return false;
+      const eff = effectiveConfidence(s as any) ?? (s.confidence ?? 0);
+      if (eff < Math.max(60, minDevelopingScore)) return false;
+      if (eff > 69) return false;
+      const t = new Date(s.created_at).getTime();
+      if (t < cutoff) return false;
       return true;
     });
     const isZeroBid = (s: Signal) => {
@@ -241,13 +248,37 @@ export default function Dashboard() {
       const reasons = Array.isArray(s.reasons) ? (s.reasons as string[]) : [];
       return reasons.some((r) => /\$0\s*bid|ask\s*vs\s*\$0/i.test(String(r)));
     };
-    const ordered = base.sort((a, b) => {
-      const ra = rankSignal(a).total;
-      const rb = rankSignal(b).total;
-      return rb - ra;
-    });
-    return [...ordered].sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
+    // De-dupe by id (developing list can include both hidden + visible merges).
+    const seen = new Set<string>();
+    const unique = base.filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)));
+    // Group by local date string.
+    const groups = new Map<string, Signal[]>();
+    for (const s of unique) {
+      const d = new Date(s.created_at);
+      const key = d.toDateString();
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(s);
+    }
+    const todayKey = new Date().toDateString();
+    const yKey = new Date(now - 24 * 60 * 60_000).toDateString();
+    const fmt = (key: string) => {
+      if (key === todayKey) return `Today · ${new Date(key).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+      if (key === yKey) return `Yesterday · ${new Date(key).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+      return new Date(key).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    };
+    const sortItems = (arr: Signal[]) => {
+      const ordered = [...arr].sort((a, b) => rankSignal(b).total - rankSignal(a).total);
+      return ordered.sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
+    };
+    return Array.from(groups.entries())
+      .sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
+      .map(([key, items]) => ({ key, label: fmt(key), items: sortItems(items) }));
   }, [developing, minDevelopingScore]);
+
+  const filteredDeveloping = useMemo(
+    () => developingGroups.flatMap((g) => g.items),
+    [developingGroups],
+  );
 
   // Top 5 ranked signals for the dashboard hero strip.
   const dashboardTop = useMemo(() => {
@@ -557,7 +588,7 @@ export default function Dashboard() {
                 Developing Signals
               </h2>
               <p className="text-xs text-muted-foreground">
-                Below Threshold — Not Tradeable Yet · confidence 50–69 · for transparency only
+                Below Threshold — Not Tradeable Yet · score 60–69 · last 24h only
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -565,14 +596,14 @@ export default function Dashboard() {
                 <span className="text-xs text-muted-foreground">Min score</span>
                 <input
                   type="range"
-                  min={0}
+                  min={60}
                   max={69}
                   step={1}
-                  value={minDevelopingScore}
+                  value={Math.max(60, minDevelopingScore)}
                   onChange={(e) => setMinDevelopingScore(Number(e.target.value))}
                   className="w-24 accent-primary"
                 />
-                <span className="text-xs font-medium tabular-nums w-5">{minDevelopingScore}</span>
+                <span className="text-xs font-medium tabular-nums w-5">{Math.max(60, minDevelopingScore)}</span>
               </div>
               <Button
                 size="sm"
@@ -585,28 +616,37 @@ export default function Dashboard() {
             </div>
           </div>
           {showDeveloping && (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-75 hover:opacity-100 transition-opacity">
-              {filteredDeveloping.length === 0 ? (
-                <EmptyState />
-              ) : (
-                filteredDeveloping.map((s) => (
-                  <SignalCard
-                    key={s.id}
-                    signal={s}
-                    watchlist={watchSet}
-                    onApprove={approve}
-                    onReject={dismiss}
-                    onDetails={(sig) => setDetailSignal(sig)}
-                    outcome={signalOutcome(s, trades, dismissedIds)}
-                    subLabel={
-                      (s.confidence ?? 0) >= 65
-                        ? "Near Watchlist — Paper Test"
-                        : "Paper Test Candidate"
-                    }
-                  />
-                ))
-              )}
-            </div>
+            filteredDeveloping.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <div className="space-y-5 opacity-75 hover:opacity-100 transition-opacity">
+                {developingGroups.map((g) => (
+                  <div key={g.key} className="space-y-2">
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                      {g.label} <span className="text-muted-foreground/60">· {g.items.length}</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {g.items.map((s) => (
+                        <SignalCard
+                          key={s.id}
+                          signal={s}
+                          watchlist={watchSet}
+                          onApprove={approve}
+                          onReject={dismiss}
+                          onDetails={(sig) => setDetailSignal(sig)}
+                          outcome={signalOutcome(s, trades, dismissedIds)}
+                          subLabel={
+                            (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
+                              ? "Near Watchlist — Paper Test"
+                              : "Paper Test Candidate"
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </section>
       )}
