@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { isExpired } from "@/lib/signalFreshness";
 import { getLifecycleState, LIFECYCLE_META, LIFECYCLE_ORDER, type LifecycleState } from "@/lib/signalLifecycle";
 import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
+import { effectiveConfidence } from "@/lib/techAdjust";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
 import MarketOverviewStrip from "@/components/MarketOverviewStrip";
