@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ShieldCheck, ShieldAlert, ShieldQuestion } from "lucide-react";
-import { SOURCE_META, SOURCE_ORDER, summarize, type ConfirmationMatrix, type SourceKey } from "@/lib/confirmations";
+import { SOURCE_META, SOURCE_ORDER, summarize, isWired, type ConfirmationMatrix, type SourceKey } from "@/lib/confirmations";
 
 type Props = {
   matrix: ConfirmationMatrix | null | undefined;
@@ -34,11 +34,15 @@ export function ConfirmationBadge({ matrix, direction, className }: Props) {
 
   return (
     <div className={cn("inline-flex items-center gap-1.5", className)}>
-      <Badge className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", color)} title={`${agreeing} agree, ${conflicting} disagree, ${configured} configured`}>
+      <Badge
+        className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", color)}
+        title={`${agreeing} agree, ${conflicting} disagree across ${configured} wired source${configured === 1 ? "" : "s"}. More sources coming soon.`}
+      >
         <Icon className="h-3 w-3" /> {label}
       </Badge>
       <div className="flex items-center gap-0.5">
         {SOURCE_ORDER.map((k: SourceKey) => {
+          if (!isWired(k)) return null;
           const c = matrix?.[k];
           if (!c?.configured) return null;
           const agree = c.stance === wanted;

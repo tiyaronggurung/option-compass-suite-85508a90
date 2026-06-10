@@ -40,6 +40,19 @@ export const SOURCE_ORDER: SourceKey[] = [
   "polymarket", "kalshi", "news", "earnings",
 ];
 
+// Sources that actually return real directional data today. Others are
+// configured but awaiting data-wiring — we exclude them from the public
+// confirmation badge math so the denominator stays honest.
+// Flip a source to wired by adding its key here once its integration ships.
+export const WIRED_SOURCES: ReadonlySet<SourceKey> = new Set<SourceKey>([
+  "alpaca",
+  "earnings",
+]);
+
+export function isWired(key: SourceKey): boolean {
+  return WIRED_SOURCES.has(key);
+}
+
 export function emptyMatrix(): Record<SourceKey, SourceConfirmation> {
   const neutral: SourceConfirmation = { score: 0, stance: "neutral", reason: "not configured", configured: false };
   return {
@@ -54,8 +67,9 @@ export function summarize(
 ): { agreeing: number; conflicting: number; configured: number; total: number } {
   const wanted: Stance = direction === "CALL" ? "bullish" : "bearish";
   let agreeing = 0, conflicting = 0, configured = 0;
-  const total = SOURCE_ORDER.length;
+  const total = WIRED_SOURCES.size;
   for (const key of SOURCE_ORDER) {
+    if (!isWired(key)) continue;
     const c = matrix?.[key];
     if (!c || !c.configured) continue;
     configured++;
