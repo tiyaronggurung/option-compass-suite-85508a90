@@ -616,28 +616,37 @@ export default function Dashboard() {
             </div>
           </div>
           {showDeveloping && (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-75 hover:opacity-100 transition-opacity">
-              {filteredDeveloping.length === 0 ? (
-                <EmptyState />
-              ) : (
-                filteredDeveloping.map((s) => (
-                  <SignalCard
-                    key={s.id}
-                    signal={s}
-                    watchlist={watchSet}
-                    onApprove={approve}
-                    onReject={dismiss}
-                    onDetails={(sig) => setDetailSignal(sig)}
-                    outcome={signalOutcome(s, trades, dismissedIds)}
-                    subLabel={
-                      (s.confidence ?? 0) >= 65
-                        ? "Near Watchlist — Paper Test"
-                        : "Paper Test Candidate"
-                    }
-                  />
-                ))
-              )}
-            </div>
+            filteredDeveloping.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <div className="space-y-5 opacity-75 hover:opacity-100 transition-opacity">
+                {developingGroups.map((g) => (
+                  <div key={g.key} className="space-y-2">
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                      {g.label} <span className="text-muted-foreground/60">· {g.items.length}</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {g.items.map((s) => (
+                        <SignalCard
+                          key={s.id}
+                          signal={s}
+                          watchlist={watchSet}
+                          onApprove={approve}
+                          onReject={dismiss}
+                          onDetails={(sig) => setDetailSignal(sig)}
+                          outcome={signalOutcome(s, trades, dismissedIds)}
+                          subLabel={
+                            (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
+                              ? "Near Watchlist — Paper Test"
+                              : "Paper Test Candidate"
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </section>
       )}
