@@ -147,6 +147,44 @@ function newsConfirmation(componentData: any): SourceConfirmation {
   };
 }
 
+// X/Twitter confirmation — derived from social-intel sentiment component.
+function xTwitterConfirmation(componentData: any): SourceConfirmation {
+  const sent = componentData?.sentiment ?? null;
+  const details: any = sent?.details ?? null;
+  const samples = details?.samples ?? null;
+  const providerStatus = details?.provider_status ?? null;
+  const total = Number(samples?.total_tweets) || 0;
+  const bullPct = Number(samples?.bullish_pct);
+  const bearPct = Number(samples?.bearish_pct);
+  const trustedHits = Number(details?.trusted_source_hits) || 0;
+
+  if (!sent || providerStatus !== "active" || (total === 0 && trustedHits === 0)) {
+    const reason =
+      providerStatus === "auth_failed" ? "auth failed" :
+      providerStatus === "rate_limited" ? "rate limited" :
+      providerStatus === "missing_key" ? "not configured" :
+      total === 0 ? "no recent tweets" : "degraded";
+    return {
+      score: 0, stance: "neutral", reason,
+      configured: providerStatus !== "missing_key",
+      last_updated: new Date().toISOString(),
+    };
+  }
+
+  const diff = (bullPct - bearPct) / 100;
+  const stance: Stance = Math.abs(diff) < 0.1 ? "neutral" : diff > 0 ? "bullish" : "bearish";
+  const parts: string[] = [];
+  if (total > 0) parts.push(`${total} tweets · ${bullPct.toFixed(0)}% bull / ${bearPct.toFixed(0)}% bear`);
+  if (trustedHits > 0) parts.push(`${trustedHits} trusted`);
+  return {
+    score: Math.min(1, Math.abs(diff) * 1.5),
+    stance,
+    reason: parts.join(" · ") || "active",
+    configured: true,
+    last_updated: new Date().toISOString(),
+  };
+}
+
 async function loadEnabledProviders(admin: SupabaseClient): Promise<Set<SourceKey>> {
   const enabled = new Set<SourceKey>(["alpaca", "earnings"]);
   try {
