@@ -210,7 +210,7 @@ function MonthGrid({ cursor, byDay }: { cursor: Date; byDay: Map<string, number>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-px sm:gap-1">
+      <div className="grid grid-cols-7 gap-px bg-border/60 rounded-sm overflow-hidden">
         {cells.map((c, i) => {
           const inMonth = c.getMonth() === cursor.getMonth();
           const key = dayKey(c);
@@ -222,14 +222,15 @@ function MonthGrid({ cursor, byDay }: { cursor: Date; byDay: Map<string, number>
             <div
               key={i}
               className={cn(
-                "min-h-[54px] sm:min-h-[78px] rounded-sm border p-1 sm:p-1.5 flex flex-col gap-0.5 transition-colors",
-                "border-border/40 bg-card-elevated/20",
-                pos && "bg-bull/15 border-bull/40",
-                neg && "bg-bear/15 border-bear/40",
-                !inMonth && "opacity-40",
-                isToday && "ring-1 ring-primary",
+                "min-h-[54px] sm:min-h-[78px] p-1 sm:p-1.5 flex flex-col gap-0.5 transition-colors",
+                "bg-card",
+                pos && "bg-bull/15",
+                neg && "bg-bear/15",
+                !inMonth && "opacity-50",
+                isToday && "ring-1 ring-primary ring-inset",
               )}
             >
+
               <div className={cn(
                 "text-[11px] sm:text-xs ticker-mono leading-none",
                 isToday ? "text-primary font-semibold" : inMonth ? "text-foreground/85" : "text-muted-foreground",
