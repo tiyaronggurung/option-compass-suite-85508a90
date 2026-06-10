@@ -1635,6 +1635,27 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_user_trade_history: {
+        Args: { _user_id: string }
+        Returns: {
+          closed_at: string
+          contracts: number
+          current_pl: number
+          direction: string
+          entry_premium: number
+          entry_price: number
+          exit_premium: number
+          exit_price: number
+          expiry: string
+          id: string
+          opened_at: string
+          option_type: string
+          realized_pl: number
+          status: string
+          strike: number
+          ticker: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

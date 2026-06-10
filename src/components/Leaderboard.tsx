@@ -3,6 +3,7 @@ import { Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { UserTradeCalendarDialog } from "@/components/UserTradeCalendarDialog";
 
 type Row = {
   user_id: string;
@@ -29,6 +30,7 @@ function fmtMoney(n: number) {
 export function Leaderboard({ currentUserId }: { currentUserId?: string | null }) {
   const [win, setWin] = useState<Window>("all");
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [openUser, setOpenUser] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,9 +103,16 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
                     {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
                   </td>
                   <td className="px-2 sm:px-4 py-2 max-w-[120px] sm:max-w-none truncate">
-                    <span className={cn("font-medium", isMe && "text-primary")}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenUser({ id: r.user_id, name: r.display_name })}
+                      className={cn(
+                        "font-medium hover:underline underline-offset-2 hover:text-primary transition-colors text-left",
+                        isMe && "text-primary",
+                      )}
+                    >
                       {r.display_name}
-                    </span>
+                    </button>
                     {isMe && <span className="ml-1 sm:ml-2 text-[10px] uppercase text-primary/70">you</span>}
                   </td>
                   <td className={cn(
@@ -125,6 +134,12 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
         </table>
         </div>
       )}
+      <UserTradeCalendarDialog
+        open={!!openUser}
+        onOpenChange={(v) => !v && setOpenUser(null)}
+        userId={openUser?.id ?? null}
+        displayName={openUser?.name ?? ""}
+      />
     </section>
   );
 }
