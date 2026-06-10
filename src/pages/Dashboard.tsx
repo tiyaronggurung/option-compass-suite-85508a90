@@ -24,6 +24,7 @@ import { TradeAlertCard, type TradeAlert } from "@/components/TradeAlertCard";
 import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sortSignalsBySourcePriority, sourcePriority, type SourceFilter } from "@/lib/signalSource";
 import { TopSignalRow } from "@/components/TopSignalRow";
+import { NotificationsBell } from "@/components/NotificationsBell";
 import { rankSignals, rankSignal, type RankBreakdown, getContractMeta } from "@/lib/rankSignals";
 import { Link } from "react-router-dom";
 
@@ -342,6 +343,7 @@ export default function Dashboard() {
             <p className="text-sm text-muted-foreground">Educational paper-trading desk. Approve trades manually.</p>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <NotificationsBell />
             {alpacaStatus && (
               <div className="flex items-center gap-1.5">
                 <span

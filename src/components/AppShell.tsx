@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Activity, BookmarkCheck, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Gauge, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBrowserPush } from "@/hooks/useBrowserPush";
+import { useSignalNotifications } from "@/hooks/useSignalNotifications";
 import { useSingleSession } from "@/hooks/useSingleSession";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -98,6 +99,7 @@ export default function AppShell() {
   const [open, setOpen] = useState(false);
   const [tabletExpanded, setTabletExpanded] = useState(false);
   useBrowserPush();
+  useSignalNotifications();
   useSingleSession();
 
   const handleSignOut = async () => {
