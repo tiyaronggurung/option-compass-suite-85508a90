@@ -214,6 +214,7 @@ export default function Trades() {
                   key={t.id}
                   trade={t}
                   onReview={(x) => setReviewing(x)}
+                  onShowSignal={(x) => openSignalForTrade(x)}
                   hasReview={!!reviews[t.id]}
                 />
               ))}
