@@ -122,29 +122,29 @@ export default function Performance() {
         <Badge className="border-0 bg-emerald-500/15 text-emerald-400">Real paper data</Badge>
       </header>
 
-      <section className="glass-card p-3 flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
+      <section className="glass-card p-3 grid grid-cols-2 sm:flex sm:flex-wrap sm:items-end gap-2 sm:gap-3">
+        <div className="space-y-1 min-w-0">
           <label className="text-[11px] uppercase tracking-wider text-muted-foreground">From</label>
           <Input
             type="date"
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
-            className="h-9 w-[150px]"
+            className="h-9 w-full sm:w-[150px]"
           />
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <label className="text-[11px] uppercase tracking-wider text-muted-foreground">To</label>
           <Input
             type="date"
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
-            className="h-9 w-[150px]"
+            className="h-9 w-full sm:w-[150px]"
           />
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0 col-span-2 sm:col-auto">
           <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Ticker</label>
           <Select value={tickerFilter} onValueChange={setTickerFilter}>
-            <SelectTrigger className="h-9 w-[140px]">
+            <SelectTrigger className="h-9 w-full sm:w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -159,13 +159,13 @@ export default function Performance() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 gap-1"
+            className="h-9 gap-1 col-span-2 sm:col-auto justify-center"
             onClick={() => { setFromDate(""); setToDate(""); setTickerFilter("__all__"); }}
           >
             <X className="h-3.5 w-3.5" /> Clear
           </Button>
         )}
-        <div className="ml-auto text-xs text-muted-foreground">
+        <div className="col-span-2 sm:ml-auto text-xs text-muted-foreground text-right">
           {filteredTrades?.length ?? 0} of {trades?.length ?? 0} trades
         </div>
       </section>
@@ -190,7 +190,7 @@ export default function Performance() {
 
           <section className="grid lg:grid-cols-2 gap-4">
             <Card title="Equity curve (paper)">
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={180} className="sm:!h-[220px]">
                 <AreaChart data={metrics.equityCurve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
@@ -208,7 +208,7 @@ export default function Performance() {
             </Card>
 
             <Card title="Daily P/L">
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={180} className="sm:!h-[220px]">
                 <BarChart data={metrics.dailyPL} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="label" stroke={MUTED} fontSize={11} />
@@ -262,11 +262,12 @@ function Card({ title, children, className }: { title: string; children: React.R
 
 function Stat({ label, value, icon: Icon, accent }: any) {
   return (
-    <div className="glass-card p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className={cn("h-4 w-4", accent)} /> {label}
+    <div className="glass-card p-3 sm:p-4">
+      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-muted-foreground">
+        <Icon className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0", accent)} />
+        <span className="truncate">{label}</span>
       </div>
-      <div className={cn("mt-2 text-2xl font-semibold ticker-mono", accent)}>{value}</div>
+      <div className={cn("mt-1.5 sm:mt-2 text-lg sm:text-2xl font-semibold ticker-mono break-all", accent)}>{value}</div>
     </div>
   );
 }
