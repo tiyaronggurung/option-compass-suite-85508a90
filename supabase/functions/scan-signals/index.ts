@@ -779,7 +779,9 @@ Deno.serve(async (req) => {
       }
 
       // Publish gate uses institutional confidence (was old pre-score)
-      if (institutionalConfidence < settings.threshold) {
+      // Hard floor: never publish anything below 60 regardless of user threshold.
+      const effectiveThreshold = Math.max(settings.threshold, 60);
+      if (institutionalConfidence < effectiveThreshold) {
         skipped++;
         skippedList.push({
           ticker: draft.ticker,
@@ -789,7 +791,7 @@ Deno.serve(async (req) => {
             `old_pre_score=${oldPreScore}`,
             `institutional_confidence=${institutionalConfidence}`,
             `institutional_tier=${institutionalTier}`,
-            `skip_reason=below_institutional_threshold`,
+            `skip_reason=below_institutional_threshold(floor=60)`,
             ...institutionalReasons.slice(0, 4),
           ],
         });
