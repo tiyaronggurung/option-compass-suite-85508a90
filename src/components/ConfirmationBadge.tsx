@@ -34,11 +34,15 @@ export function ConfirmationBadge({ matrix, direction, className }: Props) {
 
   return (
     <div className={cn("inline-flex items-center gap-1.5", className)}>
-      <Badge className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", color)} title={`${agreeing} agree, ${conflicting} disagree, ${configured} configured`}>
+      <Badge
+        className={cn("border-0 gap-1 text-[10px] px-1.5 py-0", color)}
+        title={`${agreeing} agree, ${conflicting} disagree across ${configured} wired source${configured === 1 ? "" : "s"}. More sources coming soon.`}
+      >
         <Icon className="h-3 w-3" /> {label}
       </Badge>
       <div className="flex items-center gap-0.5">
         {SOURCE_ORDER.map((k: SourceKey) => {
+          if (!isWired(k)) return null;
           const c = matrix?.[k];
           if (!c?.configured) return null;
           const agree = c.stance === wanted;
