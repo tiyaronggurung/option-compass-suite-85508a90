@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import type { Database } from "@/integrations/supabase/types";
 import { OptionTradeCard } from "@/components/OptionTradeCard";
+import { SignalDetailDialog } from "@/components/SignalDetailDialog";
+import type { Signal } from "@/lib/signalHelpers";
 
 type CloseReason = Database["public"]["Enums"]["trade_close_reason"];
 type TradeReview = Database["public"]["Tables"]["trade_reviews"]["Row"];
@@ -44,7 +46,23 @@ export default function Trades() {
   const [addingMore, setAddingMore] = useState<PaperTrade | null>(null);
   const [reviewing, setReviewing] = useState<PaperTrade | null>(null);
   const [refreshingMarks, setRefreshingMarks] = useState(false);
+  const [signalDetail, setSignalDetail] = useState<Signal | null>(null);
   const refreshRef = useRef<() => Promise<void>>();
+
+  async function openSignalForTrade(trade: PaperTrade) {
+    if (!trade.signal_id) {
+      toast.error("This trade has no linked signal.");
+      return;
+    }
+    const { data, error } = await supabase
+      .from("signals")
+      .select("*")
+      .eq("id", trade.signal_id)
+      .maybeSingle();
+    if (error) { toast.error(error.message); return; }
+    if (!data) { toast.error("Original signal no longer available."); return; }
+    setSignalDetail(data as Signal);
+  }
 
   async function refresh() {
     const [{ data }, { data: r }] = await Promise.all([
@@ -190,6 +208,7 @@ export default function Trades() {
                   key={t.id}
                   trade={t}
                   onReview={(x) => setReviewing(x)}
+                  onShowSignal={(x) => openSignalForTrade(x)}
                   hasReview={!!reviews[t.id]}
                 />
               ))}
@@ -217,6 +236,11 @@ export default function Trades() {
         cached={reviewing ? reviews[reviewing.id] : undefined}
         onOpenChange={(v) => !v && setReviewing(null)}
         onSaved={(r) => setReviews((m) => ({ ...m, [r.trade_id]: r }))}
+      />
+      <SignalDetailDialog
+        signal={signalDetail}
+        open={!!signalDetail}
+        onOpenChange={(v) => !v && setSignalDetail(null)}
       />
     </div>
   );

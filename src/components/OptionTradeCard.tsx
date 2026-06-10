@@ -8,7 +8,7 @@
 // Pure presentation — no mutations.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, Sparkles, TrendingDown } from "lucide-react";
+import { AlertTriangle, ChevronDown, Info, Sparkles, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ type Props = {
   onClosePartial?: (t: PaperTrade) => void;
   onAddMore?: (t: PaperTrade) => void;
   onReview?: (t: PaperTrade) => void;
+  onShowSignal?: (t: PaperTrade) => void;
   hasReview?: boolean;
   live?: boolean; // open vs closed view
 };
@@ -47,7 +48,7 @@ function optionLabel(t: PaperTrade): string {
   return `${t.ticker} ${strikeStr} ${type} ${fmtExpiry((t as any).expiry)}`.trim();
 }
 
-export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onReview, hasReview, live }: Props) {
+export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onReview, onShowSignal, hasReview, live }: Props) {
   const t = trade as any;
   const closedTrade = trade.status !== "OPEN";
   const hasClosedPricing = closedTrade && (t.exit_premium != null || t.realized_pl != null);
@@ -397,6 +398,17 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
           <Button size="sm" variant="ghost" onClick={() => onReview(trade)}>
             <Sparkles className="h-4 w-4 mr-1" />
             {hasReview ? "Review" : "Review trade"}
+          </Button>
+        )}
+        {!live && onShowSignal && trade.signal_id && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onShowSignal(trade)}
+            title="View original signal details"
+            aria-label="View original signal details"
+          >
+            <Info className="h-4 w-4" />
           </Button>
         )}
       </div>
