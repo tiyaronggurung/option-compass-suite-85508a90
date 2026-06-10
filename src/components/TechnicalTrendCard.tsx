@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { techAdjustConfidence, techFactor } from "@/lib/techAdjust";
 
 export interface TechSnapshot {
   ticker: string;
