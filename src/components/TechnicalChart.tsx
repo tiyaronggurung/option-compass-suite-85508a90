@@ -227,6 +227,7 @@ export function TechnicalChart({ bars, height = 380 }: Props) {
             priceLineVisible: false,
             lastValueVisible: false,
             title: `Fib ${rail.name}`,
+            autoscaleInfoProvider: () => null,
           });
           s.setData(rail.data as any);
         }
