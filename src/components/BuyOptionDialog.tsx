@@ -203,10 +203,13 @@ export function BuyOptionDialog(props: Props) {
       .sort((a, b) => a.strike - b.strike);
   }, [chain, side, expiry]);
 
-  // Auto-pick a sensible default strike when expiry/side changes.
+  // Auto-pick a sensible default strike when expiry/side changes or on first load.
   // Priority: restored-from-localStorage strike > signal's exact strike > ATM-ish.
+  // IMPORTANT: do NOT re-pick if the user already has a valid selection in `rows`
+  // — otherwise a 10s chain refresh would silently revert a manual choice.
   useEffect(() => {
-    if (!rows.length || !spot) { setSelectedSymbol(null); return; }
+    if (!rows.length || !spot) return;
+    if (selectedSymbol && rows.some((r) => r.symbol === selectedSymbol)) return;
     if (restoredStrike != null) {
       const exact = rows.find((r) => Number(r.strike) === Number(restoredStrike));
       if (exact) {
@@ -224,7 +227,7 @@ export function BuyOptionDialog(props: Props) {
     // Fallback: ATM-ish (smallest |strike - spot|)
     const best = [...rows].sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
     setSelectedSymbol(best.symbol);
-  }, [rows, spot, signal, side, restoredStrike]);
+  }, [rows, spot, signal, side, restoredStrike, selectedSymbol]);
 
 
   // Scroll the selected row into view when it changes.
