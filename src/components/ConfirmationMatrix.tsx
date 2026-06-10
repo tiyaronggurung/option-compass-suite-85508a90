@@ -19,9 +19,14 @@ export function ConfirmationMatrix({ matrix, direction, score, label }: Props) {
         <span>Source confirmation</span>
         <span className={cn(
           "ticker-mono text-xs",
-          (score ?? 0) >= 60 ? "text-bull" : (score ?? 0) >= 30 ? "text-primary" : "text-muted-foreground",
+          configured > 0 && agreeing / configured >= 0.6 ? "text-bull"
+            : configured > 0 && agreeing / configured >= 0.3 ? "text-primary"
+            : "text-muted-foreground",
         )}>
-          {score != null ? `${score}/100` : "—"}
+          {configured > 0 ? `${agreeing}/${configured}` : "—"}
+          {conflicting > 0 && (
+            <span className="text-bear ml-1">· {conflicting} conflict</span>
+          )}
         </span>
       </div>
 
