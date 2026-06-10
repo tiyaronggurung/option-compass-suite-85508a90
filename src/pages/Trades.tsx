@@ -46,7 +46,29 @@ export default function Trades() {
   const [addingMore, setAddingMore] = useState<PaperTrade | null>(null);
   const [reviewing, setReviewing] = useState<PaperTrade | null>(null);
   const [refreshingMarks, setRefreshingMarks] = useState(false);
+  const [signalDetail, setSignalDetail] = useState<Signal | null>(null);
+  const [loadingSignalFor, setLoadingSignalFor] = useState<string | null>(null);
   const refreshRef = useRef<() => Promise<void>>();
+
+  async function openSignalForTrade(trade: PaperTrade) {
+    if (!trade.signal_id) {
+      toast.error("This trade has no linked signal.");
+      return;
+    }
+    setLoadingSignalFor(trade.id);
+    try {
+      const { data, error } = await supabase
+        .from("signals")
+        .select("*")
+        .eq("id", trade.signal_id)
+        .maybeSingle();
+      if (error) { toast.error(error.message); return; }
+      if (!data) { toast.error("Original signal no longer available."); return; }
+      setSignalDetail(data as Signal);
+    } finally {
+      setLoadingSignalFor(null);
+    }
+  }
 
   async function refresh() {
     const [{ data }, { data: r }] = await Promise.all([
