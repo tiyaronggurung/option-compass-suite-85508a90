@@ -104,7 +104,9 @@ export default function Dashboard() {
       ]);
       if (cancel) return;
       setSignals(s ?? []);
-      setDeveloping(dev ?? []);
+      // Merge visible signals with confidence 60-69 into developing list.
+      const visibleDeveloping = (s ?? []).filter((x: any) => !x.is_demo && (x.confidence ?? 0) >= 60 && (x.confidence ?? 0) < 70);
+      setDeveloping([...(dev ?? []), ...visibleDeveloping]);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
       setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
