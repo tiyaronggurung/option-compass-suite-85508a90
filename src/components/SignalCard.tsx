@@ -184,6 +184,8 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
         direction={signal.direction as "CALL" | "PUT"}
       />
 
+      <TechStatsLine signal={signal} />
+
       {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
           {(signal.reasons as string[]).slice(0, 6).map((r, i) => (
