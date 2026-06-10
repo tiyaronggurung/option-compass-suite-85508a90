@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import type { Database } from "@/integrations/supabase/types";
 import { OptionTradeCard } from "@/components/OptionTradeCard";
+import { SignalDetailDialog } from "@/components/SignalDetailDialog";
+import type { Signal } from "@/lib/signalHelpers";
 
 type CloseReason = Database["public"]["Enums"]["trade_close_reason"];
 type TradeReview = Database["public"]["Tables"]["trade_reviews"]["Row"];
