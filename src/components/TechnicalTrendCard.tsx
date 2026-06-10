@@ -96,15 +96,9 @@ export function TechnicalTrendCard({ ticker, signalDirection, baseConfidence, on
   const meta = verdictMeta(p.verdict);
   const VIcon = meta.Icon;
 
-  // Tech-adjusted display confidence (display only — does not mutate stored signal)
-  let adjusted: number | null = null;
-  let adjFactor = 1;
-  if (baseConfidence != null && signalDirection) {
-    const longLike = signalDirection === "CALL";
-    if (p.verdict === "bullish") adjFactor = longLike ? 1.05 : 0.90;
-    else if (p.verdict === "bearish") adjFactor = longLike ? 0.90 : 1.05;
-    adjusted = Math.max(1, Math.min(99, Math.round(baseConfidence * adjFactor)));
-  }
+  // Tech-adjusted display confidence — uses shared helper (single source of truth)
+  const adjFactor = techFactor(signalDirection ?? null, p.verdict);
+  const adjusted = techAdjustConfidence(baseConfidence ?? null, signalDirection ?? null, p.verdict);
 
   return (
     <div className="rounded-md border border-border p-3 space-y-3">

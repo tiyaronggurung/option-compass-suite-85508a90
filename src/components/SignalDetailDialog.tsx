@@ -97,7 +97,7 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
 
 
         <div className="space-y-3 text-sm">
-          <Row label="Confidence" value={`${s.confidence}/100`} />
+          <ConfidenceRow signal={s} />
           <Row label="Risk" value={s.risk_level} />
           <Row label="DTE" value={s.dte != null ? String(s.dte) : "—"} />
           <Row label="Price" value={s.price != null ? `$${Number(s.price).toFixed(2)}` : "—"} />
