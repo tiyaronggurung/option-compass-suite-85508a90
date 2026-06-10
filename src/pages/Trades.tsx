@@ -47,7 +47,6 @@ export default function Trades() {
   const [reviewing, setReviewing] = useState<PaperTrade | null>(null);
   const [refreshingMarks, setRefreshingMarks] = useState(false);
   const [signalDetail, setSignalDetail] = useState<Signal | null>(null);
-  const [loadingSignalFor, setLoadingSignalFor] = useState<string | null>(null);
   const refreshRef = useRef<() => Promise<void>>();
 
   async function openSignalForTrade(trade: PaperTrade) {
