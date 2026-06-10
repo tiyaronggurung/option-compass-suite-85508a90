@@ -24,6 +24,7 @@ type Props = {
   onClosePartial?: (t: PaperTrade) => void;
   onAddMore?: (t: PaperTrade) => void;
   onReview?: (t: PaperTrade) => void;
+  onShowSignal?: (t: PaperTrade) => void;
   hasReview?: boolean;
   live?: boolean; // open vs closed view
 };
