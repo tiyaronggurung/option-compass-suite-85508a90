@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -23,7 +23,7 @@ interface Props {
   height?: number;
 }
 
-// ---- Indicator helpers (mirror the edge function math, run on the bars we already have) ----
+// ---- Indicator helpers ----
 function ema(values: number[], period: number): (number | null)[] {
   const out: (number | null)[] = [];
   const k = 2 / (period + 1);
@@ -63,13 +63,63 @@ function bollinger(values: number[], period = 20, mult = 2) {
 }
 
 function toTs(dateStr: string): UTCTimestamp {
-  // Alpaca returns ISO timestamps; convert to seconds for lightweight-charts.
   return Math.floor(new Date(dateStr).getTime() / 1000) as UTCTimestamp;
+}
+
+// ---- Fib channel ----
+// Find swing low/high indices in the trailing `lookback` bars and return
+// baseline anchors + the channel height for projecting parallel rails.
+function computeFibChannel(bars: ChartBar[], lookback = 90) {
+  const n = bars.length;
+  if (n < 10) return null;
+  const start = Math.max(0, n - lookback);
+  let loIdx = start, hiIdx = start;
+  for (let i = start; i < n; i++) {
+    if (bars[i].l < bars[loIdx].l) loIdx = i;
+    if (bars[i].h > bars[hiIdx].h) hiIdx = i;
+  }
+  if (loIdx === hiIdx) return null;
+
+  const tLo = toTs(bars[loIdx].t);
+  const tHi = toTs(bars[hiIdx].t);
+  const pLo = bars[loIdx].l;
+  const pHi = bars[hiIdx].h;
+
+  // baseline: low → high; slope in price/sec
+  const dt = (tHi as number) - (tLo as number);
+  if (dt === 0) return null;
+  const slope = (pHi - pLo) / dt;
+  const height = pHi - pLo; // channel width
+  const uptrend = slope >= 0;
+
+  const t0 = toTs(bars[0].t);
+  const tEnd = toTs(bars[n - 1].t);
+  const baseAt = (t: UTCTimestamp) => pLo + slope * ((t as number) - (tLo as number));
+
+  const buildLine = (offset: number) => [
+    { time: t0, value: baseAt(t0) + offset },
+    { time: tEnd, value: baseAt(tEnd) + offset },
+  ];
+
+  // 0 rail = baseline (along the swing low side), 1.0 rail = parallel through swing high.
+  // Direction: in uptrend channel rails go upward; in downtrend, downward.
+  const dir = uptrend ? 1 : -1;
+  return {
+    uptrend,
+    rails: [
+      { name: "0", color: "#10b981", data: buildLine(0) },
+      { name: "0.382", color: "#3b82f6", data: buildLine(dir * 0.382 * Math.abs(height)) },
+      { name: "0.618", color: "#a855f7", data: buildLine(dir * 0.618 * Math.abs(height)) },
+      { name: "1.0", color: "#f59e0b", data: buildLine(dir * 1.0 * Math.abs(height)) },
+      { name: "1.618", color: "#ef4444", data: buildLine(dir * 1.618 * Math.abs(height)) },
+    ],
+  };
 }
 
 export function TechnicalChart({ bars, height = 380 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const [showFib, setShowFib] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || !bars || bars.length === 0) return;
@@ -139,50 +189,50 @@ export function TechnicalChart({ bars, height = 380 }: Props) {
     pushLine("#f59e0b", 50, "EMA50");
     pushLine("#ef4444", 200, "EMA200");
 
-    // --- Bollinger Bands (area fill) ---
+    // --- Bollinger Bands ---
     const bb = bollinger(closes, 20, 2);
-
-    const upperSeries = chart.addSeries(LineSeries, {
-      color: muted,
-      lineWidth: 1,
-      lineStyle: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      title: "BB Upper",
+    const bbUpper = chart.addSeries(LineSeries, {
+      color: muted, lineWidth: 1, lineStyle: 2,
+      priceLineVisible: false, lastValueVisible: false, title: "BB Upper",
     });
-    upperSeries.setData(
-      bb.upper
-        .map((v, i) => (v == null ? null : { time: times[i], value: v }))
-        .filter(Boolean) as { time: UTCTimestamp; value: number }[],
+    bbUpper.setData(
+      bb.upper.map((v, i) => (v == null ? null : { time: times[i], value: v })).filter(Boolean) as any,
     );
-
-    const lowerSeries = chart.addSeries(LineSeries, {
-      color: muted,
-      lineWidth: 1,
-      lineStyle: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      title: "BB Lower",
+    const bbLower = chart.addSeries(LineSeries, {
+      color: muted, lineWidth: 1, lineStyle: 2,
+      priceLineVisible: false, lastValueVisible: false, title: "BB Lower",
     });
-    lowerSeries.setData(
-      bb.lower
-        .map((v, i) => (v == null ? null : { time: times[i], value: v }))
-        .filter(Boolean) as { time: UTCTimestamp; value: number }[],
+    bbLower.setData(
+      bb.lower.map((v, i) => (v == null ? null : { time: times[i], value: v })).filter(Boolean) as any,
     );
-
-    // Soft fill via an area series on the midline (visual hint only)
-    const midSeries = chart.addSeries(AreaSeries, {
+    const bbMidArea = chart.addSeries(AreaSeries, {
       topColor: "rgba(148, 163, 184, 0.08)",
       bottomColor: "rgba(148, 163, 184, 0.0)",
       lineColor: "rgba(148, 163, 184, 0.0)",
-      priceLineVisible: false,
-      lastValueVisible: false,
+      priceLineVisible: false, lastValueVisible: false,
     });
-    midSeries.setData(
-      bb.mid
-        .map((v, i) => (v == null ? null : { time: times[i], value: v }))
-        .filter(Boolean) as { time: UTCTimestamp; value: number }[],
+    bbMidArea.setData(
+      bb.mid.map((v, i) => (v == null ? null : { time: times[i], value: v })).filter(Boolean) as any,
     );
+
+    // --- Fib Channel (optional) ---
+    if (showFib) {
+      const fc = computeFibChannel(bars, 90);
+      if (fc) {
+        for (const rail of fc.rails) {
+          const s = chart.addSeries(LineSeries, {
+            color: rail.color,
+            lineWidth: rail.name === "0" || rail.name === "1.0" ? 2 : 1,
+            lineStyle: rail.name === "0.382" || rail.name === "0.618" ? 2 : 0,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            title: `Fib ${rail.name}`,
+            autoscaleInfoProvider: () => null,
+          });
+          s.setData(rail.data as any);
+        }
+      }
+    }
 
     chart.timeScale().fitContent();
 
@@ -198,7 +248,7 @@ export function TechnicalChart({ bars, height = 380 }: Props) {
       chart.remove();
       chartRef.current = null;
     };
-  }, [bars, height]);
+  }, [bars, height, showFib]);
 
   if (!bars || bars.length === 0) {
     return (
@@ -210,16 +260,37 @@ export function TechnicalChart({ bars, height = 380 }: Props) {
 
   return (
     <div className="rounded-md border border-border p-3 space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="text-xs font-medium">Price · EMAs · Bollinger Bands</div>
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
           <Legend swatch="#3b82f6" label="EMA20" />
           <Legend swatch="#f59e0b" label="EMA50" />
           <Legend swatch="#ef4444" label="EMA200" />
           <Legend swatch="hsl(var(--muted-foreground))" label="BB(20,2)" dashed />
+          <button
+            onClick={() => setShowFib((v) => !v)}
+            className={`px-2 py-0.5 rounded border text-[10px] transition-colors ${
+              showFib
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border hover:bg-accent"
+            }`}
+            title="Toggle Fibonacci channel overlay"
+          >
+            Fib channel {showFib ? "ON" : "OFF"}
+          </button>
         </div>
       </div>
       <div ref={containerRef} className="w-full" style={{ height }} />
+      {showFib && (
+        <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground pt-1 border-t border-border">
+          <Legend swatch="#10b981" label="0 (baseline)" />
+          <Legend swatch="#3b82f6" label="0.382" dashed />
+          <Legend swatch="#a855f7" label="0.618" dashed />
+          <Legend swatch="#f59e0b" label="1.0 rail" />
+          <Legend swatch="#ef4444" label="1.618 ext" />
+          <span className="opacity-70">Anchors: swing low/high in last 90 bars</span>
+        </div>
+      )}
     </div>
   );
 }
