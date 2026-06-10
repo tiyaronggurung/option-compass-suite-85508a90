@@ -134,18 +134,22 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
   const buyingPower = Math.max(0, cash);
 
   // Roll over day_start_equity once per NY day so "today" reflects only today's change.
+  // Baseline = current equity MINUS today's already-realized P/L, so a mid-day rollover
+  // still preserves today's gains in Day P/L.
   useEffect(() => {
     if (!user || !account || loading) return;
     const todayNY = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
     if (account.day_start_date === todayNY) return;
+    const baseline = equity - todayRealized;
     (async () => {
       await (supabase as any)
         .from("paper_accounts")
-        .update({ day_start_equity: equity, day_start_date: todayNY })
+        .update({ day_start_equity: baseline, day_start_date: todayNY })
         .eq("user_id", user.id);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, account?.day_start_date, loading]);
+
 
 
   return (
