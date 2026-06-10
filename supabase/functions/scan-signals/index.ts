@@ -889,6 +889,7 @@ Deno.serve(async (req) => {
           direction: draft.direction,
           blendedScore,
           confidence: finalConfidence,
+          componentData: institutional?.components ?? null,
         });
       } catch (e) {
         errors.push(`${sym} confirmations: ${(e as Error).message}`);
