@@ -72,7 +72,7 @@ export function RiskStatusCard({ effective, openTradesCount, todayRealizedPL }: 
           value={
             <div className="space-y-1">
               <div className={cn("ticker-mono text-xs", atLossCap && "text-bear")}>
-                ${realizedLoss.toFixed(0)} / ${effective.daily_loss_cap.toFixed(0)}
+                ${realizedLoss.toFixed(2)} / ${effective.daily_loss_cap.toFixed(2)}
               </div>
               <div className="h-1 w-full rounded bg-muted/40 overflow-hidden">
                 <div
@@ -86,7 +86,7 @@ export function RiskStatusCard({ effective, openTradesCount, todayRealizedPL }: 
         <Tile
           icon={ShieldCheck}
           label="Max risk / trade"
-          value={<span className="ticker-mono">${effective.max_risk_per_trade.toFixed(0)}</span>}
+          value={<span className="ticker-mono">${effective.max_risk_per_trade.toFixed(2)}</span>}
         />
       </div>
     </section>
