@@ -635,7 +635,7 @@ export function BuyOptionDialog(props: Props) {
                   )}
                 </div>
 
-                {!buyingPowerOk && (
+                {Number.isFinite(qty) && qty >= 1 && !buyingPowerOk && (
                   <div className="text-xs text-rose-500">
                     Not enough buying power. Need {fmtMoney(totalCost)}, have {fmtMoney(props.cashBalance)}.
                   </div>
