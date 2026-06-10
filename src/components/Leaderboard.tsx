@@ -48,13 +48,13 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
 
   return (
     <section className="glass-card p-0 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-amber-400" />
+      <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-3 border-b border-border">
+        <div className="flex items-center gap-2 min-w-0">
+          <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
           <h2 className="text-sm font-semibold">Leaderboard</h2>
-          <span className="text-xs text-muted-foreground">Top traders by realized P&L</span>
+          <span className="hidden sm:inline text-xs text-muted-foreground">Top traders by realized P&L</span>
         </div>
-        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+        <div className="flex items-center gap-1 rounded-md border border-border p-0.5 shrink-0">
           {WINDOWS.map((w) => (
             <button
               key={w.id}
@@ -75,14 +75,15 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
       ) : rows.length === 0 ? (
         <div className="p-6 text-center text-sm text-muted-foreground">No traders yet.</div>
       ) : (
+        <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="text-muted-foreground">
             <tr className="border-b border-border">
-              <th className="text-left px-4 py-2 font-medium w-10">#</th>
-              <th className="text-left px-4 py-2 font-medium">Trader</th>
-              <th className="text-right px-4 py-2 font-medium">Realized P&L</th>
-              <th className="text-right px-4 py-2 font-medium">Live equity</th>
-              <th className="text-right px-4 py-2 font-medium">Closed</th>
+              <th className="text-left px-2 sm:px-4 py-2 font-medium w-8 sm:w-10">#</th>
+              <th className="text-left px-2 sm:px-4 py-2 font-medium">Trader</th>
+              <th className="text-right px-2 sm:px-4 py-2 font-medium">P&L</th>
+              <th className="hidden sm:table-cell text-right px-4 py-2 font-medium">Live equity</th>
+              <th className="hidden sm:table-cell text-right px-4 py-2 font-medium">Closed</th>
             </tr>
           </thead>
           <tbody>
@@ -96,25 +97,25 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
                     isMe && "bg-primary/5",
                   )}
                 >
-                  <td className="px-4 py-2 ticker-mono text-muted-foreground">
+                  <td className="px-2 sm:px-4 py-2 ticker-mono text-muted-foreground">
                     {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-2 sm:px-4 py-2 max-w-[120px] sm:max-w-none truncate">
                     <span className={cn("font-medium", isMe && "text-primary")}>
                       {r.display_name}
                     </span>
-                    {isMe && <span className="ml-2 text-[10px] uppercase text-primary/70">you</span>}
+                    {isMe && <span className="ml-1 sm:ml-2 text-[10px] uppercase text-primary/70">you</span>}
                   </td>
                   <td className={cn(
-                    "px-4 py-2 text-right ticker-mono font-medium",
+                    "px-2 sm:px-4 py-2 text-right ticker-mono font-medium",
                     Number(r.realized_pl) >= 0 ? "text-bull" : "text-bear",
                   )}>
                     {fmtMoney(Number(r.realized_pl))}
                   </td>
-                  <td className="px-4 py-2 text-right ticker-mono">
+                  <td className="hidden sm:table-cell px-4 py-2 text-right ticker-mono">
                     {fmtMoney(Number(r.live_equity))}
                   </td>
-                  <td className="px-4 py-2 text-right ticker-mono text-muted-foreground">
+                  <td className="hidden sm:table-cell px-4 py-2 text-right ticker-mono text-muted-foreground">
                     {r.closed_trades}
                   </td>
                 </tr>
@@ -122,6 +123,7 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
             })}
           </tbody>
         </table>
+        </div>
       )}
     </section>
   );
