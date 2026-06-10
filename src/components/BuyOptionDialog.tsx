@@ -242,7 +242,7 @@ export function BuyOptionDialog(props: Props) {
   useEffect(() => {
     if (!open || !signal || !selected) return;
     saveSelection(String(signal.id), {
-      side, expiry, strike: Number(selected.strike), qty,
+      side, expiry, strike: Number(selected.strike), qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
     });
   }, [open, signal, side, expiry, selected, qty]);
 
@@ -392,7 +392,22 @@ export function BuyOptionDialog(props: Props) {
                   <Stat label="Remaining cash" value={fmtMoney(receipt.remainingCash)} />
                 </div>
                 <div className="flex justify-end gap-2 pt-1 border-t">
-                  <Button variant="outline" onClick={() => setReceipt(null)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      // Reset to ATM near current spot + clear qty default.
+                      setReceipt(null);
+                      setRestoredStrike(null);
+                      setSelectedSymbol(null);
+                      setQty(NaN);
+                      if (rows.length && spot) {
+                        const atm = [...rows].sort(
+                          (a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot),
+                        )[0];
+                        if (atm) setSelectedSymbol(atm.symbol);
+                      }
+                    }}
+                  >
                     Buy another
                   </Button>
                   <Button onClick={() => onOpenChange(false)}>Done</Button>
@@ -560,8 +575,14 @@ export function BuyOptionDialog(props: Props) {
                       type="number"
                       min={1}
                       max={999}
-                      value={qty}
-                      onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                      placeholder="Qty"
+                      value={Number.isFinite(qty) && qty > 0 ? qty : ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") { setQty(NaN); return; }
+                        const n = Math.floor(Number(raw));
+                        setQty(Number.isFinite(n) && n > 0 ? Math.min(999, n) : NaN);
+                      }}
                       className="w-24"
                     />
                   </div>
@@ -614,7 +635,7 @@ export function BuyOptionDialog(props: Props) {
                   )}
                 </div>
 
-                {!buyingPowerOk && (
+                {Number.isFinite(qty) && qty >= 1 && !buyingPowerOk && (
                   <div className="text-xs text-rose-500">
                     Not enough buying power. Need {fmtMoney(totalCost)}, have {fmtMoney(props.cashBalance)}.
                   </div>
@@ -624,8 +645,8 @@ export function BuyOptionDialog(props: Props) {
                   <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
                     Cancel
                   </Button>
-                  <Button onClick={handleBuy} disabled={submitting || !buyingPowerOk || selectedMid <= 0}>
-                    {submitting ? "Submitting…" : `Buy for ${fmtMoney(totalCost)}`}
+                  <Button onClick={handleBuy} disabled={submitting || !buyingPowerOk || selectedMid <= 0 || !Number.isFinite(qty) || qty < 1}>
+                    {submitting ? "Submitting…" : !Number.isFinite(qty) || qty < 1 ? "Enter quantity" : `Buy for ${fmtMoney(totalCost)}`}
                   </Button>
                 </div>
               </div>
