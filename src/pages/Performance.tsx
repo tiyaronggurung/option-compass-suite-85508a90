@@ -170,7 +170,7 @@ export default function Performance() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Total paper trades" value={metrics.total} icon={Activity} accent="text-primary" />
         <Stat label="Win rate" value={`${metrics.winRate.toFixed(0)}%`} icon={Target} accent="text-bull" />
         <Stat label="Profit factor" value={isFinite(metrics.profitFactor) ? metrics.profitFactor.toFixed(2) : "∞"} icon={TrendingUp} accent="text-info" />

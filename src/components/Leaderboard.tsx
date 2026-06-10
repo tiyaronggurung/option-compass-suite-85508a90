@@ -82,8 +82,8 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
               <th className="text-left px-2 sm:px-4 py-2 font-medium w-8 sm:w-10">#</th>
               <th className="text-left px-2 sm:px-4 py-2 font-medium">Trader</th>
               <th className="text-right px-2 sm:px-4 py-2 font-medium">P&L</th>
-              <th className="hidden sm:table-cell text-right px-4 py-2 font-medium">Live equity</th>
-              <th className="hidden sm:table-cell text-right px-4 py-2 font-medium">Closed</th>
+              <th className="hidden lg:table-cell text-right px-4 py-2 font-medium">Live equity</th>
+              <th className="hidden lg:table-cell text-right px-4 py-2 font-medium">Closed</th>
             </tr>
           </thead>
           <tbody>
@@ -112,10 +112,10 @@ export function Leaderboard({ currentUserId }: { currentUserId?: string | null }
                   )}>
                     {fmtMoney(Number(r.realized_pl))}
                   </td>
-                  <td className="hidden sm:table-cell px-4 py-2 text-right ticker-mono">
+                  <td className="hidden lg:table-cell px-4 py-2 text-right ticker-mono">
                     {fmtMoney(Number(r.live_equity))}
                   </td>
-                  <td className="hidden sm:table-cell px-4 py-2 text-right ticker-mono text-muted-foreground">
+                  <td className="hidden lg:table-cell px-4 py-2 text-right ticker-mono text-muted-foreground">
                     {r.closed_trades}
                   </td>
                 </tr>
