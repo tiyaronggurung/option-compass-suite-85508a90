@@ -15,6 +15,7 @@ import Trades from "@/pages/Trades";
 import Analyst from "@/pages/Analyst";
 import Alerts from "@/pages/Alerts";
 import Performance from "@/pages/Performance";
+import Technical from "@/pages/Technical";
 import Calendar from "@/pages/Calendar";
 import SettingsPage from "@/pages/Settings";
 import Diagnostics from "@/pages/Diagnostics";
