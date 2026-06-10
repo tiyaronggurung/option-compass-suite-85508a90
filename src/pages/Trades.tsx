@@ -54,19 +54,14 @@ export default function Trades() {
       toast.error("This trade has no linked signal.");
       return;
     }
-    setLoadingSignalFor(trade.id);
-    try {
-      const { data, error } = await supabase
-        .from("signals")
-        .select("*")
-        .eq("id", trade.signal_id)
-        .maybeSingle();
-      if (error) { toast.error(error.message); return; }
-      if (!data) { toast.error("Original signal no longer available."); return; }
-      setSignalDetail(data as Signal);
-    } finally {
-      setLoadingSignalFor(null);
-    }
+    const { data, error } = await supabase
+      .from("signals")
+      .select("*")
+      .eq("id", trade.signal_id)
+      .maybeSingle();
+    if (error) { toast.error(error.message); return; }
+    if (!data) { toast.error("Original signal no longer available."); return; }
+    setSignalDetail(data as Signal);
   }
 
   async function refresh() {
