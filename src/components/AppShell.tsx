@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, BookmarkCheck, ClipboardList, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
+import { Activity, BookmarkCheck, CalendarDays, ClipboardList, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { useSingleSession } from "@/hooks/useSingleSession";
@@ -13,6 +13,7 @@ const NAV = [
   { to: "/app/top-signals", label: "Top Signals", icon: Trophy },
   { to: "/app/watchlist", label: "Watchlist", icon: BookmarkCheck },
   { to: "/app/trades", label: "Paper trades", icon: ClipboardList },
+  { to: "/app/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/app/analyst", label: "AI Analyst", icon: Sparkles, soon: true },
   { to: "/app/alerts", label: "Alerts", icon: Activity, soon: true },
   { to: "/app/performance", label: "Performance", icon: LineChart, soon: true },

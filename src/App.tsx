@@ -15,6 +15,7 @@ import Trades from "@/pages/Trades";
 import Analyst from "@/pages/Analyst";
 import Alerts from "@/pages/Alerts";
 import Performance from "@/pages/Performance";
+import Calendar from "@/pages/Calendar";
 import SettingsPage from "@/pages/Settings";
 import Diagnostics from "@/pages/Diagnostics";
 import InsiderDiagnostics from "@/pages/InsiderDiagnostics";
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="analyst" element={<Analyst />} />
               <Route path="alerts" element={<Alerts />} />
               <Route path="performance" element={<Performance />} />
+              <Route path="calendar" element={<Calendar />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="diagnostics" element={<Diagnostics />} />
               <Route path="diagnostics/insiders" element={<InsiderDiagnostics />} />
