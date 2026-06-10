@@ -78,6 +78,13 @@ function barColor(v: number): string {
   return "bg-bear";
 }
 
+function fmtScore(v: number): string {
+  if (!Number.isFinite(v)) return "—";
+  const rounded = Math.round(v * 100) / 100;
+  if (Number.isInteger(rounded)) return String(rounded);
+  return rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 function Bar({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-2 text-[11px]">
@@ -85,7 +92,7 @@ function Bar({ label, value }: { label: string; value: number }) {
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
         <div className={cn("h-full rounded-full transition-all", barColor(value))} style={{ width: `${value}%` }} />
       </div>
-      <div className="w-8 text-right ticker-mono text-foreground">{value}</div>
+      <div className="w-12 text-right ticker-mono text-foreground tabular-nums">{fmtScore(value)}</div>
     </div>
   );
 }
