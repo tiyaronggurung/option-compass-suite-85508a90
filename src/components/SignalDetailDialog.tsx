@@ -12,6 +12,7 @@ import { RefreshCw } from "lucide-react";
 import type { RankBreakdown } from "@/lib/rankSignals";
 import { ConfirmationMatrix } from "@/components/ConfirmationMatrix";
 import type { ConfirmationMatrix as MatrixT } from "@/lib/confirmations";
+import { TechnicalTrendCard } from "@/components/TechnicalTrendCard";
 
 interface Props {
   signal: Signal | null;
