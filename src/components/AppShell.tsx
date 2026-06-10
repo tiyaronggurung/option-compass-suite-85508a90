@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, BookmarkCheck, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
+import { Activity, BookmarkCheck, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Gauge, LayoutDashboard, LineChart, LogOut, Menu, Settings, Sparkles, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { useSingleSession } from "@/hooks/useSingleSession";
