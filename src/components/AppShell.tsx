@@ -70,6 +70,7 @@ export default function AppShell() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [tabletCollapsed, setTabletCollapsed] = useState(true);
   useBrowserPush();
   useSingleSession();
 
