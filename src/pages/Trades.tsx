@@ -243,6 +243,11 @@ export default function Trades() {
         onOpenChange={(v) => !v && setReviewing(null)}
         onSaved={(r) => setReviews((m) => ({ ...m, [r.trade_id]: r }))}
       />
+      <SignalDetailDialog
+        signal={signalDetail}
+        open={!!signalDetail}
+        onOpenChange={(v) => !v && setSignalDetail(null)}
+      />
     </div>
   );
 }
