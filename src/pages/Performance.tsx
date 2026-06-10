@@ -262,11 +262,12 @@ function Card({ title, children, className }: { title: string; children: React.R
 
 function Stat({ label, value, icon: Icon, accent }: any) {
   return (
-    <div className="glass-card p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className={cn("h-4 w-4", accent)} /> {label}
+    <div className="glass-card p-3 sm:p-4">
+      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-muted-foreground">
+        <Icon className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0", accent)} />
+        <span className="truncate">{label}</span>
       </div>
-      <div className={cn("mt-2 text-2xl font-semibold ticker-mono", accent)}>{value}</div>
+      <div className={cn("mt-1.5 sm:mt-2 text-lg sm:text-2xl font-semibold ticker-mono break-all", accent)}>{value}</div>
     </div>
   );
 }
