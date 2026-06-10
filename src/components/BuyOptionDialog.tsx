@@ -392,7 +392,22 @@ export function BuyOptionDialog(props: Props) {
                   <Stat label="Remaining cash" value={fmtMoney(receipt.remainingCash)} />
                 </div>
                 <div className="flex justify-end gap-2 pt-1 border-t">
-                  <Button variant="outline" onClick={() => setReceipt(null)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      // Reset to ATM near current spot + clear qty default.
+                      setReceipt(null);
+                      setRestoredStrike(null);
+                      setSelectedSymbol(null);
+                      setQty(NaN);
+                      if (rows.length && spot) {
+                        const atm = [...rows].sort(
+                          (a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot),
+                        )[0];
+                        if (atm) setSelectedSymbol(atm.symbol);
+                      }
+                    }}
+                  >
                     Buy another
                   </Button>
                   <Button onClick={() => onOpenChange(false)}>Done</Button>
