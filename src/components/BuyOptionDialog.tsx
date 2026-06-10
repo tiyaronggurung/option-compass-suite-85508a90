@@ -242,7 +242,7 @@ export function BuyOptionDialog(props: Props) {
   useEffect(() => {
     if (!open || !signal || !selected) return;
     saveSelection(String(signal.id), {
-      side, expiry, strike: Number(selected.strike), qty,
+      side, expiry, strike: Number(selected.strike), qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
     });
   }, [open, signal, side, expiry, selected, qty]);
 
