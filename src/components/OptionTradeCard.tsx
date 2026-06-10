@@ -400,6 +400,17 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
             {hasReview ? "Review" : "Review trade"}
           </Button>
         )}
+        {!live && onShowSignal && trade.signal_id && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onShowSignal(trade)}
+            title="View original signal details"
+            aria-label="View original signal details"
+          >
+            <Info className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );
