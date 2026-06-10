@@ -28,8 +28,8 @@ export type ConfirmationMatrix = Record<SourceKey, SourceConfirmation>;
 
 export type ConfirmationSummary = {
   matrix: ConfirmationMatrix;
-  score: number;             // 0..100 — purely metadata, not added to confidence
-  label: string;             // human-readable summary label
+  score: number;
+  label: string;
   agreeing: number;
   conflicting: number;
   configured_count: number;
@@ -55,8 +55,6 @@ function neutral(reason = "not configured"): SourceConfirmation {
   return { score: 0, stance: "neutral", reason, configured: false };
 }
 
-// Derive the Alpaca confirmation directly from already-computed signal numbers.
-// We never recompute the score — we just translate its sign + magnitude.
 function alpacaConfirmation(
   direction: "CALL" | "PUT",
   blendedScore: number,
@@ -72,8 +70,6 @@ function alpacaConfirmation(
   };
 }
 
-// Earnings confirmation is derived from the existing earnings_events table —
-// purely informational, no boost is applied here.
 async function earningsConfirmation(
   admin: SupabaseClient,
   ticker: string,
@@ -101,7 +97,7 @@ async function earningsConfirmation(
     const days = Math.max(0, Math.ceil((+new Date(data.report_date) - Date.now()) / 86_400_000));
     return {
       score: days <= 7 ? 0.7 : 0.4,
-      stance: "neutral", // earnings is a catalyst, not directional on its own
+      stance: "neutral",
       reason: `Earnings in ${days}d (${data.report_date})`,
       configured: true,
       last_updated: new Date().toISOString(),
@@ -111,10 +107,48 @@ async function earningsConfirmation(
   }
 }
 
-// Load which non-Alpaca providers are enabled, so we can correctly weight
-// the configured_count. Failures → treat as unconfigured (safe default).
+// Options-flow confirmation — derive stance from net premium bias on the
+// already-computed options_flow component. Positive bias = bullish flow.
+function optionsFlowConfirmation(componentData: any): SourceConfirmation {
+  const details = componentData?.options_flow?.details ?? null;
+  const bias = typeof details?.net_premium_bias === "number" ? details.net_premium_bias : null;
+  const bull = Number(details?.bullish_premium) || 0;
+  const bear = Number(details?.bearish_premium) || 0;
+  if (bias == null && bull === 0 && bear === 0) {
+    return { score: 0, stance: "neutral", reason: "no flow data", configured: true, last_updated: new Date().toISOString() };
+  }
+  const b = bias ?? (bull - bear) / Math.max(1, bull + bear);
+  const stance: Stance = Math.abs(b) < 0.1 ? "neutral" : b > 0 ? "bullish" : "bearish";
+  const dollars = bull + bear;
+  return {
+    score: Math.min(1, Math.abs(b)),
+    stance,
+    reason: `Net bias ${(b * 100).toFixed(0)}% · $${(dollars / 1_000_000).toFixed(1)}M flow`,
+    configured: true,
+    last_updated: new Date().toISOString(),
+  };
+}
+
+// News confirmation — derive stance from news component score (0..100, 50 neutral).
+function newsConfirmation(componentData: any): SourceConfirmation {
+  const news = componentData?.news ?? null;
+  const score = typeof news?.score === "number" ? news.score : null;
+  if (score == null) {
+    return { score: 0, stance: "neutral", reason: "no news data", configured: true, last_updated: new Date().toISOString() };
+  }
+  const stance: Stance = score >= 55 ? "bullish" : score <= 45 ? "bearish" : "neutral";
+  const articleCount = news?.details?.article_count ?? null;
+  return {
+    score: Math.min(1, Math.abs(score - 50) / 50),
+    stance,
+    reason: `Sentiment ${score}${articleCount ? ` · ${articleCount} articles` : ""}`,
+    configured: true,
+    last_updated: new Date().toISOString(),
+  };
+}
+
 async function loadEnabledProviders(admin: SupabaseClient): Promise<Set<SourceKey>> {
-  const enabled = new Set<SourceKey>(["alpaca", "earnings"]); // always counted
+  const enabled = new Set<SourceKey>(["alpaca", "earnings"]);
   try {
     const { data } = await admin
       .from("provider_configs")
@@ -135,11 +169,11 @@ export async function buildConfirmations(
     direction: "CALL" | "PUT";
     blendedScore: number;
     confidence: number;
+    componentData?: any;
   },
 ): Promise<ConfirmationSummary> {
   const enabled = await loadEnabledProviders(admin);
 
-  // Start with neutral defaults for every source.
   const matrix: ConfirmationMatrix = {
     alpaca: neutral(),
     options_flow: neutral(),
@@ -151,16 +185,12 @@ export async function buildConfirmations(
     earnings: neutral(),
   };
 
-  // Alpaca (always primary source).
   matrix.alpaca = alpacaConfirmation(args.direction, args.blendedScore, args.confidence);
-
-  // Earnings — derived from local catalog, safe to compute every time.
   matrix.earnings = await earningsConfirmation(admin, args.ticker);
+  matrix.options_flow = optionsFlowConfirmation(args.componentData);
+  matrix.news = newsConfirmation(args.componentData);
 
-  // All other sources stay neutral / "not configured" until their integrations land.
-  // When a provider is *enabled* in provider_configs but its data fetch isn't built yet,
-  // surface that distinction in the reason text so admins know it's pending wiring.
-  for (const key of ["options_flow", "x_twitter", "reddit", "polymarket", "kalshi", "news"] as SourceKey[]) {
+  for (const key of ["x_twitter", "reddit", "polymarket", "kalshi"] as SourceKey[]) {
     if (enabled.has(key)) {
       matrix[key] = {
         score: 0, stance: "neutral",
@@ -171,7 +201,6 @@ export async function buildConfirmations(
     }
   }
 
-  // ---- Score formula (agreement vs conflict on configured sources only) ----
   const signalStance: Stance = args.direction === "CALL" ? "bullish" : "bearish";
   let agreeing = 0;
   let conflicting = 0;
@@ -188,7 +217,6 @@ export async function buildConfirmations(
   const raw = ((agreeing - conflicting) / denom) * 100;
   const score = Math.max(0, Math.min(100, Math.round(raw)));
 
-  // ---- Label ----
   let label: string;
   if (conflicting >= 2) label = "Conflicting signal";
   else if (agreeing >= 3) label = "Strong confirmation";

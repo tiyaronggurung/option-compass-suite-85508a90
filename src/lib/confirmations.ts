@@ -46,6 +46,8 @@ export const SOURCE_ORDER: SourceKey[] = [
 // Flip a source to wired by adding its key here once its integration ships.
 export const WIRED_SOURCES: ReadonlySet<SourceKey> = new Set<SourceKey>([
   "alpaca",
+  "options_flow",
+  "news",
   "earnings",
 ]);
 

@@ -184,6 +184,8 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
         direction={signal.direction as "CALL" | "PUT"}
       />
 
+      <TechStatsLine signal={signal} />
+
       {Array.isArray(signal.reasons) && signal.reasons.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
           {(signal.reasons as string[]).slice(0, 6).map((r, i) => (
@@ -231,5 +233,41 @@ function RiskBadge({ level }: { level: Signal["risk_level"] }) {
     <Badge className={cn("border-0 gap-1", map[level])}>
       <ShieldAlert className="h-3 w-3" /> {level} risk
     </Badge>
+  );
+}
+
+function TechStatsLine({ signal }: { signal: Signal }) {
+  const tm: any = (signal as any).technical_metrics ?? {};
+  const sc: any = (signal as any).score_components ?? {};
+  const tech = sc?.components?.technical?.details ?? {};
+  const flow = sc?.components?.options_flow?.details ?? {};
+
+  const rsi = typeof tm.rsi === "number" ? tm.rsi
+    : typeof tech?.technical_extras?.rsi === "number" ? tech.technical_extras.rsi : null;
+  const vwap = typeof tm.vwap === "number" ? tm.vwap : null;
+  const price = Number((signal as any).price);
+  const vwapPct = vwap != null && Number.isFinite(price) && price > 0
+    ? ((price - vwap) / vwap) * 100 : null;
+
+  const atr = typeof tech.atr === "number" ? tech.atr : null;
+  const atrPct = atr != null && Number.isFinite(price) && price > 0 ? (atr / price) * 100 : null;
+  const hv = typeof tech.hv === "number" ? tech.hv : null;
+
+  const flowBias = typeof flow.net_premium_bias === "number" ? flow.net_premium_bias : null;
+
+  const parts: string[] = [];
+  if (rsi != null) parts.push(`RSI ${rsi.toFixed(0)}`);
+  if (vwapPct != null) parts.push(`VWAP ${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%`);
+  if (hv != null) parts.push(`HV ${hv.toFixed(1)}%`);
+  if (atrPct != null) parts.push(`ATR ${atrPct.toFixed(1)}%`);
+  if (flowBias != null) parts.push(`Flow ${flowBias >= 0 ? "+" : ""}${(flowBias * 100).toFixed(0)}%`);
+
+  if (parts.length === 0) return null;
+
+  return (
+    <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
+      <span className="text-primary mt-px">⚡</span>
+      <span className="flex-1 ticker-mono">Tech: {parts.join(" · ")}</span>
+    </div>
   );
 }
