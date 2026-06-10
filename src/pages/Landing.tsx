@@ -3,15 +3,14 @@ import { Activity, ArrowRight, Brain, LineChart, ShieldCheck } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { DisclaimerBar } from "@/components/Disclaimer";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import logoAsset from "@/assets/xalgoflow-logo.png.asset.json";
 
 export default function Landing() {
   return (
     <div className="min-h-screen" style={{ backgroundImage: "var(--gradient-hero)" }}>
       <header className="container max-w-7xl py-5 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-md bg-primary/20 text-primary grid place-items-center">
-            <Activity className="h-4 w-4" />
-          </div>
+          <img src={logoAsset.url} alt="Xalgoflow" className="h-9 w-9 object-contain" />
           <span className="text-sm font-semibold">Xalgoflow</span>
         </Link>
         <div className="flex items-center gap-2">

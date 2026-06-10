@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { DisclaimerBar } from "@/components/Disclaimer";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import logoAsset from "@/assets/xalgoflow-logo.png.asset.json";
 
 const schema = z.object({
   email: z.string().trim().email("Enter a valid email").max(255),
@@ -160,9 +161,7 @@ export default function AuthPage() {
       <div className="hidden lg:flex flex-col justify-between p-10 relative overflow-hidden border-r border-border"
         style={{ backgroundImage: "var(--gradient-hero)" }}>
         <Link to="/" className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-md bg-primary/20 text-primary grid place-items-center">
-            <Activity className="h-5 w-5" />
-          </div>
+          <img src={logoAsset.url} alt="Xalgoflow" className="h-10 w-10 object-contain" />
           <div>
             <div className="text-sm font-semibold tracking-tight">Xalgoflow</div>
           </div>
@@ -183,9 +182,7 @@ export default function AuthPage() {
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
           <div className="lg:hidden mb-6 flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-primary/15 text-primary grid place-items-center">
-              <Activity className="h-4 w-4" />
-            </div>
+            <img src={logoAsset.url} alt="Xalgoflow" className="h-9 w-9 object-contain" />
             <span className="text-sm font-semibold">Xalgoflow</span>
           </div>
           {mfaFactorId ? (
