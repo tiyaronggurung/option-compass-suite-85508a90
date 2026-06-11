@@ -217,18 +217,12 @@ export default function Dashboard() {
       }
       return true;
     });
-    const isZeroBid = (s: Signal) => {
-      const bid = getContractMeta(s)?.bid;
-      if (bid === 0) return true;
-      const reasons = Array.isArray(s.reasons) ? (s.reasons as string[]) : [];
-      return reasons.some((r) => /\$0\s*bid|ask\s*vs\s*\$0/i.test(String(r)));
-    };
     const ordered = base.sort((a, b) => {
       const ta = new Date(a.created_at).getTime();
       const tb = new Date(b.created_at).getTime();
       return tb - ta;
     });
-    return [...ordered].sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
+    return ordered;
   }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
 
   const totalLive = signals?.filter((s) => s.status === "LIVE").length ?? 0;
