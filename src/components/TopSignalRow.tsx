@@ -32,6 +32,7 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onReject, onD
   const contract = getContractMeta(signal);
   const freshness = getFreshness(signal);
   const countdown = getCountdownLabel(signal);
+  const stillBest = useStillBest(signal, rank === 1);
   const freshClass =
     freshness === "fresh" ? "bg-bull/15 text-bull"
     : freshness === "aging" ? "bg-warn/15 text-warn"
