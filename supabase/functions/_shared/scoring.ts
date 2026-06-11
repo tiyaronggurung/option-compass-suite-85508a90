@@ -44,9 +44,12 @@ export type ProviderStatus = {
 };
 
 export type ScoringResult = {
-  final: number;            // 0..100 after regime adjust
+  final: number;            // 0..100 after regime adjust + fallback penalty
   base: number;             // pre-regime
   regime_adjust: number;    // signed, ±5 max
+  fallback_count: number;            // # of components that fell back to neutral 50
+  fallback_components: ComponentKey[]; // which components fell back
+  fallback_penalty: number;          // signed, 0..-12, applied after regime adjust
   regime: string | null;
   components: Record<ComponentKey, ComponentScore>;
   sources_used: string[];
