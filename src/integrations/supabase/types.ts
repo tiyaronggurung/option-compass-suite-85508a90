@@ -122,6 +122,45 @@ export type Database = {
         }
         Relationships: []
       }
+      auto_exit_rules: {
+        Row: {
+          created_at: string
+          dry_run: boolean
+          enabled: boolean
+          stop_loss_pct: number | null
+          take_profit_pct: number | null
+          theta_burn_pct: number | null
+          time_exit_et: string | null
+          trailing_stop_pct: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dry_run?: boolean
+          enabled?: boolean
+          stop_loss_pct?: number | null
+          take_profit_pct?: number | null
+          theta_burn_pct?: number | null
+          time_exit_et?: string | null
+          trailing_stop_pct?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dry_run?: boolean
+          enabled?: boolean
+          stop_loss_pct?: number | null
+          take_profit_pct?: number | null
+          theta_burn_pct?: number | null
+          time_exit_et?: string | null
+          trailing_stop_pct?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contract_selection_snapshots: {
         Row: {
           ask: number | null
@@ -557,6 +596,9 @@ export type Database = {
       paper_trades: {
         Row: {
           ask: number | null
+          auto_exit_armed_rule: string | null
+          auto_exit_closed_by: string | null
+          auto_exit_peak_premium: number | null
           bid: number | null
           closed_at: string | null
           confidence_at_approval: number | null
@@ -618,6 +660,9 @@ export type Database = {
         }
         Insert: {
           ask?: number | null
+          auto_exit_armed_rule?: string | null
+          auto_exit_closed_by?: string | null
+          auto_exit_peak_premium?: number | null
           bid?: number | null
           closed_at?: string | null
           confidence_at_approval?: number | null
@@ -679,6 +724,9 @@ export type Database = {
         }
         Update: {
           ask?: number | null
+          auto_exit_armed_rule?: string | null
+          auto_exit_closed_by?: string | null
+          auto_exit_peak_premium?: number | null
           bid?: number | null
           closed_at?: string | null
           confidence_at_approval?: number | null
