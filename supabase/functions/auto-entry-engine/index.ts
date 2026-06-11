@@ -222,6 +222,33 @@ Deno.serve(async (req) => {
           });
           continue;
         }
+        // ── Pre-trade sanity layer (Option A) ──
+        // Re-validate signal right before committing real paper cash.
+        // Blocks stale, withdrawn, or wildly-moved fills. ~1 extra round-trip.
+        const { data: fresh, error: freshErr } = await admin
+          .from("signals").select("*").eq("id", s.id).maybeSingle();
+        if (freshErr || !fresh) { skip("sanity_signal_missing"); continue; }
+        if (fresh.hidden === true) { skip("sanity_signal_hidden"); continue; }
+        // Age recheck (signal could have aged past window during loop)
+        const ageMs = Date.now() - new Date(fresh.created_at).getTime();
+        if (ageMs > ageMin * 60_000) { skip("sanity_signal_stale"); continue; }
+        // Premium drift: if signal carries a live mid/current price, ensure we
+        // aren't sizing against a price that already moved >15% against us.
+        const liveMid = numOrNull((fresh as any).current_premium)
+          ?? numOrNull((fresh as any).mid)
+          ?? numOrNull((fresh as any).last_price);
+        if (liveMid != null && liveMid > 0 && premium > 0) {
+          const drift = Math.abs(liveMid - premium) / premium;
+          if (drift > 0.15) { skip(`sanity_premium_drift:${drift.toFixed(2)}`); continue; }
+        }
+        // Bid/ask spread sanity: skip if spread > 25% of mid (illiquid).
+        const bid = numOrNull((fresh as any).bid);
+        const ask = numOrNull((fresh as any).ask);
+        if (bid != null && ask != null && bid > 0 && ask > 0) {
+          const mid = (bid + ask) / 2;
+          const spreadPct = (ask - bid) / mid;
+          if (spreadPct > 0.25) { skip(`sanity_spread_wide:${spreadPct.toFixed(2)}`); continue; }
+        }
 
         // LIVE: insert paper_trade then log
         const openedAt = new Date().toISOString();
