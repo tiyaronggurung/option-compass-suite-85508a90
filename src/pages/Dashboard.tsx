@@ -46,13 +46,31 @@ const SOURCE_FILTERS: { id: SourceMode; label: string }[] = [
   { id: "live", label: "Live market data" },
 ];
 
-function marketStatus() {
+function marketStatus(): "Pre-Market" | "Open" | "After-Hours" | "Closed" {
+  // Use America/New_York to handle DST automatically.
   const now = new Date();
-  const day = now.getUTCDay();
-  const minutesUTC = now.getUTCHours() * 60 + now.getUTCMinutes();
-  // NYSE: 14:30–21:00 UTC (approx, ignoring DST nuance)
-  const open = day >= 1 && day <= 5 && minutesUTC >= 14 * 60 + 30 && minutesUTC < 21 * 60;
-  return open ? "Open" : "Closed";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const wd = parts.find((p) => p.type === "weekday")?.value ?? "";
+  const hh = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10) % 24;
+  const mm = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
+  const mins = hh * 60 + mm;
+  const isWeekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(wd);
+  if (!isWeekday) return "Closed";
+  // ET windows
+  const preStart = 4 * 60;        // 04:00
+  const regStart = 9 * 60 + 30;   // 09:30
+  const regEnd = 16 * 60;         // 16:00
+  const afterEnd = 20 * 60;       // 20:00
+  if (mins >= regStart && mins < regEnd) return "Open";
+  if (mins >= preStart && mins < regStart) return "Pre-Market";
+  if (mins >= regEnd && mins < afterEnd) return "After-Hours";
+  return "Closed";
 }
 
 export default function Dashboard() {
