@@ -185,8 +185,11 @@ Deno.serve(async (req) => {
       if (!sigs || sigs.length === 0) continue;
 
       // Loss streak (any closed loss today on the ticker — manual or auto, cause-agnostic)
+      const { data: closedTodayDetail } = await admin
+        .from("paper_trades").select("ticker, realized_pl")
+        .eq("user_id", userId).neq("status", "OPEN").gte("closed_at", todayStartUtc);
       const lossCountByTicker = new Map<string, number>();
-      for (const t of closedToday ?? []) {
+      for (const t of closedTodayDetail ?? []) {
         if (Number((t as any).realized_pl ?? 0) < 0) {
           const k = String((t as any).ticker ?? "").toUpperCase();
           if (k) lossCountByTicker.set(k, (lossCountByTicker.get(k) ?? 0) + 1);
@@ -227,18 +230,6 @@ Deno.serve(async (req) => {
         }
       };
 
-      // closedToday rows lack ticker — re-query with ticker for the streak map.
-      // (closedToday above is reused for daily-loss-cap; this small extra fetch keeps that intact.)
-      const { data: closedTodayDetail } = await admin
-        .from("paper_trades").select("ticker, realized_pl")
-        .eq("user_id", userId).neq("status", "OPEN").gte("closed_at", todayStartUtc);
-      lossCountByTicker.clear();
-      for (const t of closedTodayDetail ?? []) {
-        if (Number((t as any).realized_pl ?? 0) < 0) {
-          const k = String((t as any).ticker ?? "").toUpperCase();
-          if (k) lossCountByTicker.set(k, (lossCountByTicker.get(k) ?? 0) + 1);
-        }
-      }
 
 
       for (const s of sigs) {
