@@ -8,6 +8,8 @@ import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
 import type { RankBreakdown } from "@/lib/rankSignals";
 import { getContractMeta } from "@/lib/rankSignals";
 import { SignalRadar } from "@/components/SignalRadar";
+import { StillBestBadge } from "@/components/StillBestBadge";
+import { useStillBest } from "@/lib/stillBest";
 
 type Props = {
   rank: number;
@@ -30,6 +32,7 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onReject, onD
   const contract = getContractMeta(signal);
   const freshness = getFreshness(signal);
   const countdown = getCountdownLabel(signal);
+  const stillBest = useStillBest(signal, rank === 1);
   const freshClass =
     freshness === "fresh" ? "bg-bull/15 text-bull"
     : freshness === "aging" ? "bg-warn/15 text-warn"
@@ -81,6 +84,7 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onReject, onD
             <Badge className={cn("border-0 gap-1 text-[10px]", freshClass)} title={`Expires in ${countdown}`}>
               <Timer className="h-3 w-3" /> {countdown}
             </Badge>
+            {rank === 1 && <StillBestBadge verdict={stillBest} />}
           </div>
 
           <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
