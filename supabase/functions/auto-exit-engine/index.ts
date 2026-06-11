@@ -373,6 +373,10 @@ function nyMinutesNow(d: Date = new Date()): number {
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
   return parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10);
 }
+function nyDateStr(d: Date = new Date()): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+  return fmt.format(d); // YYYY-MM-DD
+}
 function isUsMarketOpenNow(d: Date = new Date()): boolean {
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false,
