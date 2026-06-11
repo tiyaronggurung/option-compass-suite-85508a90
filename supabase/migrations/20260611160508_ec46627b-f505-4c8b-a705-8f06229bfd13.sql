@@ -1,0 +1,2 @@
+ALTER TABLE public.signals ADD COLUMN IF NOT EXISTS fallback_count integer;
+COMMENT ON COLUMN public.signals.fallback_count IS 'Number of scoring components (0..5) that fell back to neutral 50 due to provider failure or missing data. Used to apply -4 pts per fallback penalty (cap -12) and to analyze score-distribution shifts.';

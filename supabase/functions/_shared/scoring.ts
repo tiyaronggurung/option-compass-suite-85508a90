@@ -44,9 +44,12 @@ export type ProviderStatus = {
 };
 
 export type ScoringResult = {
-  final: number;            // 0..100 after regime adjust
+  final: number;            // 0..100 after regime adjust + fallback penalty
   base: number;             // pre-regime
   regime_adjust: number;    // signed, ±5 max
+  fallback_count: number;            // # of components that fell back to neutral 50
+  fallback_components: ComponentKey[]; // which components fell back
+  fallback_penalty: number;          // signed, 0..-12, applied after regime adjust
   regime: string | null;
   components: Record<ComponentKey, ComponentScore>;
   sources_used: string[];
@@ -969,7 +972,20 @@ export async function scoreInstitutional(
 
   const regimeName = regime?.regime ?? null;
   const adj = Math.max(-5, Math.min(5, regimeAdjust(regimeName, direction)));
-  const final = clamp100(base + adj);
+
+  // Step E: fallback penalty.
+  // A component is "fallback" if it's not configured OR its details flag neutral_50.
+  // Penalty: -4 per fallback, capped at -12 (i.e. capped at 3 fallbacks).
+  const fallbackComponents: ComponentKey[] = [];
+  for (const k of Object.keys(components) as ComponentKey[]) {
+    const c = components[k];
+    const flagged = (c.details && (c.details as Record<string, unknown>).fallback === "neutral_50");
+    if (!c.configured || flagged) fallbackComponents.push(k);
+  }
+  const fallbackCount = fallbackComponents.length;
+  const fallbackPenalty = -4 * Math.min(3, fallbackCount); // 0, -4, -8, -12, -12, -12
+
+  const final = clamp100(base + adj + fallbackPenalty);
 
   const sources_used = Array.from(new Set(
     Object.values(components).filter((c) => c.configured).map((c) => c.source),
@@ -982,6 +998,9 @@ export async function scoreInstitutional(
   }
   if (regimeName && regimeName !== "sideways") {
     reasons.push(`Regime: ${regimeName} (${adj >= 0 ? "+" : ""}${adj} pts)`);
+  }
+  if (fallbackCount > 0) {
+    reasons.push(`Degraded: ${fallbackCount} component${fallbackCount === 1 ? "" : "s"} on neutral 50 (${fallbackPenalty} pts)`);
   }
 
   // Provider lifecycle metadata — surfaced in score_components.provider_status
@@ -1086,6 +1105,9 @@ export async function scoreInstitutional(
     final: Math.round(final),
     base: Math.round(base),
     regime_adjust: adj,
+    fallback_count: fallbackCount,
+    fallback_components: fallbackComponents,
+    fallback_penalty: fallbackPenalty,
     regime: regimeName,
     components,
     sources_used,
