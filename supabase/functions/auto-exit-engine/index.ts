@@ -117,6 +117,23 @@ Deno.serve(async (req) => {
     const macroSnapshotId = macroFresh ? (macroSnap?.id as string | null) : null;
     if (!macroFresh && macroSnap) {
       console.log("auto-exit: macro_stale", { age_ms: macroAgeMs });
+      // Write a single system-level row so stale cycles are visible in the same
+      // table users monitor for exit decisions. trade_id + user_id are NULL.
+      try {
+        await admin.from("trade_exit_decisions").insert({
+          trade_id: null,
+          user_id: null,
+          action: "macro_stale",
+          macro_score: null,
+          macro_snapshot_id: macroSnap?.id ?? null,
+          hard_trigger: null,
+          reason_string: `Macro snapshot older than 90s (${Math.round(macroAgeMs / 1000)}s) — skipped macro factors this cycle`,
+          executed: false,
+          context: { age_ms: macroAgeMs, last_captured_at: macroSnap?.captured_at },
+        });
+      } catch (e) {
+        console.error("macro_stale row insert failed", e);
+      }
     }
 
     let closed = 0;
