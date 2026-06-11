@@ -1777,8 +1777,8 @@ export type Database = {
           macro_score: number | null
           macro_snapshot_id: string | null
           reason_string: string
-          trade_id: string
-          user_id: string
+          trade_id: string | null
+          user_id: string | null
         }
         Insert: {
           action: string
@@ -1791,8 +1791,8 @@ export type Database = {
           macro_score?: number | null
           macro_snapshot_id?: string | null
           reason_string: string
-          trade_id: string
-          user_id: string
+          trade_id?: string | null
+          user_id?: string | null
         }
         Update: {
           action?: string
@@ -1805,8 +1805,8 @@ export type Database = {
           macro_score?: number | null
           macro_snapshot_id?: string | null
           reason_string?: string
-          trade_id?: string
-          user_id?: string
+          trade_id?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
