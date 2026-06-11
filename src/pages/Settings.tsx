@@ -20,6 +20,7 @@ import ScannerUniversePanel from "@/components/ScannerUniversePanel";
 import ConfirmationProvidersPanel from "@/components/ConfirmationProvidersPanel";
 import TwoFactorPanel from "@/components/TwoFactorPanel";
 import AutoExitRulesPanel from "@/components/AutoExitRulesPanel";
+import AutoEntryRulesPanel from "@/components/AutoEntryRulesPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -92,6 +93,8 @@ export default function Settings() {
       </section>
 
       <AutoExitRulesPanel />
+
+      <AutoEntryRulesPanel />
 
       <ActiveSessionPanel />
 
