@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
   const alpacaKey = Deno.env.get("ALPACA_API_KEY_ID") ?? "";
   const alpacaSec = Deno.env.get("ALPACA_API_SECRET_KEY") ?? "";
-  const avKey = Deno.env.get("ALPHAVANTAGE_API_KEY") ?? "";
+  const finnhubKey = Deno.env.get("FINNHUB_API_KEY") ?? "";
 
   const errors: Record<string, string> = {};
 
@@ -44,17 +44,18 @@ Deno.serve(async (req) => {
   const etfResults: Record<string, EtfQuote> = {};
   await Promise.all(etfTickers.map(async (sym) => {
     try {
-      etfResults[sym] = await fetchEtfQuote(sym, alpacaKey, alpacaSec);
+      etfResults[sym] = await fetchEtfQuote(sym, alpacaKey, alpacaSec, errors);
     } catch (e) {
       errors[sym] = e instanceof Error ? e.message : String(e);
       etfResults[sym] = { price: null, ret5m: null, aboveVwap: null };
     }
   }));
 
-  // Fetch VIX (Alpha Vantage)
+  // Fetch VIX (Finnhub — Alpha Vantage GLOBAL_QUOTE doesn't serve indices)
   let vixSpot: number | null = null;
   try {
-    vixSpot = await fetchVixSpot(avKey);
+    vixSpot = await fetchVixSpot(finnhubKey);
+    if (vixSpot == null) errors["VIX"] = "empty_response";
   } catch (e) {
     errors["VIX"] = e instanceof Error ? e.message : String(e);
   }
