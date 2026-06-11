@@ -258,6 +258,16 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
         <Badge className="bg-warn/15 text-warn border-0">Paper Option Trade</Badge>
         <Badge variant="outline" className="bg-transparent text-muted-foreground">Simulation Only</Badge>
         <Badge variant="outline" className="bg-transparent text-muted-foreground">No real money executed</Badge>
+        {!closed && (trade as any).auto_exit_armed_rule && (
+          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/40" title="Auto-exit rule armed">
+            Auto-exit: {String((trade as any).auto_exit_armed_rule).replace(/_/g, " ")}
+          </Badge>
+        )}
+        {closed && (trade as any).auto_exit_closed_by && (
+          <Badge variant="outline" className="bg-info/10 text-info border-info/40" title="Closed by auto-exit engine">
+            Auto-closed: {String((trade as any).auto_exit_closed_by).replace(/_/g, " ")}
+          </Badge>
+        )}
       </div>
 
       {/* Consider-closing hint when linked alert hits terminal state. Manual close only. */}
