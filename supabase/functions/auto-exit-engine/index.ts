@@ -24,7 +24,13 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type FiredRule = "stop_loss" | "take_profit" | "trailing_stop" | "time_exit" | "theta_burn";
+type FiredRule = "stop_loss" | "take_profit" | "trailing_stop" | "time_exit" | "theta_burn"
+  | "macro_override" | "earnings_risk" | "spread_emergency";
+
+const MACRO_FRESH_MS = 90_000;       // skip macro layer if snapshot older than 90s
+const MACRO_OVERRIDE_THRESHOLD = 20; // macro_tailwind_score below this = hard exit on long calls
+const SPREAD_EMERGENCY_PCT = 0.15;   // ask-bid > 15% of mid = liquidity emergency
+const EARNINGS_WINDOW_HOURS = 2;     // earnings same calendar day = exit window (we lack BMO/AMC time)
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
