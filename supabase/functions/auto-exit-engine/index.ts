@@ -259,6 +259,9 @@ Deno.serve(async (req) => {
         const status = realizedPl > 0 ? "WIN" : realizedPl < 0 ? "LOSS" : "CLOSED";
         const exitReason = fired === "stop_loss" ? "stop_hit"
           : fired === "take_profit" ? "target_hit"
+          : fired === "macro_override" ? "macro_override"
+          : fired === "earnings_risk" ? "earnings_risk"
+          : fired === "spread_emergency" ? "spread_emergency"
           : "manual";
 
         // Idempotent: only update if still OPEN
