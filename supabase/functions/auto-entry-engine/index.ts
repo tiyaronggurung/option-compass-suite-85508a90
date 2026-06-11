@@ -288,7 +288,7 @@ Deno.serve(async (req) => {
         if (!macroStale && macroScore != null) {
           const dirU = String(s.direction ?? "").toUpperCase();
           const isCall = !dirU.includes("PUT");
-          if ((isCall && macroScore < -1) || (!isCall && macroScore > 1)) {
+          if ((isCall && macroScore < 35) || (!isCall && macroScore > 65)) {
             await logDecision(s, "reject", "macro_headwind",
               `Macro tailwind ${macroScore.toFixed(2)} opposes ${isCall ? "CALL" : "PUT"}.`,
               { macro_score: macroScore, direction: dirU });
