@@ -75,6 +75,32 @@ export default function Technical() {
           Pick a ticker above to see its technical readout.
         </div>
       )}
+
+      <div className="space-y-2 pt-2">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-lg sm:text-xl font-semibold tracking-tight font-display">S&P 500 Map</h2>
+          <a
+            href="https://finviz.com/map.ashx"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-muted-foreground hover:text-foreground underline"
+          >
+            Open on Finviz
+          </a>
+        </div>
+        <div className="rounded-md border border-border overflow-hidden bg-card">
+          <iframe
+            src="https://finviz.com/map.ashx?t=sec"
+            title="Finviz Stock Map"
+            className="w-full"
+            style={{ height: 720, border: 0 }}
+            loading="lazy"
+          />
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Heatmap by Finviz. Educational use only, not financial advice.
+        </p>
+      </div>
     </div>
   );
 }
