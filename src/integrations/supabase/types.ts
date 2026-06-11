@@ -1445,6 +1445,7 @@ export type Database = {
           expires_at: string | null
           expiry: string | null
           external_id: string | null
+          fallback_count: number | null
           flow_at_birth: Json
           flow_metrics: Json
           flow_type: string | null
@@ -1494,6 +1495,7 @@ export type Database = {
           expires_at?: string | null
           expiry?: string | null
           external_id?: string | null
+          fallback_count?: number | null
           flow_at_birth?: Json
           flow_metrics?: Json
           flow_type?: string | null
@@ -1543,6 +1545,7 @@ export type Database = {
           expires_at?: string | null
           expiry?: string | null
           external_id?: string | null
+          fallback_count?: number | null
           flow_at_birth?: Json
           flow_metrics?: Json
           flow_type?: string | null
