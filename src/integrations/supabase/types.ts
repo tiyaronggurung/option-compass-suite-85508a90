@@ -1768,6 +1768,71 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_entry_decisions: {
+        Row: {
+          action: string
+          context: Json
+          created_at: string
+          dry_run: boolean
+          fallback_count: number | null
+          hard_trigger: string | null
+          id: string
+          llm_confidence: number | null
+          llm_decision: string | null
+          llm_latency_ms: number | null
+          macro_score: number | null
+          reason_string: string | null
+          signal_confidence: number | null
+          signal_id: string | null
+          ticker: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          context?: Json
+          created_at?: string
+          dry_run?: boolean
+          fallback_count?: number | null
+          hard_trigger?: string | null
+          id?: string
+          llm_confidence?: number | null
+          llm_decision?: string | null
+          llm_latency_ms?: number | null
+          macro_score?: number | null
+          reason_string?: string | null
+          signal_confidence?: number | null
+          signal_id?: string | null
+          ticker?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          context?: Json
+          created_at?: string
+          dry_run?: boolean
+          fallback_count?: number | null
+          hard_trigger?: string | null
+          id?: string
+          llm_confidence?: number | null
+          llm_decision?: string | null
+          llm_latency_ms?: number | null
+          macro_score?: number | null
+          reason_string?: string | null
+          signal_confidence?: number | null
+          signal_id?: string | null
+          ticker?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_entry_decisions_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trade_exit_decisions: {
         Row: {
           action: string

@@ -87,6 +87,34 @@ Deno.serve(async (req) => {
 
     let scanned = 0, fired = 0, dryRun = 0, skipped = 0;
 
+    // ── Cycle-level macro snapshot (once, used by macro_headwind hard override) ──
+    const { data: macroSnap } = await admin
+      .from("macro_regime_snapshots")
+      .select("captured_at, macro_tailwind_score")
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let macroScore: number | null = null;
+    let macroStale = true;
+    let macroAgeMin: number | null = null;
+    if (macroSnap?.captured_at) {
+      macroAgeMin = (Date.now() - new Date(macroSnap.captured_at).getTime()) / 60_000;
+      macroStale = macroAgeMin > 30;
+      if (!macroStale) macroScore = numOrNull(macroSnap.macro_tailwind_score);
+    }
+    if (macroStale) {
+      // One system row per cycle — paper trail, NOT per-signal.
+      await admin.from("trade_entry_decisions").insert({
+        user_id: null, signal_id: null, ticker: null,
+        action: "system", hard_trigger: "macro_stale",
+        reason_string: "Macro snapshot stale or missing; headwind check skipped this cycle.",
+        macro_score: null, signal_confidence: null, fallback_count: null,
+        dry_run: false,
+        context: { snapshot_age_min: macroAgeMin, has_snapshot: !!macroSnap },
+      });
+    }
+
+
     for (const rules of rulesRows) {
       const userId = rules.user_id as string;
 
@@ -156,6 +184,54 @@ Deno.serve(async (req) => {
         .in("ticker", Array.from(whitelist));
       if (!sigs || sigs.length === 0) continue;
 
+      // Loss streak (any closed loss today on the ticker — manual or auto, cause-agnostic)
+      const { data: closedTodayDetail } = await admin
+        .from("paper_trades").select("ticker, realized_pl")
+        .eq("user_id", userId).neq("status", "OPEN").gte("closed_at", todayStartUtc);
+      const lossCountByTicker = new Map<string, number>();
+      for (const t of closedTodayDetail ?? []) {
+        if (Number((t as any).realized_pl ?? 0) < 0) {
+          const k = String((t as any).ticker ?? "").toUpperCase();
+          if (k) lossCountByTicker.set(k, (lossCountByTicker.get(k) ?? 0) + 1);
+        }
+      }
+
+      // Earnings today for candidate tickers (NY date)
+      const todayNy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+      const candidateTickers = Array.from(new Set(sigs.map((x: any) => String(x.ticker))));
+      const { data: erRows } = await admin
+        .from("earnings_events").select("ticker, report_date")
+        .in("ticker", candidateTickers).eq("report_date", todayNy);
+      const earningsToday = new Set((erRows ?? []).map((r: any) => String(r.ticker).toUpperCase()));
+
+      const logDecision = async (
+        signal: any,
+        action: "enter" | "hold" | "reject",
+        hard_trigger: string | null,
+        reason: string,
+        context: Record<string, unknown> = {},
+      ) => {
+        try {
+          await admin.from("trade_entry_decisions").insert({
+            user_id: userId,
+            signal_id: signal?.id ?? null,
+            ticker: signal?.ticker ?? null,
+            action,
+            hard_trigger,
+            reason_string: reason,
+            macro_score: macroScore,
+            signal_confidence: signal ? Number(signal.confidence ?? 0) : null,
+            fallback_count: signal ? Number((signal as any).fallback_count ?? 0) : null,
+            dry_run: !!rules.dry_run,
+            context,
+          });
+        } catch (e) {
+          console.error("trade_entry_decisions insert failed", e);
+        }
+      };
+
+
+
       for (const s of sigs) {
         scanned++;
         if (priorIds.has(s.id)) continue; // idempotency
@@ -168,6 +244,58 @@ Deno.serve(async (req) => {
             skip_reason: reason, rule_snapshot: rules,
           }).then(() => {}, () => {});
         };
+
+        // ── Hard overrides (deterministic vetoes — checked BEFORE soft filters) ──
+        // Order: cheapest checks first. Each writes a trade_entry_decisions reject row.
+        const fallbackCount = Number((s as any).fallback_count ?? 0);
+
+        // 1) Earnings same day → IV crush window
+        if (earningsToday.has(ticker)) {
+          await logDecision(s, "reject", "earnings_same_day",
+            `Earnings report today on ${ticker} — IV crush window.`);
+          skip("hard:earnings_same_day"); continue;
+        }
+
+        // 2) Spread emergency (>35% of mid) → unfillable / toxic
+        const bidQ = numOrNull((s as any).bid);
+        const askQ = numOrNull((s as any).ask);
+        if (bidQ != null && askQ != null && bidQ > 0 && askQ > 0) {
+          const midQ = (bidQ + askQ) / 2;
+          const spreadPct = (askQ - bidQ) / midQ;
+          if (spreadPct > 0.35) {
+            await logDecision(s, "reject", "spread_emergency",
+              `Bid/ask spread ${(spreadPct * 100).toFixed(0)}% of mid.`, { spread_pct: spreadPct });
+            skip(`hard:spread_emergency:${spreadPct.toFixed(2)}`); continue;
+          }
+        }
+
+        // 3) Signal degraded (3+ fallbacks) → don't fire real cash on filler
+        if (fallbackCount >= 3) {
+          await logDecision(s, "reject", "fallback_count_high",
+            `Signal degraded (fallback_count=${fallbackCount}).`, { fallback_count: fallbackCount });
+          skip(`hard:fallback_count:${fallbackCount}`); continue;
+        }
+
+        // 4) Loss streak on this ticker today (any source, manual or auto)
+        const lossesToday = lossCountByTicker.get(ticker) ?? 0;
+        if (lossesToday >= 2) {
+          await logDecision(s, "reject", "loss_streak",
+            `${lossesToday} closed losses on ${ticker} today.`, { losses_today: lossesToday });
+          skip(`hard:loss_streak:${lossesToday}`); continue;
+        }
+
+        // 5) Macro headwind (only when snapshot is fresh; stale → skip check, not veto)
+        if (!macroStale && macroScore != null) {
+          const dirU = String(s.direction ?? "").toUpperCase();
+          const isCall = !dirU.includes("PUT");
+          if ((isCall && macroScore < -1) || (!isCall && macroScore > 1)) {
+            await logDecision(s, "reject", "macro_headwind",
+              `Macro tailwind ${macroScore.toFixed(2)} opposes ${isCall ? "CALL" : "PUT"}.`,
+              { macro_score: macroScore, direction: dirU });
+            skip(`hard:macro_headwind:${macroScore.toFixed(2)}`); continue;
+          }
+        }
+
 
         // Filters
         if (rules.min_tier && (TIER_RANK[String(s.tier ?? "").toUpperCase()] ?? 0)
@@ -220,8 +348,11 @@ Deno.serve(async (req) => {
             user_id: userId, signal_id: s.id, ticker, status: "dry_run",
             skip_reason: null, rule_snapshot: { ...rules, planned_qty: qty, planned_cost: totalCost, premium },
           });
+          await logDecision(s, "enter", null, "Dry-run: all hard overrides passed; would fire.",
+            { planned_qty: qty, planned_cost: totalCost, premium });
           continue;
         }
+
         // ── Pre-trade sanity layer (Option A) ──
         // Re-validate signal right before committing real paper cash.
         // Blocks stale, withdrawn, or wildly-moved fills. ~1 extra round-trip.
@@ -299,6 +430,9 @@ Deno.serve(async (req) => {
           paper_trade_id: inserted.id,
           rule_snapshot: { ...rules, qty, total_cost: totalCost, premium },
         });
+        await logDecision(s, "enter", null, "All hard overrides passed; signal fired.",
+          { qty, total_cost: totalCost, premium, paper_trade_id: inserted.id });
+
 
         if (firesCount + fired >= Number(rules.max_trades_per_day ?? 5)) break;
         if (spendToday >= Number(rules.daily_spend_cap_usd ?? Infinity)) break;
