@@ -184,6 +184,63 @@ Deno.serve(async (req) => {
         .in("ticker", Array.from(whitelist));
       if (!sigs || sigs.length === 0) continue;
 
+      // Loss streak (any closed loss today on the ticker — manual or auto, cause-agnostic)
+      const lossCountByTicker = new Map<string, number>();
+      for (const t of closedToday ?? []) {
+        if (Number((t as any).realized_pl ?? 0) < 0) {
+          const k = String((t as any).ticker ?? "").toUpperCase();
+          if (k) lossCountByTicker.set(k, (lossCountByTicker.get(k) ?? 0) + 1);
+        }
+      }
+
+      // Earnings today for candidate tickers (NY date)
+      const todayNy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+      const candidateTickers = Array.from(new Set(sigs.map((x: any) => String(x.ticker))));
+      const { data: erRows } = await admin
+        .from("earnings_events").select("ticker, report_date")
+        .in("ticker", candidateTickers).eq("report_date", todayNy);
+      const earningsToday = new Set((erRows ?? []).map((r: any) => String(r.ticker).toUpperCase()));
+
+      const logDecision = async (
+        signal: any,
+        action: "enter" | "hold" | "reject",
+        hard_trigger: string | null,
+        reason: string,
+        context: Record<string, unknown> = {},
+      ) => {
+        try {
+          await admin.from("trade_entry_decisions").insert({
+            user_id: userId,
+            signal_id: signal?.id ?? null,
+            ticker: signal?.ticker ?? null,
+            action,
+            hard_trigger,
+            reason_string: reason,
+            macro_score: macroScore,
+            signal_confidence: signal ? Number(signal.confidence ?? 0) : null,
+            fallback_count: signal ? Number((signal as any).fallback_count ?? 0) : null,
+            dry_run: !!rules.dry_run,
+            context,
+          });
+        } catch (e) {
+          console.error("trade_entry_decisions insert failed", e);
+        }
+      };
+
+      // closedToday rows lack ticker — re-query with ticker for the streak map.
+      // (closedToday above is reused for daily-loss-cap; this small extra fetch keeps that intact.)
+      const { data: closedTodayDetail } = await admin
+        .from("paper_trades").select("ticker, realized_pl")
+        .eq("user_id", userId).neq("status", "OPEN").gte("closed_at", todayStartUtc);
+      lossCountByTicker.clear();
+      for (const t of closedTodayDetail ?? []) {
+        if (Number((t as any).realized_pl ?? 0) < 0) {
+          const k = String((t as any).ticker ?? "").toUpperCase();
+          if (k) lossCountByTicker.set(k, (lossCountByTicker.get(k) ?? 0) + 1);
+        }
+      }
+
+
       for (const s of sigs) {
         scanned++;
         if (priorIds.has(s.id)) continue; // idempotency
