@@ -279,8 +279,7 @@ export default function Dashboard() {
       return new Date(key).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
     };
     const sortItems = (arr: Signal[]) => {
-      const ordered = [...arr].sort((a, b) => rankSignal(b).total - rankSignal(a).total);
-      return ordered.sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
+      return [...arr].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     };
     return Array.from(groups.entries())
       .sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
