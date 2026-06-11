@@ -103,6 +103,22 @@ Deno.serve(async (req) => {
       return json({ ok: true, status: "no_rules" });
     }
 
+    // Load latest macro snapshot (additive; engine still runs if stale/missing).
+    const { data: macroSnap } = await admin
+      .from("macro_regime_snapshots")
+      .select("id, captured_at, macro_tailwind_score")
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const macroAgeMs = macroSnap?.captured_at
+      ? Date.now() - new Date(macroSnap.captured_at).getTime() : Infinity;
+    const macroFresh = macroAgeMs <= MACRO_FRESH_MS;
+    const macroScore = macroFresh ? numOrNull(macroSnap?.macro_tailwind_score) : null;
+    const macroSnapshotId = macroFresh ? (macroSnap?.id as string | null) : null;
+    if (!macroFresh && macroSnap) {
+      console.log("auto-exit: macro_stale", { age_ms: macroAgeMs });
+    }
+
     let closed = 0;
     let scanned = 0;
     const actions: Array<{ trade_id: string; rule: FiredRule; dry_run: boolean }> = [];
