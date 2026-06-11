@@ -122,6 +122,138 @@ export type Database = {
         }
         Relationships: []
       }
+      auto_entry_log: {
+        Row: {
+          created_at: string
+          id: string
+          paper_trade_id: string | null
+          rule_snapshot: Json | null
+          signal_id: string | null
+          skip_reason: string | null
+          status: string
+          ticker: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          paper_trade_id?: string | null
+          rule_snapshot?: Json | null
+          signal_id?: string | null
+          skip_reason?: string | null
+          status: string
+          ticker: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          paper_trade_id?: string | null
+          rule_snapshot?: Json | null
+          signal_id?: string | null
+          skip_reason?: string | null
+          status?: string
+          ticker?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auto_entry_log_paper_trade_id_fkey"
+            columns: ["paper_trade_id"]
+            isOneToOne: false
+            referencedRelation: "paper_trades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auto_entry_log_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      auto_entry_rules: {
+        Row: {
+          allowed_directions: string[] | null
+          block_if_open_on_ticker: boolean
+          cooldown_minutes: number
+          created_at: string
+          daily_spend_cap_usd: number
+          dry_run: boolean
+          enabled: boolean
+          end_time_et: string | null
+          max_premium_usd: number | null
+          max_risk_usd: number | null
+          max_signal_age_minutes: number
+          max_trades_per_day: number
+          min_confidence: number | null
+          min_tier: string | null
+          start_time_et: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allowed_directions?: string[] | null
+          block_if_open_on_ticker?: boolean
+          cooldown_minutes?: number
+          created_at?: string
+          daily_spend_cap_usd?: number
+          dry_run?: boolean
+          enabled?: boolean
+          end_time_et?: string | null
+          max_premium_usd?: number | null
+          max_risk_usd?: number | null
+          max_signal_age_minutes?: number
+          max_trades_per_day?: number
+          min_confidence?: number | null
+          min_tier?: string | null
+          start_time_et?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allowed_directions?: string[] | null
+          block_if_open_on_ticker?: boolean
+          cooldown_minutes?: number
+          created_at?: string
+          daily_spend_cap_usd?: number
+          dry_run?: boolean
+          enabled?: boolean
+          end_time_et?: string | null
+          max_premium_usd?: number | null
+          max_risk_usd?: number | null
+          max_signal_age_minutes?: number
+          max_trades_per_day?: number
+          min_confidence?: number | null
+          min_tier?: string | null
+          start_time_et?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      auto_entry_whitelist: {
+        Row: {
+          created_at: string
+          id: string
+          ticker: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ticker: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ticker?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       auto_exit_rules: {
         Row: {
           created_at: string
