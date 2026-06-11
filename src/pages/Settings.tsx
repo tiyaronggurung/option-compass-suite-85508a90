@@ -21,6 +21,7 @@ import ConfirmationProvidersPanel from "@/components/ConfirmationProvidersPanel"
 import TwoFactorPanel from "@/components/TwoFactorPanel";
 import AutoExitRulesPanel from "@/components/AutoExitRulesPanel";
 import AutoEntryRulesPanel from "@/components/AutoEntryRulesPanel";
+import ExitDecisionsPanel from "@/components/ExitDecisionsPanel";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
