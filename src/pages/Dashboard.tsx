@@ -224,9 +224,9 @@ export default function Dashboard() {
       return reasons.some((r) => /\$0\s*bid|ask\s*vs\s*\$0/i.test(String(r)));
     };
     const ordered = base.sort((a, b) => {
-      const ra = rankSignal(a).total;
-      const rb = rankSignal(b).total;
-      return rb - ra;
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      return tb - ta;
     });
     return [...ordered].sort((a, b) => Number(isZeroBid(a)) - Number(isZeroBid(b)));
   }, [signals, filter, sourceMode, providerFilter, tagFilter, watchSet, includeExpired, dismissedIds, lifecycleFilter]);
