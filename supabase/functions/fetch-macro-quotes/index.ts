@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
   const alpacaKey = Deno.env.get("ALPACA_API_KEY_ID") ?? "";
   const alpacaSec = Deno.env.get("ALPACA_API_SECRET_KEY") ?? "";
-  const avKey = Deno.env.get("ALPHAVANTAGE_API_KEY") ?? "";
+  const finnhubKey = Deno.env.get("FINNHUB_API_KEY") ?? "";
 
   const errors: Record<string, string> = {};
 
@@ -44,17 +44,18 @@ Deno.serve(async (req) => {
   const etfResults: Record<string, EtfQuote> = {};
   await Promise.all(etfTickers.map(async (sym) => {
     try {
-      etfResults[sym] = await fetchEtfQuote(sym, alpacaKey, alpacaSec);
+      etfResults[sym] = await fetchEtfQuote(sym, alpacaKey, alpacaSec, errors);
     } catch (e) {
       errors[sym] = e instanceof Error ? e.message : String(e);
       etfResults[sym] = { price: null, ret5m: null, aboveVwap: null };
     }
   }));
 
-  // Fetch VIX (Alpha Vantage)
+  // Fetch VIX (Finnhub — Alpha Vantage GLOBAL_QUOTE doesn't serve indices)
   let vixSpot: number | null = null;
   try {
-    vixSpot = await fetchVixSpot(avKey);
+    vixSpot = await fetchVixSpot(finnhubKey);
+    if (vixSpot == null) errors["VIX"] = "empty_response";
   } catch (e) {
     errors["VIX"] = e instanceof Error ? e.message : String(e);
   }
@@ -97,32 +98,42 @@ Deno.serve(async (req) => {
 });
 
 // ─── Alpaca ETF quotes ───────────────────────────────────────────────────
-async function fetchEtfQuote(sym: string, key: string, sec: string): Promise<EtfQuote> {
+async function fetchEtfQuote(
+  sym: string,
+  key: string,
+  sec: string,
+  errors: Record<string, string>,
+): Promise<EtfQuote> {
   if (!key || !sec) throw new Error("alpaca creds missing");
   const headers = { "APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": sec };
 
-  // Last trade
-  const tradeUrl = `https://data.alpaca.markets/v2/stocks/${encodeURIComponent(sym)}/trades/latest`;
+  // Last trade (IEX feed — free tier)
+  const tradeUrl = `https://data.alpaca.markets/v2/stocks/${encodeURIComponent(sym)}/trades/latest?feed=iex`;
   const tradeRes = await fetch(tradeUrl, { headers });
   if (!tradeRes.ok) throw new Error(`alpaca trade ${sym} ${tradeRes.status}`);
   const tradeJson = await tradeRes.json();
   const price = numOrNull(tradeJson?.trade?.p);
 
-  // 5-min bars for today (use last + 5-ago close for ret5m, all bars for VWAP)
-  // Pull last ~30 minutes of 1-min bars to be safe.
+  // 1-min bars over the last 60 min (IEX feed — free tier).
+  // Alpaca free-tier SIP data has a 15-min delay; IEX is real-time but lower volume.
   const end = new Date();
-  const start = new Date(end.getTime() - 60 * 60 * 1000); // last 60min
+  const start = new Date(end.getTime() - 60 * 60 * 1000);
   const barsUrl = `https://data.alpaca.markets/v2/stocks/${encodeURIComponent(sym)}/bars`
-    + `?timeframe=1Min&limit=120&adjustment=raw`
+    + `?timeframe=1Min&limit=120&adjustment=raw&feed=iex`
     + `&start=${encodeURIComponent(start.toISOString())}`
     + `&end=${encodeURIComponent(end.toISOString())}`;
   const barsRes = await fetch(barsUrl, { headers });
   if (!barsRes.ok) {
+    const body = await barsRes.text().catch(() => "");
+    errors[`${sym}_bars`] = `http_${barsRes.status}${body ? `: ${body.slice(0, 120)}` : ""}`;
     return { price, ret5m: null, aboveVwap: null };
   }
   const barsJson = await barsRes.json();
   const bars: Array<{ c: number; v: number; vw?: number; h: number; l: number }> = barsJson?.bars ?? [];
-  if (bars.length === 0) return { price, ret5m: null, aboveVwap: null };
+  if (bars.length === 0) {
+    errors[`${sym}_bars`] = "empty";
+    return { price, ret5m: null, aboveVwap: null };
+  }
 
   // 5-min return: latest close vs 5 bars ago close
   let ret5m: number | null = null;
@@ -132,7 +143,7 @@ async function fetchEtfQuote(sym: string, key: string, sec: string): Promise<Etf
     if (ago > 0) ret5m = (last - ago) / ago;
   }
 
-  // Session VWAP from the bars we have (rough — only spans up to 60min)
+  // Session VWAP from the bars we have (rough — spans up to 60min)
   let pv = 0, vol = 0;
   for (const b of bars) {
     const typical = b.vw ?? (b.h + b.l + b.c) / 3;
@@ -145,15 +156,19 @@ async function fetchEtfQuote(sym: string, key: string, sec: string): Promise<Etf
   return { price, ret5m, aboveVwap };
 }
 
-// ─── VIX via Alpha Vantage ───────────────────────────────────────────────
-async function fetchVixSpot(avKey: string): Promise<number | null> {
-  if (!avKey) return null;
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=VIX&apikey=${avKey}`;
+// ─── VIX via Finnhub (Alpha Vantage GLOBAL_QUOTE doesn't serve indices) ──
+async function fetchVixSpot(finnhubKey: string): Promise<number | null> {
+  if (!finnhubKey) return null;
+  // Finnhub uses ^VIX for the CBOE Volatility Index.
+  const url = `https://finnhub.io/api/v1/quote?symbol=%5EVIX&token=${finnhubKey}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`av vix ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`finnhub vix ${res.status}${body ? `: ${body.slice(0, 120)}` : ""}`);
+  }
   const j = await res.json();
-  const p = numOrNull(j?.["Global Quote"]?.["05. price"]);
-  return p;
+  // Finnhub /quote returns { c: current, h, l, o, pc, t }
+  return numOrNull(j?.c);
 }
 
 // ─── Macro tailwind score (0-100, null-skip with renormalize) ───────────
