@@ -245,6 +245,58 @@ Deno.serve(async (req) => {
           }).then(() => {}, () => {});
         };
 
+        // ── Hard overrides (deterministic vetoes — checked BEFORE soft filters) ──
+        // Order: cheapest checks first. Each writes a trade_entry_decisions reject row.
+        const fallbackCount = Number((s as any).fallback_count ?? 0);
+
+        // 1) Earnings same day → IV crush window
+        if (earningsToday.has(ticker)) {
+          await logDecision(s, "reject", "earnings_same_day",
+            `Earnings report today on ${ticker} — IV crush window.`);
+          skip("hard:earnings_same_day"); continue;
+        }
+
+        // 2) Spread emergency (>35% of mid) → unfillable / toxic
+        const bidQ = numOrNull((s as any).bid);
+        const askQ = numOrNull((s as any).ask);
+        if (bidQ != null && askQ != null && bidQ > 0 && askQ > 0) {
+          const midQ = (bidQ + askQ) / 2;
+          const spreadPct = (askQ - bidQ) / midQ;
+          if (spreadPct > 0.35) {
+            await logDecision(s, "reject", "spread_emergency",
+              `Bid/ask spread ${(spreadPct * 100).toFixed(0)}% of mid.`, { spread_pct: spreadPct });
+            skip(`hard:spread_emergency:${spreadPct.toFixed(2)}`); continue;
+          }
+        }
+
+        // 3) Signal degraded (3+ fallbacks) → don't fire real cash on filler
+        if (fallbackCount >= 3) {
+          await logDecision(s, "reject", "fallback_count_high",
+            `Signal degraded (fallback_count=${fallbackCount}).`, { fallback_count: fallbackCount });
+          skip(`hard:fallback_count:${fallbackCount}`); continue;
+        }
+
+        // 4) Loss streak on this ticker today (any source, manual or auto)
+        const lossesToday = lossCountByTicker.get(ticker) ?? 0;
+        if (lossesToday >= 2) {
+          await logDecision(s, "reject", "loss_streak",
+            `${lossesToday} closed losses on ${ticker} today.`, { losses_today: lossesToday });
+          skip(`hard:loss_streak:${lossesToday}`); continue;
+        }
+
+        // 5) Macro headwind (only when snapshot is fresh; stale → skip check, not veto)
+        if (!macroStale && macroScore != null) {
+          const dirU = String(s.direction ?? "").toUpperCase();
+          const isCall = !dirU.includes("PUT");
+          if ((isCall && macroScore < -1) || (!isCall && macroScore > 1)) {
+            await logDecision(s, "reject", "macro_headwind",
+              `Macro tailwind ${macroScore.toFixed(2)} opposes ${isCall ? "CALL" : "PUT"}.`,
+              { macro_score: macroScore, direction: dirU });
+            skip(`hard:macro_headwind:${macroScore.toFixed(2)}`); continue;
+          }
+        }
+
+
         // Filters
         if (rules.min_tier && (TIER_RANK[String(s.tier ?? "").toUpperCase()] ?? 0)
             < (TIER_RANK[String(rules.min_tier).toUpperCase()] ?? 0)) { skip("tier_below_min"); continue; }
