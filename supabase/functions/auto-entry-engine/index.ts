@@ -348,8 +348,11 @@ Deno.serve(async (req) => {
             user_id: userId, signal_id: s.id, ticker, status: "dry_run",
             skip_reason: null, rule_snapshot: { ...rules, planned_qty: qty, planned_cost: totalCost, premium },
           });
+          await logDecision(s, "enter", null, "Dry-run: all hard overrides passed; would fire.",
+            { planned_qty: qty, planned_cost: totalCost, premium });
           continue;
         }
+
         // ── Pre-trade sanity layer (Option A) ──
         // Re-validate signal right before committing real paper cash.
         // Blocks stale, withdrawn, or wildly-moved fills. ~1 extra round-trip.
