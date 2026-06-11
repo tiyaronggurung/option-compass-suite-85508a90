@@ -95,6 +95,8 @@ export default function Settings() {
 
       <AutoExitRulesPanel />
 
+      <ExitDecisionsPanel />
+
       <AutoEntryRulesPanel />
 
       <ActiveSessionPanel />
