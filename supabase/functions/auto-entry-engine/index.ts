@@ -87,6 +87,34 @@ Deno.serve(async (req) => {
 
     let scanned = 0, fired = 0, dryRun = 0, skipped = 0;
 
+    // ── Cycle-level macro snapshot (once, used by macro_headwind hard override) ──
+    const { data: macroSnap } = await admin
+      .from("macro_regime_snapshots")
+      .select("captured_at, macro_tailwind_score")
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let macroScore: number | null = null;
+    let macroStale = true;
+    let macroAgeMin: number | null = null;
+    if (macroSnap?.captured_at) {
+      macroAgeMin = (Date.now() - new Date(macroSnap.captured_at).getTime()) / 60_000;
+      macroStale = macroAgeMin > 30;
+      if (!macroStale) macroScore = numOrNull(macroSnap.macro_tailwind_score);
+    }
+    if (macroStale) {
+      // One system row per cycle — paper trail, NOT per-signal.
+      await admin.from("trade_entry_decisions").insert({
+        user_id: null, signal_id: null, ticker: null,
+        action: "system", hard_trigger: "macro_stale",
+        reason_string: "Macro snapshot stale or missing; headwind check skipped this cycle.",
+        macro_score: null, signal_confidence: null, fallback_count: null,
+        dry_run: false,
+        context: { snapshot_age_min: macroAgeMin, has_snapshot: !!macroSnap },
+      });
+    }
+
+
     for (const rules of rulesRows) {
       const userId = rules.user_id as string;
 
