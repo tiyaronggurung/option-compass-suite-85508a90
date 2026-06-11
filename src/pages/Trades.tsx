@@ -92,7 +92,7 @@ export default function Trades() {
       const hasOpen = (trades ?? []).some((t) => t.status === "OPEN");
       if (!hasOpen) return;
       try {
-        await supabase.functions.invoke("update-paper-marks", { body: {} });
+        await invokeUpdatePaperMarks({});
       } catch { /* swallow — UI will retry next tick */ }
       if (!cancelled) refreshRef.current?.();
     }
