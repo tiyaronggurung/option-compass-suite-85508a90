@@ -24,7 +24,13 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type FiredRule = "stop_loss" | "take_profit" | "trailing_stop" | "time_exit" | "theta_burn";
+type FiredRule = "stop_loss" | "take_profit" | "trailing_stop" | "time_exit" | "theta_burn"
+  | "macro_override" | "earnings_risk" | "spread_emergency";
+
+const MACRO_FRESH_MS = 90_000;       // skip macro layer if snapshot older than 90s
+const MACRO_OVERRIDE_THRESHOLD = 20; // macro_tailwind_score below this = hard exit on long calls
+const SPREAD_EMERGENCY_PCT = 0.15;   // ask-bid > 15% of mid = liquidity emergency
+const EARNINGS_WINDOW_HOURS = 2;     // earnings same calendar day = exit window (we lack BMO/AMC time)
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -97,6 +103,22 @@ Deno.serve(async (req) => {
       return json({ ok: true, status: "no_rules" });
     }
 
+    // Load latest macro snapshot (additive; engine still runs if stale/missing).
+    const { data: macroSnap } = await admin
+      .from("macro_regime_snapshots")
+      .select("id, captured_at, macro_tailwind_score")
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const macroAgeMs = macroSnap?.captured_at
+      ? Date.now() - new Date(macroSnap.captured_at).getTime() : Infinity;
+    const macroFresh = macroAgeMs <= MACRO_FRESH_MS;
+    const macroScore = macroFresh ? numOrNull(macroSnap?.macro_tailwind_score) : null;
+    const macroSnapshotId = macroFresh ? (macroSnap?.id as string | null) : null;
+    if (!macroFresh && macroSnap) {
+      console.log("auto-exit: macro_stale", { age_ms: macroAgeMs });
+    }
+
     let closed = 0;
     let scanned = 0;
     const actions: Array<{ trade_id: string; rule: FiredRule; dry_run: boolean }> = [];
@@ -136,16 +158,59 @@ Deno.serve(async (req) => {
         const dte = dteFromExpiry(trade.expiry);
         const theta = numOrNull(trade.theta);
 
-        const fired = evaluateRules({
-          rules,
-          plPct,
-          currentPremium,
-          peakPremium: newPeak,
-          dte,
-          theta,
-        });
+        // ─── Hard overrides (additive, run before existing manual rules) ───────
+        let fired: FiredRule | null = null;
+        let hardReason = "";
+        const hardCtx: Record<string, unknown> = {};
 
-        // Show armed badge: pick the closest rule to firing (priority order, just label whichever is configured first)
+        // 1. Earnings risk: report on same calendar day in ET
+        try {
+          const today = nyDateStr();
+          const { data: er } = await admin
+            .from("earnings_events")
+            .select("report_date")
+            .eq("ticker", trade.ticker)
+            .eq("report_date", today)
+            .maybeSingle();
+          if (er) {
+            fired = "earnings_risk";
+            hardReason = `Earnings today (${today}) — forced derisk regardless of P/L`;
+            hardCtx["earnings_date"] = today;
+          }
+        } catch { /* ignore */ }
+
+        // 2. Spread emergency: ask-bid > 15% of mid (only when bid/ask present)
+        if (!fired) {
+          const bid = numOrNull((trade as any).bid);
+          const ask = numOrNull((trade as any).ask);
+          if (bid != null && ask != null && bid > 0 && ask > 0 && ask >= bid) {
+            const mid = (bid + ask) / 2;
+            const spreadPct = mid > 0 ? (ask - bid) / mid : 0;
+            if (spreadPct > SPREAD_EMERGENCY_PCT) {
+              fired = "spread_emergency";
+              hardReason = `Bid/ask spread at ${(spreadPct * 100).toFixed(1)}% of mid — exiting before liquidity worsens`;
+              hardCtx["spread_pct"] = spreadPct;
+            }
+          }
+        }
+
+        // 3. Macro override: long calls only, fresh macro snapshot, score < 20
+        if (!fired && macroFresh && macroScore != null && macroScore < MACRO_OVERRIDE_THRESHOLD) {
+          const isLongCall = String(trade.option_type ?? "").toUpperCase() === "CALL"
+            && String(trade.direction ?? "").toUpperCase() !== "SHORT";
+          if (isLongCall) {
+            fired = "macro_override";
+            hardReason = `Macro tailwind collapsed to ${macroScore}/100 — closing long call`;
+            hardCtx["macro_score"] = macroScore;
+          }
+        }
+
+        // 4. Manual user-configured rules (unchanged behavior)
+        if (!fired) {
+          fired = evaluateRules({ rules, plPct, currentPremium, peakPremium: newPeak, dte, theta });
+        }
+
+        // Show armed badge: pick the closest rule to firing
         const armed = pickArmedRuleLabel(rules);
         if (armed && trade.auto_exit_armed_rule !== armed) {
           await admin.from("paper_trades")
@@ -153,12 +218,34 @@ Deno.serve(async (req) => {
             .eq("id", trade.id);
         }
 
+        // ─── Always log a decision row (including holds) ────────────────────
+        const decisionAction = fired ? (rules.dry_run ? "dry_run" : "exit_now") : "hold";
+        const reasonStr = fired
+          ? (hardReason || `${fired} fired at ${plPct.toFixed(0)}% P/L on ${trade.ticker}`)
+          : `Hold — no exit pressure (P/L ${plPct.toFixed(0)}%, macro ${macroScore ?? "n/a"})`;
+        try {
+          await admin.from("trade_exit_decisions").insert({
+            trade_id: trade.id,
+            user_id: userId,
+            action: decisionAction,
+            composite_score: null,
+            macro_score: macroScore,
+            macro_snapshot_id: macroSnapshotId,
+            hard_trigger: fired && ["macro_override", "earnings_risk", "spread_emergency"].includes(fired) ? fired : null,
+            reason_string: reasonStr,
+            executed: !!fired && !rules.dry_run,
+            context: { fired, plPct, dte, macroFresh, ...hardCtx },
+          });
+        } catch (e) {
+          console.error("trade_exit_decisions insert failed", e);
+        }
+
         if (!fired) continue;
 
         actions.push({ trade_id: trade.id, rule: fired, dry_run: !!rules.dry_run });
 
         if (rules.dry_run) {
-          console.log("auto-exit DRY-RUN", { user: userId, trade: trade.id, rule: fired, plPct });
+          console.log("auto-exit DRY-RUN", { user: userId, trade: trade.id, rule: fired, plPct, reason: reasonStr });
           continue;
         }
 
@@ -172,6 +259,9 @@ Deno.serve(async (req) => {
         const status = realizedPl > 0 ? "WIN" : realizedPl < 0 ? "LOSS" : "CLOSED";
         const exitReason = fired === "stop_loss" ? "stop_hit"
           : fired === "take_profit" ? "target_hit"
+          : fired === "macro_override" ? "macro_override"
+          : fired === "earnings_risk" ? "earnings_risk"
+          : fired === "spread_emergency" ? "spread_emergency"
           : "manual";
 
         // Idempotent: only update if still OPEN
@@ -282,6 +372,10 @@ function nyMinutesNow(d: Date = new Date()): number {
   const parts = fmt.formatToParts(d);
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
   return parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10);
+}
+function nyDateStr(d: Date = new Date()): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+  return fmt.format(d); // YYYY-MM-DD
 }
 function isUsMarketOpenNow(d: Date = new Date()): boolean {
   const fmt = new Intl.DateTimeFormat("en-US", {

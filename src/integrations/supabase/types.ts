@@ -548,6 +548,69 @@ export type Database = {
         }
         Relationships: []
       }
+      macro_regime_snapshots: {
+        Row: {
+          captured_at: string
+          components: Json | null
+          dxy_1d_ret: number | null
+          id: string
+          macro_tailwind_score: number | null
+          qqq_5m_ret: number | null
+          qqq_above_5m_vwap: boolean | null
+          qqq_price: number | null
+          smh_5m_ret: number | null
+          smh_above_5m_vwap: boolean | null
+          smh_price: number | null
+          source_errors: Json | null
+          spy_5m_ret: number | null
+          spy_above_5m_vwap: boolean | null
+          spy_price: number | null
+          vix_spot: number | null
+          xlk_5m_ret: number | null
+          xlk_price: number | null
+        }
+        Insert: {
+          captured_at?: string
+          components?: Json | null
+          dxy_1d_ret?: number | null
+          id?: string
+          macro_tailwind_score?: number | null
+          qqq_5m_ret?: number | null
+          qqq_above_5m_vwap?: boolean | null
+          qqq_price?: number | null
+          smh_5m_ret?: number | null
+          smh_above_5m_vwap?: boolean | null
+          smh_price?: number | null
+          source_errors?: Json | null
+          spy_5m_ret?: number | null
+          spy_above_5m_vwap?: boolean | null
+          spy_price?: number | null
+          vix_spot?: number | null
+          xlk_5m_ret?: number | null
+          xlk_price?: number | null
+        }
+        Update: {
+          captured_at?: string
+          components?: Json | null
+          dxy_1d_ret?: number | null
+          id?: string
+          macro_tailwind_score?: number | null
+          qqq_5m_ret?: number | null
+          qqq_above_5m_vwap?: boolean | null
+          qqq_price?: number | null
+          smh_5m_ret?: number | null
+          smh_above_5m_vwap?: boolean | null
+          smh_price?: number | null
+          source_errors?: Json | null
+          spy_5m_ret?: number | null
+          spy_above_5m_vwap?: boolean | null
+          spy_price?: number | null
+          vix_spot?: number | null
+          xlk_5m_ret?: number | null
+          xlk_price?: number | null
+        }
+        Relationships: []
+      }
       mark_engine_config: {
         Row: {
           enabled: boolean
@@ -1701,6 +1764,66 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      trade_exit_decisions: {
+        Row: {
+          action: string
+          composite_score: number | null
+          context: Json | null
+          decided_at: string
+          executed: boolean
+          hard_trigger: string | null
+          id: string
+          macro_score: number | null
+          macro_snapshot_id: string | null
+          reason_string: string
+          trade_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          composite_score?: number | null
+          context?: Json | null
+          decided_at?: string
+          executed?: boolean
+          hard_trigger?: string | null
+          id?: string
+          macro_score?: number | null
+          macro_snapshot_id?: string | null
+          reason_string: string
+          trade_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          composite_score?: number | null
+          context?: Json | null
+          decided_at?: string
+          executed?: boolean
+          hard_trigger?: string | null
+          id?: string
+          macro_score?: number | null
+          macro_snapshot_id?: string | null
+          reason_string?: string
+          trade_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_exit_decisions_macro_snapshot_id_fkey"
+            columns: ["macro_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "macro_regime_snapshots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_exit_decisions_trade_id_fkey"
+            columns: ["trade_id"]
+            isOneToOne: false
+            referencedRelation: "paper_trades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trade_reviews: {
         Row: {
