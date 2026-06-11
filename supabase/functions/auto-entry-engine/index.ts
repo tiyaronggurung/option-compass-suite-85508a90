@@ -262,7 +262,7 @@ Deno.serve(async (req) => {
         if (bidQ != null && askQ != null && bidQ > 0 && askQ > 0) {
           const midQ = (bidQ + askQ) / 2;
           const spreadPct = (askQ - bidQ) / midQ;
-          if (spreadPct > 0.35) {
+          if (spreadPct > 0.12) {
             await logDecision(s, "reject", "spread_emergency",
               `Bid/ask spread ${(spreadPct * 100).toFixed(0)}% of mid.`, { spread_pct: spreadPct });
             skip(`hard:spread_emergency:${spreadPct.toFixed(2)}`); continue;
