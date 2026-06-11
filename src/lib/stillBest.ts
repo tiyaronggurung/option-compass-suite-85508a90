@@ -22,7 +22,8 @@ export type StillBestVerdict = {
 
 const MAX_AGE_MIN = 5;            // matches default rules.max_signal_age_minutes
 const MACRO_FRESH_MIN = 30;       // ignore macro check if snapshot older than this
-const MACRO_BLOCK_THRESHOLD = 1;  // |tailwind| > 1 against direction blocks
+const MACRO_BLOCK_THRESHOLD_CALL = 35;  // CALL blocked when tailwind < 35
+const MACRO_BLOCK_THRESHOLD_PUT = 65;   // PUT blocked when tailwind > 65
 const WINDOW_START_HOUR_ET = 10;
 const WINDOW_END_HOUR_ET = 15;
 
@@ -72,8 +73,8 @@ export function evaluateStillBest(signal: Signal, macro: MacroSnap): StillBestVe
       const tw = Number(macro.macro_tailwind_score);
       const dir = String(signal.direction ?? "").toUpperCase();
       const against =
-        (dir === "CALL" && tw < -MACRO_BLOCK_THRESHOLD) ||
-        (dir === "PUT" && tw > MACRO_BLOCK_THRESHOLD);
+        (dir === "CALL" && tw < MACRO_BLOCK_THRESHOLD_CALL) ||
+        (dir === "PUT" && tw > MACRO_BLOCK_THRESHOLD_PUT);
       if (against) {
         return {
           state: "macro_blocks",
