@@ -430,6 +430,9 @@ Deno.serve(async (req) => {
           paper_trade_id: inserted.id,
           rule_snapshot: { ...rules, qty, total_cost: totalCost, premium },
         });
+        await logDecision(s, "enter", null, "All hard overrides passed; signal fired.",
+          { qty, total_cost: totalCost, premium, paper_trade_id: inserted.id });
+
 
         if (firesCount + fired >= Number(rules.max_trades_per_day ?? 5)) break;
         if (spendToday >= Number(rules.daily_spend_cap_usd ?? Infinity)) break;
