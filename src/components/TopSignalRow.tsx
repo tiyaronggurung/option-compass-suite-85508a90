@@ -8,6 +8,8 @@ import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
 import type { RankBreakdown } from "@/lib/rankSignals";
 import { getContractMeta } from "@/lib/rankSignals";
 import { SignalRadar } from "@/components/SignalRadar";
+import { StillBestBadge } from "@/components/StillBestBadge";
+import { useStillBest } from "@/lib/stillBest";
 
 type Props = {
   rank: number;
