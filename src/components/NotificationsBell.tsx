@@ -1,10 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Bell, Volume2, VolumeX, BellOff } from "lucide-react";
+import { Bell, Volume2, VolumeX, BellOff, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { signalNotifStore } from "@/lib/signalNotificationsStore";
+import { signalNotifStore, playChime } from "@/lib/signalNotificationsStore";
 
 let cachedSnap = {
   items: signalNotifStore.items,
@@ -78,6 +78,29 @@ export function NotificationsBell() {
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <div className="text-sm font-semibold">Signal alerts</div>
           <div className="flex items-center gap-1">
+            {import.meta.env.DEV && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label="Send test notification"
+                title="Send test notification (dev only)"
+                onClick={() => {
+                  signalNotifStore.push({
+                    id: `test-${Date.now()}`,
+                    ticker: "TEST",
+                    direction: Math.random() > 0.5 ? "CALL" : "PUT",
+                    confidence: 88,
+                    risk_level: "MEDIUM",
+                    contract_symbol: "TEST 250101C00100000",
+                    received_at: Date.now(),
+                  });
+                  if (signalNotifStore.soundEnabled) playChime();
+                }}
+              >
+                <Zap className="h-3.5 w-3.5 text-warn" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -118,7 +141,7 @@ export function NotificationsBell() {
             items.map((s) => (
               <Link
                 key={s.id}
-                to="/app/top-signals"
+                to={`/app/top-signals?signal=${encodeURIComponent(s.id)}`}
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 border-b border-border/60 hover:bg-accent/50 transition-colors"
               >

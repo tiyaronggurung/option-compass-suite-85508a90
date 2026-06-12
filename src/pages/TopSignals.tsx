@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -46,6 +47,37 @@ export default function TopSignals() {
   const [cashBalance, setCashBalance] = useState<number>(0);
 
   const watchSet = useMemo(() => new Set(watch), [watch]);
+
+  // Deep-link target from notifications bell: /app/top-signals?signal=<id>
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetSignalId = searchParams.get("signal");
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const scrolledForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!targetSignalId || !signals) return;
+    if (scrolledForRef.current === targetSignalId) return;
+    // Wait a frame for the rows to render
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-signal-id="${CSS.escape(targetSignalId)}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightId(targetSignalId);
+        scrolledForRef.current = targetSignalId;
+        // Clear the highlight + URL param after a bit
+        setTimeout(() => {
+          setHighlightId(null);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("signal");
+            return next;
+          }, { replace: true });
+        }, 2800);
+      }
+    }, 80);
+    return () => clearTimeout(t);
+  }, [targetSignalId, signals, setSearchParams]);
+
 
   useEffect(() => {
     if (!user) return;
@@ -265,14 +297,22 @@ export default function TopSignals() {
           </div>
         ) : (
           filteredByTab.map(({ signal, rank }, i) => (
-            <TopSignalRow
+            <div
               key={signal.id}
-              rank={i + 1}
-              signal={signal}
-              breakdown={rank}
-              onApprove={handleApprove}
-              onDetails={(s, b) => setDetail({ signal: s, breakdown: b })}
-            />
+              data-signal-id={signal.id}
+              className={cn(
+                "rounded-lg transition-all duration-500",
+                highlightId === signal.id && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+              )}
+            >
+              <TopSignalRow
+                rank={i + 1}
+                signal={signal}
+                breakdown={rank}
+                onApprove={handleApprove}
+                onDetails={(s, b) => setDetail({ signal: s, breakdown: b })}
+              />
+            </div>
           ))
         )}
       </section>
