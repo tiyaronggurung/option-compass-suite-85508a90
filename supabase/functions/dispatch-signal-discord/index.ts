@@ -178,8 +178,6 @@ Deno.serve(async (req) => {
     if (!data) return json(404, { error: "not_found" });
 
     if (!isTest) {
-      if (data.is_demo) return json(200, { ok: true, skipped: "demo" });
-      if (data.confidence < MIN_CONF) return json(200, { ok: true, skipped: "low_confidence" });
       if (data.discord_dispatched_at) return json(200, { ok: true, skipped: "already_dispatched" });
     }
 
@@ -197,8 +195,6 @@ Deno.serve(async (req) => {
       .from("signals")
       .select("id, ticker, direction, confidence, risk_level, price, contract_symbol, strike, expiry, dte, premium, reasons, catalyst_summary, source, created_at, is_demo, discord_dispatched_at")
       .gte("created_at", since)
-      .gte("confidence", MIN_CONF)
-      .eq("is_demo", false)
       .is("discord_dispatched_at", null)
       .order("created_at", { ascending: true })
       .limit(20);

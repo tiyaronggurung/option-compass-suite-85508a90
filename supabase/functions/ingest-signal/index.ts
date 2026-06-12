@@ -136,8 +136,8 @@ Deno.serve(async (req) => {
 
   console.log(`[ingest-signal] inserted ${data.ticker} ${data.direction} src="${data.source ?? "n/a"}"`);
 
-  // Fire-and-forget Discord dispatch (won't block ingestion if it fails).
-  if (!data.is_demo && data.confidence >= 60 && Deno.env.get("DISCORD_SIGNALS_WEBHOOK_URL")) {
+  // Fire-and-forget Discord dispatch for EVERY signal (incl. demo + low confidence).
+  if (Deno.env.get("DISCORD_SIGNALS_WEBHOOK_URL")) {
     const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/dispatch-signal-discord`;
     fetch(url, {
       method: "POST",
