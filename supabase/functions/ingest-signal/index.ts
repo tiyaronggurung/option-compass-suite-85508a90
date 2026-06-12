@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
       },
-      body: JSON.stringify({ signal_id: data.id, test: true }),
+      body: JSON.stringify({ signal_id: data.id }),
     }).catch((e) => console.warn("[ingest-signal] discord dispatch failed", e));
   }
 
