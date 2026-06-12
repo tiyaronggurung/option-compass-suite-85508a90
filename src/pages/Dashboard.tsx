@@ -687,20 +687,28 @@ export default function Dashboard() {
                     </div>
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {g.items.map((s) => (
-                        <SignalCard
+                        <div
                           key={s.id}
-                          signal={s}
-                          watchlist={watchSet}
-                          onApprove={approve}
-                          onReject={dismiss}
-                          onDetails={(sig) => setDetailSignal(sig)}
-                          outcome={signalOutcome(s, trades, dismissedIds)}
-                          subLabel={
-                            (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
-                              ? "Near Watchlist — Paper Test"
-                              : "Paper Test Candidate"
-                          }
-                        />
+                          data-signal-id={s.id}
+                          className={cn(
+                            "rounded-lg transition-all duration-500",
+                            highlightId === s.id && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+                          )}
+                        >
+                          <SignalCard
+                            signal={s}
+                            watchlist={watchSet}
+                            onApprove={approve}
+                            onReject={dismiss}
+                            onDetails={(sig) => setDetailSignal(sig)}
+                            outcome={signalOutcome(s, trades, dismissedIds)}
+                            subLabel={
+                              (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
+                                ? "Near Watchlist — Paper Test"
+                                : "Paper Test Candidate"
+                            }
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>
