@@ -203,6 +203,9 @@ Deno.serve(async (req) => {
       .gte("created_at", since)
       .gte("confidence", MIN_CONF)
       .is("discord_dispatched_at", null)
+      .eq("hidden", false)
+      .neq("tier", "rejected")
+      .eq("is_demo", false)
       .order("created_at", { ascending: true })
       .limit(20);
     if (error) return json(500, { error: "db_error", message: error.message });
