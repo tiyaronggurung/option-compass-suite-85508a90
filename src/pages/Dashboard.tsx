@@ -468,15 +468,23 @@ export default function Dashboard() {
           </div>
           <div className="space-y-2">
             {dashboardTop.map(({ signal, rank }: { signal: Signal; rank: RankBreakdown }, i: number) => (
-              <TopSignalRow
+              <div
                 key={signal.id}
-                rank={i + 1}
-                signal={signal}
-                breakdown={rank}
-                onApprove={approve}
-                onReject={dismiss}
-                onDetails={(s) => setDetailSignal(s)}
-              />
+                data-signal-id={signal.id}
+                className={cn(
+                  "rounded-lg transition-all duration-500",
+                  highlightId === signal.id && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+                )}
+              >
+                <TopSignalRow
+                  rank={i + 1}
+                  signal={signal}
+                  breakdown={rank}
+                  onApprove={approve}
+                  onReject={dismiss}
+                  onDetails={(s) => setDetailSignal(s)}
+                />
+              </div>
             ))}
           </div>
         </section>
