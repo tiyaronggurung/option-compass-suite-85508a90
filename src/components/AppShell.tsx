@@ -158,12 +158,19 @@ export default function AppShell() {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <NotificationsBell />
             <ThemeToggle />
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSignOut} aria-label="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </header>
+        {/* Desktop/tablet floating bell — Dashboard renders its own inline; this covers all other pages */}
+        <div className="hidden md:block fixed top-3 right-4 z-40">
+          <div className="rounded-full bg-background/80 backdrop-blur border border-border shadow-sm">
+            <NotificationsBell />
+          </div>
+        </div>
         <main className="flex-1 overflow-auto">
           <div className="container max-w-7xl py-5 md:py-6">
             <Outlet />
