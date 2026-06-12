@@ -22,6 +22,7 @@ import type { RiskSettingsLike } from "@/lib/riskGuard";
 import { buyOptionAsPaperTrade, type SelectedContract, type BuyOptionReceipt } from "@/lib/buyOption";
 import { buildProjection, breakeven, daysToExpiry } from "@/lib/blackScholes";
 import { computeEntryQuality } from "@/lib/entryQuality";
+import { getUsMarketStatus } from "@/lib/marketHours";
 
 // Per-signal last selection memory (side/expiry/strike/qty), kept in localStorage.
 type SavedSelection = { side: "call" | "put"; expiry: string; strike: number | null; qty: number };
