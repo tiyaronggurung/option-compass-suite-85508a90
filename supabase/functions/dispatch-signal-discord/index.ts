@@ -179,6 +179,7 @@ Deno.serve(async (req) => {
 
     if (!isTest) {
       if (data.discord_dispatched_at) return json(200, { ok: true, skipped: "already_dispatched" });
+      if (data.confidence < MIN_CONF) return json(200, { ok: true, skipped: "below_min_confidence" });
     }
 
     const ok = await postOne(webhook, data as SignalRow);
