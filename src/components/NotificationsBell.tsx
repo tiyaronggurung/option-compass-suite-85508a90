@@ -138,43 +138,22 @@ export function NotificationsBell() {
               No new signals yet. We'll chime when one arrives.
             </div>
           ) : (
-            items.map((s) => {
-              const to =
-                s.confidence >= 70
-                  ? `/app/top-signals?signal=${encodeURIComponent(s.id)}`
-                  : `/app?signal=${encodeURIComponent(s.id)}`;
-              return (
+            items.map((s) => (
               <Link
                 key={s.id}
-                to={to}
+                to={`/app?signal=${encodeURIComponent(s.id)}`}
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 border-b border-border/60 hover:bg-accent/50 transition-colors"
+                className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-border/60 hover:bg-accent/50 transition-colors"
               >
-                <span
-                  className={cn(
-                    "text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded",
-                    s.direction === "CALL" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear",
-                  )}
-                >
-                  {s.direction}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">
-                    {s.ticker}
-                    <span className="text-xs font-normal text-muted-foreground ml-1.5">
-                      {s.confidence}/100 · {s.risk_level}
-                    </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold truncate">{s.ticker}</div>
+                  <div className="text-[10.5px] text-muted-foreground">
+                    Score {s.confidence}/100
                   </div>
-                  {s.contract_symbol && (
-                    <div className="text-[10.5px] text-muted-foreground truncate ticker-mono">
-                      {s.contract_symbol}
-                    </div>
-                  )}
                 </div>
                 <div className="text-[10px] text-muted-foreground shrink-0">{relTime(s.received_at)}</div>
               </Link>
-              );
-            })
+            ))
           )}
         </div>
       </PopoverContent>
