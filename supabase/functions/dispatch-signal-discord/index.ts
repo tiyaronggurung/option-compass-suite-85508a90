@@ -178,8 +178,6 @@ Deno.serve(async (req) => {
     if (!data) return json(404, { error: "not_found" });
 
     if (!isTest) {
-      if (data.is_demo) return json(200, { ok: true, skipped: "demo" });
-      if (data.confidence < MIN_CONF) return json(200, { ok: true, skipped: "low_confidence" });
       if (data.discord_dispatched_at) return json(200, { ok: true, skipped: "already_dispatched" });
     }
 
