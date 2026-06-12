@@ -1441,6 +1441,7 @@ export type Database = {
           contract_symbol: string | null
           created_at: string
           direction: Database["public"]["Enums"]["signal_direction"]
+          discord_dispatched_at: string | null
           dte: number | null
           expires_at: string | null
           expiry: string | null
@@ -1491,6 +1492,7 @@ export type Database = {
           contract_symbol?: string | null
           created_at?: string
           direction: Database["public"]["Enums"]["signal_direction"]
+          discord_dispatched_at?: string | null
           dte?: number | null
           expires_at?: string | null
           expiry?: string | null
@@ -1541,6 +1543,7 @@ export type Database = {
           contract_symbol?: string | null
           created_at?: string
           direction?: Database["public"]["Enums"]["signal_direction"]
+          discord_dispatched_at?: string | null
           dte?: number | null
           expires_at?: string | null
           expiry?: string | null

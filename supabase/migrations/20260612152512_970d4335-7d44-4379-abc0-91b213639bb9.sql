@@ -1,0 +1,2 @@
+ALTER TABLE public.signals ADD COLUMN IF NOT EXISTS discord_dispatched_at timestamptz;
+CREATE INDEX IF NOT EXISTS idx_signals_discord_dispatch ON public.signals (created_at) WHERE discord_dispatched_at IS NULL;
