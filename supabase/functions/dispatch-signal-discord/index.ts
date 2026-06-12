@@ -122,6 +122,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
+  const auth = await requireAdmin(req);
+  if (!auth.ok) return json(auth.status, { error: auth.msg });
+
   const webhook = Deno.env.get("DISCORD_SIGNALS_WEBHOOK_URL");
   if (!webhook) return json(500, { error: "missing_webhook", message: "DISCORD_SIGNALS_WEBHOOK_URL not set" });
 
