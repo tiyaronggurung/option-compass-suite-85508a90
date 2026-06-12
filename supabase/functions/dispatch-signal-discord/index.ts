@@ -48,35 +48,53 @@ type SignalRow = {
 };
 
 function buildEmbed(s: SignalRow) {
-  const isCall = s.direction?.toUpperCase() === "CALL";
-  const color = isCall ? 0x16a34a : 0xdc2626; // green / red
-  const arrow = isCall ? "📈" : "📉";
-  const tier =
-    s.confidence >= 85 ? "🔥 ELITE" :
-    s.confidence >= 70 ? "⭐ TOP" :
-    "🌱 DEVELOPING";
+  const dir = (s.direction ?? "").toUpperCase();
+  const isCall = dir === "CALL";
+  const arrow = isCall ? "▲" : "▼";
+  const sideEmoji = isCall ? "🟢" : "🔴";
 
-  const fields: { name: string; value: string; inline?: boolean }[] = [
-    { name: "Score", value: `**${s.confidence}/100** · ${tier}`, inline: true },
-    { name: "Risk", value: s.risk_level ?? "—", inline: true },
-    { name: "Direction", value: `${arrow} ${s.direction}`, inline: true },
-  ];
+  let tierLabel: string;
+  let color: number;
+  if (s.confidence >= 85) {
+    tierLabel = "🔥 ELITE";
+    color = isCall ? 0x16a34a : 0xdc2626;
+  } else if (s.confidence >= 70) {
+    tierLabel = "⭐ TOP";
+    color = isCall ? 0x22c55e : 0xef4444;
+  } else {
+    tierLabel = "🌱 DEVELOPING";
+    color = isCall ? 0x4ade80 : 0xf87171;
+  }
+
+  const risk = s.risk_level ?? "—";
+  const signalUrl = `${APP_BASE}/app?signal=${s.id}`;
+
+  const headerBits = [tierLabel, `${risk} risk`];
+  if (s.dte != null) headerBits.push(`${s.dte} DTE`);
+  const description =
+    `**${headerBits.join("  •  ")}**\n` +
+    `[Open in Xalgoflow →](${signalUrl})`;
+
+  const fields: { name: string; value: string; inline?: boolean }[] = [];
 
   if (s.contract_symbol) {
-    fields.push({ name: "Contract", value: `\`${s.contract_symbol}\``, inline: false });
+    fields.push({
+      name: "Contract",
+      value: `\`\`\`${s.contract_symbol}\`\`\``,
+      inline: false,
+    });
   }
-  const parts: string[] = [];
-  if (s.strike != null) parts.push(`Strike $${Number(s.strike).toFixed(2)}`);
-  if (s.expiry) parts.push(`Exp ${s.expiry}`);
-  if (s.dte != null) parts.push(`${s.dte} DTE`);
-  if (s.premium != null) parts.push(`Premium $${Number(s.premium).toFixed(2)}`);
-  if (parts.length) fields.push({ name: "Details", value: parts.join(" · "), inline: false });
 
-  if (s.price != null) {
-    fields.push({ name: "Underlying", value: `$${Number(s.price).toFixed(2)}`, inline: true });
+  if (s.strike != null || s.expiry || s.dte != null) {
+    fields.push({ name: "Strike", value: s.strike != null ? `$${Number(s.strike).toFixed(2)}` : "—", inline: true });
+    fields.push({ name: "Expiry", value: s.expiry ?? "—", inline: true });
+    fields.push({ name: "DTE", value: s.dte != null ? `${s.dte}d` : "—", inline: true });
   }
-  if (s.source) {
-    fields.push({ name: "Source", value: s.source, inline: true });
+
+  if (s.premium != null || s.price != null || s.source) {
+    fields.push({ name: "Premium", value: s.premium != null ? `$${Number(s.premium).toFixed(2)}` : "—", inline: true });
+    fields.push({ name: "Underlying", value: s.price != null ? `$${Number(s.price).toFixed(2)}` : "—", inline: true });
+    fields.push({ name: "Source", value: s.source ?? "—", inline: true });
   }
 
   const reasons = (s.reasons ?? []).slice(0, 4);
@@ -88,19 +106,28 @@ function buildEmbed(s: SignalRow) {
     });
   }
   if (s.catalyst_summary) {
-    fields.push({ name: "Catalyst", value: s.catalyst_summary.slice(0, 500), inline: false });
+    fields.push({
+      name: "Catalyst",
+      value: `> ${s.catalyst_summary.slice(0, 480).replace(/\n+/g, "\n> ")}`,
+      inline: false,
+    });
   }
+
+  const ticker = s.ticker.toUpperCase();
+  const thumbUrl = `https://financialmodelingprep.com/image-stock/${ticker}.png`;
 
   return {
     username: "Xalgoflow AI",
     embeds: [{
-      title: `${arrow} ${s.ticker} ${s.direction}`,
-      url: `${APP_BASE}/app?signal=${s.id}`,
-      description: `New signal detected — [Open in Xalgoflow](${APP_BASE}/app?signal=${s.id})`,
+      author: { name: `Xalgoflow AI${s.source ? ` · ${s.source}` : ""}` },
+      title: `${sideEmoji} ${ticker} · ${dir} ${arrow} ${s.confidence}/100`,
+      url: signalUrl,
+      description,
       color,
+      thumbnail: { url: thumbUrl },
       fields,
       timestamp: s.created_at,
-      footer: { text: "Xalgoflow — paper trading signal · not financial advice" },
+      footer: { text: "Xalgoflow • paper trading signal • not financial advice" },
     }],
   };
 }
