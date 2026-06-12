@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Bell, BellOff, Mail, MessageSquare, Phone, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,8 +17,10 @@ type Settings = Database["public"]["Tables"]["alert_settings"]["Row"];
 
 export default function Alerts() {
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const [s, setS] = useState<Settings | null>(null);
   const [permission, setPermission] = useState<NotificationPermission>("default");
+  const [discordTesting, setDiscordTesting] = useState(false);
 
   useEffect(() => {
     if ("Notification" in window) setPermission(Notification.permission);
@@ -179,6 +182,46 @@ export default function Alerts() {
           </Field>
         </Channel>
       </section>
+
+      {isAdmin && (
+        <section className="glass-card p-5 space-y-3">
+          <h2 className="font-semibold flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" /> Discord broadcast (admin)</h2>
+          <p className="text-xs text-muted-foreground">
+            Signals with confidence ≥ 60 are auto-posted to the shared Xalgoflow Discord channel via the configured webhook. Use the button below to send a test post using the most recent eligible signal.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={discordTesting}
+            onClick={async () => {
+              setDiscordTesting(true);
+              try {
+                const { data: latest } = await supabase
+                  .from("signals")
+                  .select("id")
+                  .eq("is_demo", false)
+                  .gte("confidence", 60)
+                  .order("created_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                if (!latest) { toast.error("No eligible signal found to test with."); return; }
+                const { data, error } = await supabase.functions.invoke("dispatch-signal-discord", {
+                  body: { signal_id: latest.id, test: true },
+                });
+                if (error) throw error;
+                if ((data as any)?.ok) toast.success("Test posted to Discord.");
+                else toast.error(`Failed: ${JSON.stringify(data)}`);
+              } catch (e: any) {
+                toast.error(e?.message ?? "Discord test failed.");
+              } finally {
+                setDiscordTesting(false);
+              }
+            }}
+          >
+            {discordTesting ? "Sending…" : "Send test to Discord"}
+          </Button>
+        </section>
+      )}
 
       <DisclaimerBar />
     </div>

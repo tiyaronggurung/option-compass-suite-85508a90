@@ -135,5 +135,19 @@ Deno.serve(async (req) => {
   }
 
   console.log(`[ingest-signal] inserted ${data.ticker} ${data.direction} src="${data.source ?? "n/a"}"`);
+
+  // Fire-and-forget Discord dispatch (won't block ingestion if it fails).
+  if (!data.is_demo && data.confidence >= 60 && Deno.env.get("DISCORD_SIGNALS_WEBHOOK_URL")) {
+    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/dispatch-signal-discord`;
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      },
+      body: JSON.stringify({ signal_id: data.id }),
+    }).catch((e) => console.warn("[ingest-signal] discord dispatch failed", e));
+  }
+
   return json(201, { ok: true, signal: data });
 });
