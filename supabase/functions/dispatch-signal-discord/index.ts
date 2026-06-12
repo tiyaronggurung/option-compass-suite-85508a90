@@ -171,7 +171,6 @@ Deno.serve(async (req) => {
 
   const signalId = typeof body.signal_id === "string" ? body.signal_id : null;
   const isTest = body.test === true;
-  const sweep = body.sweep === true;
 
   // ---- Single signal mode ----
   if (signalId) {
