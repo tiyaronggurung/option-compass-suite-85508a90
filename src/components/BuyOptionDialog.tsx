@@ -104,6 +104,13 @@ export function BuyOptionDialog(props: Props) {
   const [chainLastUpdated, setChainLastUpdated] = useState<number | null>(null);
   const [receipt, setReceipt] = useState<BuyOptionReceipt | null>(null);
   const [restoredStrike, setRestoredStrike] = useState<number | null>(null);
+  const [marketStatus, setMarketStatus] = useState(() => getUsMarketStatus());
+  useEffect(() => {
+    if (!open) return;
+    setMarketStatus(getUsMarketStatus());
+    const id = setInterval(() => setMarketStatus(getUsMarketStatus()), 30_000);
+    return () => clearInterval(id);
+  }, [open]);
 
   const signalSpot = useMemo(() => Number(signal?.price ?? 0) || 0, [signal]);
 
