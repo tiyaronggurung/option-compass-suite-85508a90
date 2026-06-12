@@ -22,6 +22,7 @@ import type { RiskSettingsLike } from "@/lib/riskGuard";
 import { buyOptionAsPaperTrade, type SelectedContract, type BuyOptionReceipt } from "@/lib/buyOption";
 import { buildProjection, breakeven, daysToExpiry } from "@/lib/blackScholes";
 import { computeEntryQuality } from "@/lib/entryQuality";
+import { getUsMarketStatus } from "@/lib/marketHours";
 
 // Per-signal last selection memory (side/expiry/strike/qty), kept in localStorage.
 type SavedSelection = { side: "call" | "put"; expiry: string; strike: number | null; qty: number };
@@ -103,6 +104,13 @@ export function BuyOptionDialog(props: Props) {
   const [chainLastUpdated, setChainLastUpdated] = useState<number | null>(null);
   const [receipt, setReceipt] = useState<BuyOptionReceipt | null>(null);
   const [restoredStrike, setRestoredStrike] = useState<number | null>(null);
+  const [marketStatus, setMarketStatus] = useState(() => getUsMarketStatus());
+  useEffect(() => {
+    if (!open) return;
+    setMarketStatus(getUsMarketStatus());
+    const id = setInterval(() => setMarketStatus(getUsMarketStatus()), 30_000);
+    return () => clearInterval(id);
+  }, [open]);
 
   const signalSpot = useMemo(() => Number(signal?.price ?? 0) || 0, [signal]);
 
@@ -644,12 +652,18 @@ export function BuyOptionDialog(props: Props) {
                   </div>
                 )}
 
+                {!marketStatus.open && (
+                  <div className="text-xs rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-2">
+                    🔒 {marketStatus.reason}
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
                     Cancel
                   </Button>
-                  <Button onClick={handleBuy} disabled={submitting || !buyingPowerOk || selectedMid <= 0 || !Number.isFinite(qty) || qty < 1}>
-                    {submitting ? "Submitting…" : !Number.isFinite(qty) || qty < 1 ? "Enter quantity" : `Buy for ${fmtMoney(totalCost)}`}
+                  <Button onClick={handleBuy} disabled={submitting || !buyingPowerOk || selectedMid <= 0 || !Number.isFinite(qty) || qty < 1 || !marketStatus.open}>
+                    {submitting ? "Submitting…" : !marketStatus.open ? "Market closed" : !Number.isFinite(qty) || qty < 1 ? "Enter quantity" : `Buy for ${fmtMoney(totalCost)}`}
                   </Button>
                 </div>
               </div>

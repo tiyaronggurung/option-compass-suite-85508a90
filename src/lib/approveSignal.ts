@@ -5,6 +5,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { checkRiskGuards, type RiskSettingsLike } from "@/lib/riskGuard";
+import { getUsMarketStatus } from "@/lib/marketHours";
 import type { Signal } from "@/lib/signalHelpers";
 
 export type PaperTestClass = "developing" | "near_watchlist" | "watchlist" | "strong" | "elite";
@@ -32,6 +33,8 @@ export type ApproveResult =
   | { ok: false; reason: string };
 
 export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<ApproveResult> {
+  const mkt = getUsMarketStatus();
+  if (!mkt.open) return { ok: false, reason: mkt.reason };
   const intendedRisk = input.intendedRisk ?? 100;
   const contracts = Math.max(1, Math.floor(input.contracts ?? 1));
   const guard = checkRiskGuards({
