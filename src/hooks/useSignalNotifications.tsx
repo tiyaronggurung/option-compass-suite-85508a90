@@ -31,6 +31,9 @@ export function useSignalNotifications() {
           const sig = payload.new as Signal;
           if (sig.hidden) return;
           if ((sig as unknown as { is_demo?: boolean }).is_demo) return;
+          // Only notify for signals with confidence 60-100 (Developing + Tradeable).
+          const conf = Number(sig.confidence ?? 0);
+          if (conf < 60 || conf > 100) return;
 
           signalNotifStore.push({
             id: sig.id,
