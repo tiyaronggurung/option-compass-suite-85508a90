@@ -10,10 +10,6 @@
 // Reads DISCORD_SIGNALS_WEBHOOK_URL from secrets.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { requireAdmin } from "../_shared/requireAdmin.ts";
 
 const corsHeaders = {
