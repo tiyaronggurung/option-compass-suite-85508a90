@@ -78,6 +78,29 @@ export function NotificationsBell() {
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <div className="text-sm font-semibold">Signal alerts</div>
           <div className="flex items-center gap-1">
+            {import.meta.env.DEV && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label="Send test notification"
+                title="Send test notification (dev only)"
+                onClick={() => {
+                  signalNotifStore.push({
+                    id: `test-${Date.now()}`,
+                    ticker: "TEST",
+                    direction: Math.random() > 0.5 ? "CALL" : "PUT",
+                    confidence: 88,
+                    risk_level: "MEDIUM",
+                    contract_symbol: "TEST 250101C00100000",
+                    received_at: Date.now(),
+                  });
+                  if (signalNotifStore.soundEnabled) playChime();
+                }}
+              >
+                <Zap className="h-3.5 w-3.5 text-warn" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
