@@ -196,6 +196,7 @@ Deno.serve(async (req) => {
       .from("signals")
       .select("id, ticker, direction, confidence, risk_level, price, contract_symbol, strike, expiry, dte, premium, reasons, catalyst_summary, source, created_at, is_demo, discord_dispatched_at")
       .gte("created_at", since)
+      .gte("confidence", MIN_CONF)
       .is("discord_dispatched_at", null)
       .order("created_at", { ascending: true })
       .limit(20);
