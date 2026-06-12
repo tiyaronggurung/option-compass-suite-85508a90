@@ -29,7 +29,8 @@ export function useSignalNotifications() {
 
     const handleInsert = (payload: { new: Signal }) => {
       const sig = payload.new;
-      if (sig.hidden) return;
+      // Note: do NOT filter on `hidden` — developing signals (60–69) are
+      // flagged hidden by default but must still trigger notifications.
       if ((sig as unknown as { is_demo?: boolean }).is_demo) return;
       const conf = Number(sig.confidence ?? 0);
       if (conf < 60 || conf > 100) return;
