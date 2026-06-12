@@ -48,6 +48,37 @@ export default function TopSignals() {
 
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
+  // Deep-link target from notifications bell: /app/top-signals?signal=<id>
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetSignalId = searchParams.get("signal");
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const scrolledForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!targetSignalId || !signals) return;
+    if (scrolledForRef.current === targetSignalId) return;
+    // Wait a frame for the rows to render
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-signal-id="${CSS.escape(targetSignalId)}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightId(targetSignalId);
+        scrolledForRef.current = targetSignalId;
+        // Clear the highlight + URL param after a bit
+        setTimeout(() => {
+          setHighlightId(null);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("signal");
+            return next;
+          }, { replace: true });
+        }, 2800);
+      }
+    }, 80);
+    return () => clearTimeout(t);
+  }, [targetSignalId, signals, setSearchParams]);
+
+
   useEffect(() => {
     if (!user) return;
     let cancel = false;
