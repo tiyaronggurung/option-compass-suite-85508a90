@@ -620,15 +620,23 @@ export default function Dashboard() {
           : filtered.length === 0
           ? <EmptyState />
           : filtered.map((s) => (
-              <SignalCard
+              <div
                 key={s.id}
-                signal={s}
-                watchlist={watchSet}
-                onApprove={approve}
-                onReject={dismiss}
-                onDetails={(sig) => setDetailSignal(sig)}
-                outcome={signalOutcome(s, trades, dismissedIds)}
-              />
+                data-signal-id={s.id}
+                className={cn(
+                  "rounded-lg transition-all duration-500",
+                  highlightId === s.id && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+                )}
+              >
+                <SignalCard
+                  signal={s}
+                  watchlist={watchSet}
+                  onApprove={approve}
+                  onReject={dismiss}
+                  onDetails={(sig) => setDetailSignal(sig)}
+                  outcome={signalOutcome(s, trades, dismissedIds)}
+                />
+              </div>
             ))}
       </section>
 
