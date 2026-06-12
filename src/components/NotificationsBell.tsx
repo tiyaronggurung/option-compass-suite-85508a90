@@ -1,10 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Bell, Volume2, VolumeX, BellOff } from "lucide-react";
+import { Bell, Volume2, VolumeX, BellOff, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { signalNotifStore } from "@/lib/signalNotificationsStore";
+import { signalNotifStore, playChime } from "@/lib/signalNotificationsStore";
 
 let cachedSnap = {
   items: signalNotifStore.items,
