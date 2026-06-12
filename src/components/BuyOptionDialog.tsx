@@ -652,12 +652,18 @@ export function BuyOptionDialog(props: Props) {
                   </div>
                 )}
 
+                {!marketStatus.open && (
+                  <div className="text-xs rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-2">
+                    🔒 {marketStatus.reason}
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
                     Cancel
                   </Button>
-                  <Button onClick={handleBuy} disabled={submitting || !buyingPowerOk || selectedMid <= 0 || !Number.isFinite(qty) || qty < 1}>
-                    {submitting ? "Submitting…" : !Number.isFinite(qty) || qty < 1 ? "Enter quantity" : `Buy for ${fmtMoney(totalCost)}`}
+                  <Button onClick={handleBuy} disabled={submitting || !buyingPowerOk || selectedMid <= 0 || !Number.isFinite(qty) || qty < 1 || !marketStatus.open}>
+                    {submitting ? "Submitting…" : !marketStatus.open ? "Market closed" : !Number.isFinite(qty) || qty < 1 ? "Enter quantity" : `Buy for ${fmtMoney(totalCost)}`}
                   </Button>
                 </div>
               </div>
