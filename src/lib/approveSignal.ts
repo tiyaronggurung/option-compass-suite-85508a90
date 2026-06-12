@@ -33,6 +33,8 @@ export type ApproveResult =
   | { ok: false; reason: string };
 
 export async function approveSignalAsPaperTrade(input: ApproveInput): Promise<ApproveResult> {
+  const mkt = getUsMarketStatus();
+  if (!mkt.open) return { ok: false, reason: mkt.reason };
   const intendedRisk = input.intendedRisk ?? 100;
   const contracts = Math.max(1, Math.floor(input.contracts ?? 1));
   const guard = checkRiskGuards({
