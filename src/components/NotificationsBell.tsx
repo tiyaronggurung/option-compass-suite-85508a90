@@ -173,7 +173,8 @@ export function NotificationsBell() {
                 </div>
                 <div className="text-[10px] text-muted-foreground shrink-0">{relTime(s.received_at)}</div>
               </Link>
-            ))
+              );
+            })
           )}
         </div>
       </PopoverContent>
