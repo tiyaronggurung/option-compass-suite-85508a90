@@ -59,6 +59,8 @@ export type BuyOptionResult =
   | { ok: false; reason: string };
 
 export async function buyOptionAsPaperTrade(input: BuyOptionInput): Promise<BuyOptionResult> {
+  const mkt = getUsMarketStatus();
+  if (!mkt.open) return { ok: false, reason: mkt.reason };
   const qty = Math.max(1, Math.floor(input.contracts));
   const premium = input.contract.mid;
   if (!Number.isFinite(premium) || premium <= 0) {
