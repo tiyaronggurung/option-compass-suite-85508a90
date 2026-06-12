@@ -98,6 +98,38 @@ export default function Dashboard() {
   const [minDevelopingScore, setMinDevelopingScore] = useState(60);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
+  // Deep-link target from notifications bell: /app?signal=<id>
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetSignalId = searchParams.get("signal");
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const scrolledForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!targetSignalId || !signals) return;
+    if (scrolledForRef.current === targetSignalId) return;
+    // If targeting a developing card, make sure that section is open.
+    setShowDeveloping(true);
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-signal-id="${CSS.escape(targetSignalId)}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightId(targetSignalId);
+        scrolledForRef.current = targetSignalId;
+        setTimeout(() => {
+          setHighlightId(null);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("signal");
+            return next;
+          }, { replace: true });
+        }, 2800);
+      }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [targetSignalId, signals, setSearchParams]);
+
+
+
   const reloadAlerts = async () => {
     if (!user) return;
     const { data } = await (supabase as any)
