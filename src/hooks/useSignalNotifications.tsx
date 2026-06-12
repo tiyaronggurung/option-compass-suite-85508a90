@@ -22,38 +22,73 @@ export function useSignalNotifications() {
   useEffect(() => {
     if (!user) return;
 
-    const channel = supabase
-      .channel("signal-notif-stream")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "signals" },
-        (payload) => {
-          const sig = payload.new as Signal;
-          if (sig.hidden) return;
-          if ((sig as unknown as { is_demo?: boolean }).is_demo) return;
-          // Only notify for signals with confidence 60-100 (Developing + Tradeable).
-          const conf = Number(sig.confidence ?? 0);
-          if (conf < 60 || conf > 100) return;
+    let cancelled = false;
+    let currentChannel: ReturnType<typeof supabase.channel> | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 1000;
 
-          signalNotifStore.push({
-            id: sig.id,
-            ticker: sig.ticker,
-            direction: sig.direction,
-            confidence: sig.confidence,
-            risk_level: sig.risk_level,
-            contract_symbol: sig.contract_symbol ?? null,
-            received_at: Date.now(),
-          });
+    const handleInsert = (payload: { new: Signal }) => {
+      const sig = payload.new;
+      if (sig.hidden) return;
+      if ((sig as unknown as { is_demo?: boolean }).is_demo) return;
+      const conf = Number(sig.confidence ?? 0);
+      if (conf < 60 || conf > 100) return;
 
-          if (signalNotifStore.soundEnabled) playChime();
+      signalNotifStore.push({
+        id: sig.id,
+        ticker: sig.ticker,
+        direction: sig.direction,
+        confidence: sig.confidence,
+        risk_level: sig.risk_level,
+        contract_symbol: sig.contract_symbol ?? null,
+        received_at: Date.now(),
+      });
 
-          toast(`${sig.ticker} · ${sig.direction}`, {
-            description: `${sig.confidence}/100 · ${sig.risk_level} risk${sig.contract_symbol ? ` · ${sig.contract_symbol}` : ""}`,
-          });
-        }
-      )
-      .subscribe();
+      if (signalNotifStore.soundEnabled) playChime();
 
-    return () => { supabase.removeChannel(channel); };
+      toast(`${sig.ticker} · ${sig.direction}`, {
+        description: `${sig.confidence}/100 · ${sig.risk_level} risk${sig.contract_symbol ? ` · ${sig.contract_symbol}` : ""}`,
+      });
+    };
+
+    const connect = () => {
+      if (cancelled) return;
+      const channel = supabase
+        .channel(`signal-notif-stream-${Date.now()}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "signals" },
+          handleInsert as (payload: { new: Signal }) => void
+        )
+        .subscribe((status) => {
+          if (import.meta.env.DEV) {
+            console.log("[signal-notif] channel status:", status);
+          }
+          if (status === "SUBSCRIBED") {
+            retryDelay = 1000;
+          } else if (
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT" ||
+            status === "CLOSED"
+          ) {
+            if (cancelled) return;
+            if (currentChannel) {
+              supabase.removeChannel(currentChannel);
+              currentChannel = null;
+            }
+            retryTimer = setTimeout(connect, retryDelay);
+            retryDelay = Math.min(retryDelay * 2, 15000);
+          }
+        });
+      currentChannel = channel;
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (currentChannel) supabase.removeChannel(currentChannel);
+    };
   }, [user]);
 }
