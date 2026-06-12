@@ -297,14 +297,22 @@ export default function TopSignals() {
           </div>
         ) : (
           filteredByTab.map(({ signal, rank }, i) => (
-            <TopSignalRow
+            <div
               key={signal.id}
-              rank={i + 1}
-              signal={signal}
-              breakdown={rank}
-              onApprove={handleApprove}
-              onDetails={(s, b) => setDetail({ signal: s, breakdown: b })}
-            />
+              data-signal-id={signal.id}
+              className={cn(
+                "rounded-lg transition-all duration-500",
+                highlightId === signal.id && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+              )}
+            >
+              <TopSignalRow
+                rank={i + 1}
+                signal={signal}
+                breakdown={rank}
+                onApprove={handleApprove}
+                onDetails={(s, b) => setDetail({ signal: s, breakdown: b })}
+              />
+            </div>
           ))
         )}
       </section>
