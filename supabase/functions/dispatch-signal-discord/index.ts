@@ -149,20 +149,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
-  // Allow cron/internal callers via shared secret header; otherwise require admin.
-  const internalSecret = Deno.env.get("SIGNAL_INGEST_SECRET") ?? "";
-  const providedSecret = req.headers.get("x-internal-secret") ?? "";
-  const isInternal = internalSecret && providedSecret === internalSecret;
-  if (!isInternal) {
+  // Parse body up-front so we can branch auth: sweep mode is callable by cron
+  // (anon/internal) since it only re-posts already-stored DB signals; single
+  // and test modes still require admin.
+  let body: any = {};
+  try { body = await req.json(); } catch { /* allow empty */ }
+  const sweep = body.sweep === true;
+
+  if (!sweep) {
     const auth = await requireAdmin(req);
     if (!auth.ok) return json(auth.status, { error: auth.msg });
   }
 
   const webhook = Deno.env.get("DISCORD_SIGNALS_WEBHOOK_URL");
   if (!webhook) return json(500, { error: "missing_webhook", message: "DISCORD_SIGNALS_WEBHOOK_URL not set" });
-
-  let body: any = {};
-  try { body = await req.json(); } catch { /* allow empty */ }
 
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
