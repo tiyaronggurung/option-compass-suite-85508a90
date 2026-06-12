@@ -141,7 +141,7 @@ export function NotificationsBell() {
             items.map((s) => (
               <Link
                 key={s.id}
-                to="/app/top-signals"
+                to={`/app/top-signals?signal=${encodeURIComponent(s.id)}`}
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 border-b border-border/60 hover:bg-accent/50 transition-colors"
               >
