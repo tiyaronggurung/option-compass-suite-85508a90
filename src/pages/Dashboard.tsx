@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Activity, DollarSign, Flame, Radio, Tag as TagIcon, TrendingDown, TrendingUp, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -96,6 +97,38 @@ export default function Dashboard() {
   const [cashBalance, setCashBalance] = useState<number>(0);
   const [minDevelopingScore, setMinDevelopingScore] = useState(60);
   const watchSet = useMemo(() => new Set(watch), [watch]);
+
+  // Deep-link target from notifications bell: /app?signal=<id>
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetSignalId = searchParams.get("signal");
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const scrolledForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!targetSignalId || !signals) return;
+    if (scrolledForRef.current === targetSignalId) return;
+    // If targeting a developing card, make sure that section is open.
+    setShowDeveloping(true);
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-signal-id="${CSS.escape(targetSignalId)}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightId(targetSignalId);
+        scrolledForRef.current = targetSignalId;
+        setTimeout(() => {
+          setHighlightId(null);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("signal");
+            return next;
+          }, { replace: true });
+        }, 2800);
+      }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [targetSignalId, signals, setSearchParams]);
+
+
 
   const reloadAlerts = async () => {
     if (!user) return;
@@ -435,15 +468,23 @@ export default function Dashboard() {
           </div>
           <div className="space-y-2">
             {dashboardTop.map(({ signal, rank }: { signal: Signal; rank: RankBreakdown }, i: number) => (
-              <TopSignalRow
+              <div
                 key={signal.id}
-                rank={i + 1}
-                signal={signal}
-                breakdown={rank}
-                onApprove={approve}
-                onReject={dismiss}
-                onDetails={(s) => setDetailSignal(s)}
-              />
+                data-signal-id={signal.id}
+                className={cn(
+                  "rounded-lg transition-all duration-500",
+                  highlightId === signal.id && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+                )}
+              >
+                <TopSignalRow
+                  rank={i + 1}
+                  signal={signal}
+                  breakdown={rank}
+                  onApprove={approve}
+                  onReject={dismiss}
+                  onDetails={(s) => setDetailSignal(s)}
+                />
+              </div>
             ))}
           </div>
         </section>
@@ -579,15 +620,23 @@ export default function Dashboard() {
           : filtered.length === 0
           ? <EmptyState />
           : filtered.map((s) => (
-              <SignalCard
+              <div
                 key={s.id}
-                signal={s}
-                watchlist={watchSet}
-                onApprove={approve}
-                onReject={dismiss}
-                onDetails={(sig) => setDetailSignal(sig)}
-                outcome={signalOutcome(s, trades, dismissedIds)}
-              />
+                data-signal-id={s.id}
+                className={cn(
+                  "rounded-lg transition-all duration-500",
+                  highlightId === s.id && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+                )}
+              >
+                <SignalCard
+                  signal={s}
+                  watchlist={watchSet}
+                  onApprove={approve}
+                  onReject={dismiss}
+                  onDetails={(sig) => setDetailSignal(sig)}
+                  outcome={signalOutcome(s, trades, dismissedIds)}
+                />
+              </div>
             ))}
       </section>
 
@@ -638,20 +687,28 @@ export default function Dashboard() {
                     </div>
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {g.items.map((s) => (
-                        <SignalCard
+                        <div
                           key={s.id}
-                          signal={s}
-                          watchlist={watchSet}
-                          onApprove={approve}
-                          onReject={dismiss}
-                          onDetails={(sig) => setDetailSignal(sig)}
-                          outcome={signalOutcome(s, trades, dismissedIds)}
-                          subLabel={
-                            (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
-                              ? "Near Watchlist — Paper Test"
-                              : "Paper Test Candidate"
-                          }
-                        />
+                          data-signal-id={s.id}
+                          className={cn(
+                            "rounded-lg transition-all duration-500",
+                            highlightId === s.id && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+                          )}
+                        >
+                          <SignalCard
+                            signal={s}
+                            watchlist={watchSet}
+                            onApprove={approve}
+                            onReject={dismiss}
+                            onDetails={(sig) => setDetailSignal(sig)}
+                            outcome={signalOutcome(s, trades, dismissedIds)}
+                            subLabel={
+                              (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
+                                ? "Near Watchlist — Paper Test"
+                                : "Paper Test Candidate"
+                            }
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>
