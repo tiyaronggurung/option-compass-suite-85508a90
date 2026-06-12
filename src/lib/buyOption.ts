@@ -9,6 +9,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { checkRiskGuards, type RiskSettingsLike } from "@/lib/riskGuard";
 import { paperTestClassFor } from "@/lib/approveSignal";
+import { getUsMarketStatus } from "@/lib/marketHours";
 import type { Signal } from "@/lib/signalHelpers";
 
 export type SelectedContract = {
