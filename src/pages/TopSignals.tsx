@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { PaperTrade, Signal } from "@/lib/signalHelpers";
 import { isExpired } from "@/lib/signalFreshness";
+import { effectiveConfidence } from "@/lib/techAdjust";
 import { rankSignals, getContractMeta, type RankBreakdown } from "@/lib/rankSignals";
 import { sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/riskGuard";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
@@ -117,6 +118,10 @@ export default function TopSignals() {
         if (s.is_demo) return false;
         if (s.status !== "LIVE") return false;
         if (isExpired(s)) return false;
+        // Match Dashboard hero gate: only surface signals with effective
+        // confidence >= 70. Anything weaker belongs in the Developing section.
+        const eff = effectiveConfidence(s as any) ?? 0;
+        if (eff < 70) return false;
       }
       return true;
     });
