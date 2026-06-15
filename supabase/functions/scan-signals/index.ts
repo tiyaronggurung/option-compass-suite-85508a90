@@ -990,6 +990,32 @@ Deno.serve(async (req) => {
         return;
       }
       created++;
+
+      // Fire-and-forget Discord dispatch for any signal that will appear as a
+      // card on the dashboard (Top or Developing strip). Dedup is handled by
+      // dispatch-signal-discord via signals.discord_dispatched_at.
+      if (finalScore >= 60 && Deno.env.get("DISCORD_SIGNALS_WEBHOOK_URL")) {
+        try {
+          const { data: inserted } = await admin
+            .from("signals")
+            .select("id")
+            .eq("external_id", externalId)
+            .maybeSingle();
+          if (inserted?.id) {
+            const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/dispatch-signal-discord`;
+            fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              },
+              body: JSON.stringify({ signal_id: inserted.id }),
+            }).catch((e) => console.warn("[scan-signals] discord dispatch failed", e));
+          }
+        } catch (e) {
+          console.warn("[scan-signals] discord lookup failed", (e as Error).message);
+        }
+      }
     } catch (e) {
       const msg = (e as Error).message;
       if (msg.includes("budget_exhausted")) {
