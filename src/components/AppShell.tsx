@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { useSignalNotifications } from "@/hooks/useSignalNotifications";
 import { useSingleSession } from "@/hooks/useSingleSession";
+import { useMarketBell } from "@/hooks/useMarketBell";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
