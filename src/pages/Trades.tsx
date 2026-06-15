@@ -569,10 +569,12 @@ function PartialCloseDialog({
   useEffect(() => {
     if (trade) {
       setQtyStr("1");
-      const seed = t?.current_premium != null ? Number(t.current_premium) : entryPremium;
-      setLivePremium(t?.current_premium != null ? Number(t.current_premium) : null);
-      setExitPremiumStr(seed ? String(seed) : "");
+      const seed = t?.current_premium != null ? Number(t.current_premium) : null;
+      setLivePremium(seed);
+      setExitPremiumStr(seed != null ? String(seed) : "");
       setReason("manual_close");
+      // Always pull a fresh live mark on open — no manual price entry allowed.
+      useLiveMark();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade]);
