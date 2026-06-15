@@ -107,6 +107,7 @@ export default {
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.35s ease-out",
         "buzz": "buzz 0.6s ease-in-out infinite, buzz-glow 1.6s ease-in-out infinite",
+        "buzz-once": "buzz 0.6s ease-in-out 1, buzz-glow 1.6s ease-in-out 1",
       },
     },
   },
