@@ -2,6 +2,7 @@
 // POST { tickers: string[] } -> { quotes: { [ticker]: { price, ts } } }
 // Same input/output shape as before — frontend (liveQuotesStore, useLiveQuote) unchanged.
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const TRADIER_KEY = Deno.env.get("TRADIER_API_KEY") ?? "";
 const TRADIER_BASE = "https://api.tradier.com/v1";
@@ -109,6 +110,26 @@ async function getQuotes(tickers: string[]): Promise<Record<string, QuoteVal>> {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // Auth gate — prevent anonymous quota abuse.
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  {
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: ud } = await authClient.auth.getUser();
+    if (!ud?.user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
   if (!TRADIER_KEY) {
     return new Response(JSON.stringify({ error: "TRADIER_API_KEY not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

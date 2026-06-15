@@ -63,12 +63,15 @@ Deno.serve(async (req) => {
 
   const authHeader = req.headers.get("Authorization") ?? "";
   const bearer = authHeader.replace(/^Bearer\s+/i, "");
-  const isServiceRole = bearer && bearer === serviceRole;
+  const isServiceRole = !!bearer && bearer === serviceRole;
+  // Trigger derives from auth — anonymous body cannot bypass auth by claiming trigger:"cron".
   let trigger: "cron" | "manual" = isServiceRole ? "cron" : "manual";
   try {
     const body = req.headers.get("content-length") && Number(req.headers.get("content-length")) > 0
       ? await req.json().catch(() => ({})) : {};
-    if (body && typeof body.trigger === "string") trigger = body.trigger === "cron" ? "cron" : "manual";
+    if (isServiceRole && body && typeof body.trigger === "string") {
+      trigger = body.trigger === "cron" ? "cron" : "manual";
+    }
   } catch { /* ignore */ }
 
   async function logRun(

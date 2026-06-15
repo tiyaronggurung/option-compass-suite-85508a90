@@ -2,6 +2,7 @@
 // Returns total call vs put volume + premium and put/call ratio from Unusual Whales.
 
 import { uwFetch, UW_CONFIGURED } from "../_shared/unusual-whales.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,6 +24,29 @@ function label(pcr: number): { sentiment: "bullish" | "bearish" | "neutral"; rea
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Auth gate — prevent anonymous quota abuse.
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  {
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: ud } = await authClient.auth.getUser();
+    if (!ud?.user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
+
 
   const url = new URL(req.url);
   const ticker = (url.searchParams.get("ticker") ?? "").toUpperCase().trim();

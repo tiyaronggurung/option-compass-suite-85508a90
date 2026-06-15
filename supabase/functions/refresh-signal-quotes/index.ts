@@ -26,12 +26,26 @@ Deno.serve(async (req) => {
   const admin = createClient(supabaseUrl, serviceRole);
 
   const authHeader = req.headers.get("Authorization") ?? "";
-  const isServiceRole = authHeader.replace(/^Bearer\s+/i, "") === serviceRole;
+  const bearer = authHeader.replace(/^Bearer\s+/i, "");
+  const isServiceRole = !!bearer && bearer === serviceRole;
+  // Auth gate — service-role (cron) OR authenticated user.
+  if (!isServiceRole) {
+    if (!authHeader.startsWith("Bearer ")) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+    const { data: ud } = await authClient.auth.getUser();
+    if (!ud?.user) return json({ error: "Unauthorized" }, 401);
+  }
+  // Trigger is derived from auth — body cannot upgrade an anonymous request to "cron".
   let trigger: "cron" | "manual" = isServiceRole ? "cron" : "manual";
   try {
     const body = req.headers.get("content-length") && Number(req.headers.get("content-length")) > 0
       ? await req.json().catch(() => ({})) : {};
-    if (body && typeof body.trigger === "string") trigger = body.trigger === "cron" ? "cron" : "manual";
+    if (isServiceRole && body && typeof body.trigger === "string") {
+      trigger = body.trigger === "cron" ? "cron" : "manual";
+    }
   } catch { /* ignore */ }
 
   try {
