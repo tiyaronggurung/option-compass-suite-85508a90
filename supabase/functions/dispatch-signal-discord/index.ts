@@ -32,6 +32,7 @@ type SignalRow = {
   ticker: string;
   direction: string;
   confidence: number;
+  tech_adjusted_confidence: number | null;
   risk_level: string | null;
   price: number | null;
   contract_symbol: string | null;
@@ -47,18 +48,22 @@ type SignalRow = {
   discord_dispatched_at: string | null;
 };
 
+const effConf = (s: { confidence: number; tech_adjusted_confidence: number | null }) =>
+  Math.round(s.tech_adjusted_confidence ?? s.confidence);
+
 function buildEmbed(s: SignalRow) {
   const dir = (s.direction ?? "").toUpperCase();
   const isCall = dir === "CALL";
   const arrow = isCall ? "▲" : "▼";
   const sideEmoji = isCall ? "🟢" : "🔴";
+  const score = effConf(s);
 
   let tierLabel: string;
   let color: number;
-  if (s.confidence >= 85) {
+  if (score >= 85) {
     tierLabel = "🔥 ELITE";
     color = isCall ? 0x16a34a : 0xdc2626;
-  } else if (s.confidence >= 70) {
+  } else if (score >= 70) {
     tierLabel = "⭐ TOP";
     color = isCall ? 0x22c55e : 0xef4444;
   } else {
@@ -120,7 +125,7 @@ function buildEmbed(s: SignalRow) {
     username: "Xalgoflow AI",
     embeds: [{
       author: { name: `Xalgoflow AI${s.source ? ` · ${s.source}` : ""}` },
-      title: `${sideEmoji} ${ticker} · ${dir} ${arrow} ${s.confidence}/100`,
+      title: `${sideEmoji} ${ticker} · ${dir} ${arrow} ${effConf(s)}/100`,
       url: signalUrl,
       description,
       color,
@@ -176,7 +181,7 @@ Deno.serve(async (req) => {
   if (signalId) {
     const { data, error } = await admin
       .from("signals")
-      .select("id, ticker, direction, confidence, risk_level, price, contract_symbol, strike, expiry, dte, premium, reasons, catalyst_summary, source, created_at, is_demo, discord_dispatched_at")
+      .select("id, ticker, direction, confidence, tech_adjusted_confidence, risk_level, price, contract_symbol, strike, expiry, dte, premium, reasons, catalyst_summary, source, created_at, is_demo, discord_dispatched_at")
       .eq("id", signalId)
       .maybeSingle();
     if (error) return json(500, { error: "db_error", message: error.message });
@@ -184,7 +189,7 @@ Deno.serve(async (req) => {
 
     if (!isTest) {
       if (data.discord_dispatched_at) return json(200, { ok: true, skipped: "already_dispatched" });
-      if (data.confidence < MIN_CONF) return json(200, { ok: true, skipped: "below_min_confidence" });
+      if (effConf(data as SignalRow) < MIN_CONF) return json(200, { ok: true, skipped: "below_min_confidence" });
     }
 
     const ok = await postOne(webhook, data as SignalRow);
@@ -199,17 +204,20 @@ Deno.serve(async (req) => {
     const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data, error } = await admin
       .from("signals")
-      .select("id, ticker, direction, confidence, risk_level, price, contract_symbol, strike, expiry, dte, premium, reasons, catalyst_summary, source, created_at, is_demo, discord_dispatched_at")
+      .select("id, ticker, direction, confidence, tech_adjusted_confidence, risk_level, price, contract_symbol, strike, expiry, dte, premium, reasons, catalyst_summary, source, created_at, is_demo, discord_dispatched_at")
       .gte("created_at", since)
-      .gte("confidence", MIN_CONF)
+      .or(`confidence.gte.${MIN_CONF},tech_adjusted_confidence.gte.${MIN_CONF}`)
       .is("discord_dispatched_at", null)
       .eq("is_demo", false)
       .order("created_at", { ascending: true })
-      .limit(20);
+      .limit(50);
     if (error) return json(500, { error: "db_error", message: error.message });
 
+    // Final gate: effective confidence must meet MIN_CONF (mirror dashboard cards).
+    const rows = ((data ?? []) as SignalRow[]).filter((s) => effConf(s) >= MIN_CONF);
+
     let sent = 0;
-    for (const s of (data ?? []) as SignalRow[]) {
+    for (const s of rows) {
       const ok = await postOne(webhook, s);
       if (ok) {
         sent++;
@@ -217,7 +225,7 @@ Deno.serve(async (req) => {
         await new Promise((r) => setTimeout(r, 350)); // gentle on Discord rate limits
       }
     }
-    return json(200, { ok: true, mode: "sweep", scanned: data?.length ?? 0, sent });
+    return json(200, { ok: true, mode: "sweep", scanned: rows.length, sent });
   }
 
   return json(400, { error: "bad_request", message: "Provide signal_id or sweep:true" });
