@@ -356,7 +356,7 @@ export default function Dashboard() {
       if (pa !== pb) return pa - pb;
       return b.rank.total - a.rank.total;
     });
-    return sorted;
+    return sorted.slice(0, 5);
   }, [signals, developing]);
 
 
