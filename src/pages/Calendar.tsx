@@ -60,18 +60,44 @@ export default function Calendar() {
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState<Date>(startOfMonth(new Date()));
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [allTimeTotal, setAllTimeTotal] = useState<number | null>(null);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await supabase
-        .from("paper_trades")
-        .select("id,status,closed_at,opened_at,current_pl,ticker,direction,option_type,strike,expiry,contracts,entry_premium,exit_premium,entry_price,exit_price")
-        .eq("user_id", user.id)
-        .in("status", ["WIN", "LOSS"])
-        .order("closed_at", { ascending: false })
-        .limit(2000);
-      setTrades((data ?? []) as Trade[]);
+      const [closedRes, openRes, acctRes] = await Promise.all([
+        supabase
+          .from("paper_trades")
+          .select("id,status,closed_at,opened_at,current_pl,ticker,direction,option_type,strike,expiry,contracts,entry_premium,exit_premium,entry_price,exit_price")
+          .eq("user_id", user.id)
+          .in("status", ["WIN", "LOSS"])
+          .order("closed_at", { ascending: false })
+          .limit(2000),
+        supabase
+          .from("paper_trades")
+          .select("current_value,entry_premium,entry_price,multiplier,contracts,total_cost")
+          .eq("user_id", user.id)
+          .eq("status", "OPEN"),
+        (supabase as any)
+          .from("paper_accounts")
+          .select("starting_balance,cash_balance")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+      ]);
+      setTrades((closedRes.data ?? []) as Trade[]);
+
+      const starting = Number(acctRes?.data?.starting_balance ?? 10000);
+      const cash = Number(acctRes?.data?.cash_balance ?? starting);
+      const openValue = ((openRes.data ?? []) as any[]).reduce((sum, t) => {
+        if (t.current_value != null) return sum + Number(t.current_value);
+        const mult = Number(t.multiplier ?? 100);
+        const qty = Number(t.contracts ?? 1);
+        const basis = t.total_cost != null
+          ? Number(t.total_cost)
+          : Number(t.entry_premium ?? t.entry_price ?? 0) * mult * qty;
+        return sum + basis;
+      }, 0);
+      setAllTimeTotal((cash + openValue) - starting);
     })();
   }, [user]);
 
@@ -120,9 +146,22 @@ export default function Calendar() {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center gap-2">
-        <CalendarDays className="h-5 w-5 text-primary" />
-        <h1 className="text-lg sm:text-xl font-semibold font-display tracking-tight">P&amp;L Calendar</h1>
+      <header className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-5 w-5 text-primary" />
+          <h1 className="text-lg sm:text-xl font-semibold font-display tracking-tight">P&amp;L Calendar</h1>
+        </div>
+        {allTimeTotal !== null && (
+          <div className="flex items-center gap-2 rounded-md border border-border bg-card-elevated/40 px-3 py-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Total P/L</span>
+            <span className={cn(
+              "ticker-mono text-sm font-semibold",
+              allTimeTotal > 0 ? "text-bull" : allTimeTotal < 0 ? "text-bear" : "text-muted-foreground",
+            )}>
+              {fmtMoneyFull(allTimeTotal)}
+            </span>
+          </div>
+        )}
       </header>
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
