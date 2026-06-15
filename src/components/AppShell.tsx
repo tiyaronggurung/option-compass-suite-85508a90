@@ -102,6 +102,7 @@ export default function AppShell() {
   useBrowserPush();
   useSignalNotifications();
   useSingleSession();
+  useMarketBell();
 
   const handleSignOut = async () => {
     await signOut();
