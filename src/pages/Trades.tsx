@@ -601,8 +601,8 @@ function PartialCloseDialog({
 
   const qty = Math.floor(Number(qtyStr));
   const validQty = Number.isFinite(qty) && qty >= 1 && qty < totalContracts;
-  const exitPremium = Number(exitPremiumStr);
-  const validExit = exitPremiumStr !== "" && !Number.isNaN(exitPremium) && exitPremium >= 0;
+  const exitPremium = livePremium != null ? livePremium : Number(exitPremiumStr);
+  const validExit = livePremium != null && Number.isFinite(exitPremium) && exitPremium >= 0;
   const valid = validQty && validExit;
 
   const sliceCost = entryPremium * multiplier * qty;
