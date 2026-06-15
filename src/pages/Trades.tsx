@@ -287,9 +287,10 @@ function CloseTradeDialog({
       const seedLive = t?.current_premium != null ? Number(t.current_premium) : null;
       setLivePremium(seedLive);
       setLiveMarkAt(t?.last_mark_at ?? null);
-      const seed = seedLive ?? entryPremium;
-      setExitPremiumStr(seed ? String(seed) : "");
+      setExitPremiumStr(seedLive != null ? String(seedLive) : "");
       setReason("manual_close");
+      // Always pull a fresh live mark on open — no manual price entry allowed.
+      useLiveMark();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade]);
@@ -323,8 +324,8 @@ function CloseTradeDialog({
 
   if (!trade) return null;
 
-  const exitPremium = Number(exitPremiumStr);
-  const validExit = exitPremiumStr !== "" && !Number.isNaN(exitPremium) && exitPremium >= 0;
+  const exitPremium = livePremium != null ? livePremium : Number(exitPremiumStr);
+  const validExit = livePremium != null && Number.isFinite(exitPremium) && exitPremium >= 0;
   const totalCost = entryPremium * multiplier * contracts;
   const exitValue = validExit ? exitPremium * multiplier * contracts : 0;
   const realizedPl = validExit ? (exitPremium - entryPremium) * multiplier * contracts : 0;
@@ -336,7 +337,7 @@ function CloseTradeDialog({
 
   async function submit() {
     if (!validExit) {
-      toast.error("Enter a valid exit premium");
+      toast.error("Waiting for live market mark — try Refresh mark");
       return;
     }
     setSubmitting(true);
@@ -393,26 +394,21 @@ function CloseTradeDialog({
                 disabled={fetchingMark}
               >
                 <RefreshCw className={cn("h-3 w-3 mr-1", fetchingMark && "animate-spin")} />
-                {fetchingMark ? "Fetching…" : "Use live mark"}
+                {fetchingMark ? "Fetching…" : "Refresh mark"}
               </Button>
             </div>
             <Input
               id="exit-premium"
-              type="number"
-              step="0.01"
-              min="0"
-              value={exitPremiumStr}
-              onChange={(e) => setExitPremiumStr(e.target.value)}
-              className="ticker-mono"
-              placeholder="e.g. 5.10"
+              type="text"
+              value={livePremium != null ? `$${fmtPrice(livePremium)}` : (fetchingMark ? "Fetching live mark…" : "No live mark")}
+              readOnly
+              disabled
+              className="ticker-mono bg-muted/40 cursor-not-allowed"
             />
             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>Realized P/L = (exit − entry) × 100 × contracts</span>
-              {livePremium != null && (
-                <span className="ticker-mono">
-                  Live mark ${fmtPrice(livePremium)}
-                  {liveMarkAt && <> · {timeAgo(liveMarkAt)}</>}
-                </span>
+              <span>Locked to live market mark — no manual price entry.</span>
+              {liveMarkAt && livePremium != null && (
+                <span className="ticker-mono">updated {timeAgo(liveMarkAt)}</span>
               )}
             </div>
           </div>
@@ -573,10 +569,12 @@ function PartialCloseDialog({
   useEffect(() => {
     if (trade) {
       setQtyStr("1");
-      const seed = t?.current_premium != null ? Number(t.current_premium) : entryPremium;
-      setLivePremium(t?.current_premium != null ? Number(t.current_premium) : null);
-      setExitPremiumStr(seed ? String(seed) : "");
+      const seed = t?.current_premium != null ? Number(t.current_premium) : null;
+      setLivePremium(seed);
+      setExitPremiumStr(seed != null ? String(seed) : "");
       setReason("manual_close");
+      // Always pull a fresh live mark on open — no manual price entry allowed.
+      useLiveMark();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade]);
@@ -603,8 +601,8 @@ function PartialCloseDialog({
 
   const qty = Math.floor(Number(qtyStr));
   const validQty = Number.isFinite(qty) && qty >= 1 && qty < totalContracts;
-  const exitPremium = Number(exitPremiumStr);
-  const validExit = exitPremiumStr !== "" && !Number.isNaN(exitPremium) && exitPremium >= 0;
+  const exitPremium = livePremium != null ? livePremium : Number(exitPremiumStr);
+  const validExit = livePremium != null && Number.isFinite(exitPremium) && exitPremium >= 0;
   const valid = validQty && validExit;
 
   const sliceCost = entryPremium * multiplier * qty;
@@ -727,19 +725,18 @@ function PartialCloseDialog({
               <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs"
                 onClick={useLiveMark} disabled={fetchingMark}>
                 <RefreshCw className={cn("h-3 w-3 mr-1", fetchingMark && "animate-spin")} />
-                {fetchingMark ? "Fetching…" : "Use live mark"}
+                {fetchingMark ? "Fetching…" : "Refresh mark"}
               </Button>
             </div>
             <Input
-              id="partial-exit" type="number" step="0.01" min="0"
-              value={exitPremiumStr} onChange={(e) => setExitPremiumStr(e.target.value)}
-              className="ticker-mono" placeholder="e.g. 5.10"
+              id="partial-exit" type="text"
+              value={livePremium != null ? `$${fmtPrice(livePremium)}` : (fetchingMark ? "Fetching live mark…" : "No live mark")}
+              readOnly disabled
+              className="ticker-mono bg-muted/40 cursor-not-allowed"
             />
-            {livePremium != null && (
-              <div className="text-[10px] text-muted-foreground ticker-mono">
-                Live mark ${fmtPrice(livePremium)}
-              </div>
-            )}
+            <div className="text-[10px] text-muted-foreground">
+              Locked to live market mark — no manual price entry.
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Close reason</Label>
