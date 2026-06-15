@@ -725,19 +725,18 @@ function PartialCloseDialog({
               <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs"
                 onClick={useLiveMark} disabled={fetchingMark}>
                 <RefreshCw className={cn("h-3 w-3 mr-1", fetchingMark && "animate-spin")} />
-                {fetchingMark ? "Fetching…" : "Use live mark"}
+                {fetchingMark ? "Fetching…" : "Refresh mark"}
               </Button>
             </div>
             <Input
-              id="partial-exit" type="number" step="0.01" min="0"
-              value={exitPremiumStr} onChange={(e) => setExitPremiumStr(e.target.value)}
-              className="ticker-mono" placeholder="e.g. 5.10"
+              id="partial-exit" type="text"
+              value={livePremium != null ? `$${fmtPrice(livePremium)}` : (fetchingMark ? "Fetching live mark…" : "No live mark")}
+              readOnly disabled
+              className="ticker-mono bg-muted/40 cursor-not-allowed"
             />
-            {livePremium != null && (
-              <div className="text-[10px] text-muted-foreground ticker-mono">
-                Live mark ${fmtPrice(livePremium)}
-              </div>
-            )}
+            <div className="text-[10px] text-muted-foreground">
+              Locked to live market mark — no manual price entry.
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Close reason</Label>
