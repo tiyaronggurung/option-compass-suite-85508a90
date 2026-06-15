@@ -994,7 +994,8 @@ Deno.serve(async (req) => {
       // Fire-and-forget Discord dispatch for any signal that will appear as a
       // card on the dashboard (Top or Developing strip). Dedup is handled by
       // dispatch-signal-discord via signals.discord_dispatched_at.
-      if (finalScore >= 60 && Deno.env.get("DISCORD_SIGNALS_WEBHOOK_URL")) {
+      const effScore = Math.round(techAdjConf ?? finalScore);
+      if (effScore >= 60 && Deno.env.get("DISCORD_SIGNALS_WEBHOOK_URL")) {
         try {
           const { data: inserted } = await admin
             .from("signals")
