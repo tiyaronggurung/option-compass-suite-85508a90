@@ -7,11 +7,10 @@ export async function invokeUpdatePaperMarks(body: Record<string, unknown> = {})
     return { data: null, error: new Error("Not authenticated") };
   }
   const res = await supabase.functions.invoke("update-paper-marks", { body });
-  // Server-side 401 (e.g. expired token that still looked valid client-side): sign out cleanly.
+  // Server-side 401 during logout race or expired token: silent no-op.
   const msg = String(res.error?.message ?? "");
   if (res.error && /401|Unauthorized/i.test(msg)) {
-    await supabase.auth.signOut();
-    return { data: null, error: new Error("Session expired. Please sign in again.") };
+    return { data: null, error: null };
   }
   return res;
 }
