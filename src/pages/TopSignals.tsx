@@ -83,15 +83,20 @@ export default function TopSignals() {
     if (!user) return;
     let cancel = false;
     (async () => {
-      const [{ data: s }, { data: t }, { data: w }, { data: rs }, { data: pa }] = await Promise.all([
-        supabase.from("signals").select("*").order("created_at", { ascending: false }).limit(200),
+      const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: rs }, { data: pa }] = await Promise.all([
+        supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(200),
+        supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 60).order("created_at", { ascending: false }).limit(60),
         supabase.from("paper_trades").select("*").eq("user_id", user.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user.id),
         supabase.from("risk_settings").select("*").eq("user_id", user.id).maybeSingle(),
         supabase.from("paper_accounts").select("cash_balance").eq("user_id", user.id).maybeSingle(),
       ]);
       if (cancel) return;
-      setSignals(s ?? []);
+      // Merge visible signals with hidden-rejected pool (same as Dashboard hero), dedupe by id.
+      const pool = new Map<string, Signal>();
+      for (const x of (s ?? []) as Signal[]) pool.set(x.id, x);
+      for (const x of (dev ?? []) as Signal[]) if (!pool.has(x.id)) pool.set(x.id, x);
+      setSignals(Array.from(pool.values()));
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
       setRisk(rs as RiskSettingsLike);
