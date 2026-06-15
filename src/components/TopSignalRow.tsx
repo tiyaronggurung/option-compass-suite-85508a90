@@ -47,7 +47,7 @@ export function TopSignalRow({ rank, signal, breakdown, onApprove, onReject, onD
 
   const isHot = (breakdown?.total ?? 0) >= 70;
   return (
-    <div className={cn("glass-card p-3 md:p-4 ring-1 ring-border hover:ring-primary/40 transition", isHot && "animate-buzz ring-primary/60")}>
+    <div className={cn("glass-card p-3 md:p-4 ring-1 ring-border hover:ring-primary/40 transition", isHot && "animate-buzz-once ring-primary/60")}>
 
       <div className="flex items-start gap-3 md:gap-4">
         <div className="w-8 text-center text-lg font-semibold text-muted-foreground ticker-mono shrink-0 pt-1">
