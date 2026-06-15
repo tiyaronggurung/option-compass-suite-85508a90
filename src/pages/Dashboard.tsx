@@ -328,8 +328,15 @@ export default function Dashboard() {
   // Top 5 ranked signals for the dashboard hero strip.
   const dashboardTop = useMemo(() => {
     if (!signals) return [];
-    const base = signals.filter((s) => {
-      if (s.hidden || s.is_demo || s.status !== "LIVE" || isExpired(s)) return false;
+    // Merge visible signals + hidden/rejected developing pool, dedupe by id,
+    // then surface ANY signal with effective confidence >= 70.
+    const pool = new Map<string, Signal>();
+    for (const s of signals) pool.set(s.id, s);
+    for (const s of developing ?? []) if (!pool.has(s.id)) pool.set(s.id, s);
+    const base = Array.from(pool.values()).filter((s) => {
+      if (s.is_demo) return false;
+      if (s.status !== "LIVE") return false;
+      if (isExpired(s)) return false;
       const eff = effectiveConfidence(s as any) ?? 0;
       return eff >= 70;
     });
@@ -349,8 +356,9 @@ export default function Dashboard() {
       if (pa !== pb) return pa - pb;
       return b.rank.total - a.rank.total;
     });
-    return sorted.slice(0, 20);
-  }, [signals]);
+    return sorted;
+  }, [signals, developing]);
+
 
 
   // Fallback: 1-click approve (used when option chain is unavailable).
