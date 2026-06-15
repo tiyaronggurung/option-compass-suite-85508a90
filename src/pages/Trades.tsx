@@ -394,26 +394,21 @@ function CloseTradeDialog({
                 disabled={fetchingMark}
               >
                 <RefreshCw className={cn("h-3 w-3 mr-1", fetchingMark && "animate-spin")} />
-                {fetchingMark ? "Fetching…" : "Use live mark"}
+                {fetchingMark ? "Fetching…" : "Refresh mark"}
               </Button>
             </div>
             <Input
               id="exit-premium"
-              type="number"
-              step="0.01"
-              min="0"
-              value={exitPremiumStr}
-              onChange={(e) => setExitPremiumStr(e.target.value)}
-              className="ticker-mono"
-              placeholder="e.g. 5.10"
+              type="text"
+              value={livePremium != null ? `$${fmtPrice(livePremium)}` : (fetchingMark ? "Fetching live mark…" : "No live mark")}
+              readOnly
+              disabled
+              className="ticker-mono bg-muted/40 cursor-not-allowed"
             />
             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>Realized P/L = (exit − entry) × 100 × contracts</span>
-              {livePremium != null && (
-                <span className="ticker-mono">
-                  Live mark ${fmtPrice(livePremium)}
-                  {liveMarkAt && <> · {timeAgo(liveMarkAt)}</>}
-                </span>
+              <span>Locked to live market mark — no manual price entry.</span>
+              {liveMarkAt && livePremium != null && (
+                <span className="ticker-mono">updated {timeAgo(liveMarkAt)}</span>
               )}
             </div>
           </div>
