@@ -146,9 +146,22 @@ export default function Calendar() {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center gap-2">
-        <CalendarDays className="h-5 w-5 text-primary" />
-        <h1 className="text-lg sm:text-xl font-semibold font-display tracking-tight">P&amp;L Calendar</h1>
+      <header className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-5 w-5 text-primary" />
+          <h1 className="text-lg sm:text-xl font-semibold font-display tracking-tight">P&amp;L Calendar</h1>
+        </div>
+        {allTimeTotal !== null && (
+          <div className="flex items-center gap-2 rounded-md border border-border bg-card-elevated/40 px-3 py-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Total P/L</span>
+            <span className={cn(
+              "ticker-mono text-sm font-semibold",
+              allTimeTotal > 0 ? "text-bull" : allTimeTotal < 0 ? "text-bear" : "text-muted-foreground",
+            )}>
+              {fmtMoneyFull(allTimeTotal)}
+            </span>
+          </div>
+        )}
       </header>
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
