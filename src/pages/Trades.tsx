@@ -324,8 +324,8 @@ function CloseTradeDialog({
 
   if (!trade) return null;
 
-  const exitPremium = Number(exitPremiumStr);
-  const validExit = exitPremiumStr !== "" && !Number.isNaN(exitPremium) && exitPremium >= 0;
+  const exitPremium = livePremium != null ? livePremium : Number(exitPremiumStr);
+  const validExit = livePremium != null && Number.isFinite(exitPremium) && exitPremium >= 0;
   const totalCost = entryPremium * multiplier * contracts;
   const exitValue = validExit ? exitPremium * multiplier * contracts : 0;
   const realizedPl = validExit ? (exitPremium - entryPremium) * multiplier * contracts : 0;
@@ -337,7 +337,7 @@ function CloseTradeDialog({
 
   async function submit() {
     if (!validExit) {
-      toast.error("Enter a valid exit premium");
+      toast.error("Waiting for live market mark — try Refresh mark");
       return;
     }
     setSubmitting(true);
