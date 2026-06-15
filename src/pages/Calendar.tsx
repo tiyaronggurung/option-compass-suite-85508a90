@@ -268,8 +268,13 @@ function MonthGrid({ cursor, byDay, onPickDay }: { cursor: Date; byDay: Map<stri
         <div className="text-xs text-muted-foreground">
           {monthDays} trading day{monthDays === 1 ? "" : "s"}
         </div>
-        <div className={cn("ticker-mono text-sm font-semibold", monthTotal > 0 ? "text-bull" : monthTotal < 0 ? "text-bear" : "text-muted-foreground")}>
-          {fmtMoneyFull(monthTotal)}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {MONTHS[cursor.getMonth()].slice(0, 3)} {cursor.getFullYear()} realized
+          </span>
+          <span className={cn("ticker-mono text-sm font-semibold", monthTotal > 0 ? "text-bull" : monthTotal < 0 ? "text-bear" : "text-muted-foreground")}>
+            {fmtMoneyFull(monthTotal)}
+          </span>
         </div>
       </div>
 
