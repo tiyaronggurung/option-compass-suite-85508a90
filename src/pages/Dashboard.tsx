@@ -157,9 +157,10 @@ export default function Dashboard() {
       ]);
       if (cancel) return;
       setSignals(s ?? []);
-      // Merge visible signals with confidence 60-69 into developing list.
-      const visibleDeveloping = (s ?? []).filter((x: any) => !x.is_demo && (x.confidence ?? 0) >= 60 && (x.confidence ?? 0) < 70);
-      setDeveloping([...(dev ?? []), ...visibleDeveloping]);
+      // Merge visible signals with effective score 60-69 into developing list.
+      const filteredDev = (dev ?? []).filter((x: any) => (effectiveConfidence(x) ?? 0) >= 60);
+      const visibleDeveloping = (s ?? []).filter((x: any) => !x.is_demo && (effectiveConfidence(x) ?? 0) >= 60 && (effectiveConfidence(x) ?? 0) < 70);
+      setDeveloping([...filteredDev, ...visibleDeveloping]);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
       setDismissedIds(new Set((actions ?? []).map((a: any) => a.signal_id)));
@@ -174,16 +175,16 @@ export default function Dashboard() {
       .channel("signals-stream")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "signals" }, (payload) => {
         const ns = payload.new as Signal;
-        const conf = ns.confidence ?? 0;
+        const effConf = effectiveConfidence(ns as any) ?? 0;
         if (ns.hidden) {
-          if (ns.tier === "rejected" && conf >= 60) {
+          if (ns.tier === "rejected" && effConf >= 60) {
             setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
           }
           return;
         }
         // Visible signals: 70+ go to top grid, 60-69 surface in developing, <60 dropped.
-        if (conf < 60) return;
-        if (conf < 70) {
+        if (effConf < 60) return;
+        if (effConf < 70) {
           setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
           return;
         }
@@ -280,7 +281,7 @@ export default function Dashboard() {
     const now = Date.now();
     const cutoff = now - 24 * 60 * 60_000;
     const base = developing.filter((s) => {
-      const eff = s.confidence ?? 0;
+      const eff = effectiveConfidence(s as any) ?? 0;
       if (eff < Math.max(60, minDevelopingScore)) return false;
       if (eff > 69) return false;
       const t = new Date(s.created_at).getTime();
