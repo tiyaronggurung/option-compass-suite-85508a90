@@ -203,7 +203,6 @@ Deno.serve(async (req) => {
       .gte("created_at", since)
       .gte("confidence", MIN_CONF)
       .is("discord_dispatched_at", null)
-      .eq("hidden", false)
       .neq("tier", "rejected")
       .eq("is_demo", false)
       .order("created_at", { ascending: true })
