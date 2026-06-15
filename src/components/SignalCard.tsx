@@ -53,7 +53,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const effConf = effectiveConfidence(signal as any) ?? 0;
   const isHot = effConf >= 70;
   return (
-    <div className={cn("glass-card p-3 sm:p-4 ring-1 transition hover:ring-primary/40", ring, isHot && "animate-buzz ring-primary/60")}>
+    <div className={cn("glass-card p-3 sm:p-4 ring-1 transition hover:ring-primary/40", ring, isHot && "animate-buzz-once ring-primary/60")}>
 
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5 min-w-0 flex-1">
