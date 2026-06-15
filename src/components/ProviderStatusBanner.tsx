@@ -65,11 +65,10 @@ export function ProviderStatusBanner({ signals }: { signals: any[] | null }) {
     return [];
   }, [signals]);
 
-  if (statuses.length === 0) return null;
-
   // Inject Alpaca as a synthetic entry — it's always used by the scanner trend
   // component but isn't currently emitted into provider_status.
   const enriched: ProviderStatus[] = useMemo(() => {
+    if (statuses.length === 0) return [];
     const hasAlpaca = statuses.some((p) => p.provider === "alpaca");
     if (hasAlpaca) return statuses;
     return [
@@ -82,6 +81,8 @@ export function ProviderStatusBanner({ signals }: { signals: any[] | null }) {
       ...statuses,
     ];
   }, [statuses]);
+
+  if (statuses.length === 0) return null;
 
   const nonReserved = enriched.filter((p) => p.state !== "reserved");
   const reserved = enriched.filter((p) => p.state === "reserved");
