@@ -112,7 +112,8 @@ export default function TopSignals() {
     if (!signals) return [];
     const base = signals.filter((s) => {
       if (!includeDebug) {
-        if (s.hidden) return false;
+        // NOTE: do NOT exclude `hidden` here — the fetch above already merges
+        // the hidden+rejected (confidence>=60) pool the Dashboard hero uses.
         if (s.is_demo) return false;
         if (s.status !== "LIVE") return false;
         if (isExpired(s)) return false;
