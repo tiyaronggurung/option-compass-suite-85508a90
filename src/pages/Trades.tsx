@@ -287,9 +287,10 @@ function CloseTradeDialog({
       const seedLive = t?.current_premium != null ? Number(t.current_premium) : null;
       setLivePremium(seedLive);
       setLiveMarkAt(t?.last_mark_at ?? null);
-      const seed = seedLive ?? entryPremium;
-      setExitPremiumStr(seed ? String(seed) : "");
+      setExitPremiumStr(seedLive != null ? String(seedLive) : "");
       setReason("manual_close");
+      // Always pull a fresh live mark on open — no manual price entry allowed.
+      useLiveMark();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade]);
