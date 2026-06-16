@@ -70,7 +70,7 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
       const [accRes, tradesRes, closedRes] = await Promise.all([
         (supabase as any).from("paper_accounts").select("*").eq("user_id", user!.id).maybeSingle(),
         supabase.from("paper_trades")
-          .select("id,status,current_value,entry_premium,entry_price,multiplier,contracts,total_cost")
+          .select("id,status,current_value,current_pl,entry_premium,entry_price,multiplier,contracts,total_cost")
           .eq("user_id", user!.id).eq("status", "OPEN"),
         supabase.from("paper_trades")
           .select("current_pl,closed_at,status")
