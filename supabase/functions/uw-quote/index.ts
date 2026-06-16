@@ -2,7 +2,7 @@
 // POST { tickers: string[] } -> { quotes: { [ticker]: { price, ts } } }
 // Same input/output shape as before — frontend (liveQuotesStore, useLiveQuote) unchanged.
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const TRADIER_KEY = Deno.env.get("TRADIER_API_KEY") ?? "";
 const TRADIER_BASE = "https://api.tradier.com/v1";
@@ -123,8 +123,9 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } },
     );
-    const { data: ud } = await authClient.auth.getUser();
-    if (!ud?.user) {
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: cd, error: cErr } = await authClient.auth.getClaims(token);
+    if (cErr || !cd?.claims?.sub) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
