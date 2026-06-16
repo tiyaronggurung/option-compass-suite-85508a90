@@ -59,6 +59,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const showLifecycleBadge = lifecycleState !== "active";
 
   const effConf = effectiveConfidence(signal as any) ?? 0;
+  if (effConf < 65) return null;
   const isHot = effConf >= 70;
   return (
     <div className={cn("glass-card p-3 sm:p-4 ring-1 transition hover:ring-primary/40", ring, isHot && "animate-buzz-once ring-primary/60")}>

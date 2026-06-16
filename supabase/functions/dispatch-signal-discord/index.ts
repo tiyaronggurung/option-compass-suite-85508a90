@@ -18,7 +18,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const MIN_CONF = 60;
+const MIN_CONF = 65;
 const APP_BASE = "https://xalgoflow.lovable.app";
 
 const json = (status: number, body: unknown) =>
