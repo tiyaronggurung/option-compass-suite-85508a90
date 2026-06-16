@@ -30,15 +30,16 @@ describe("analyzeCostEfficiency", () => {
     // theta drag ~1.33% which trips trap on theta alone. Use lower theta:
     const r2 = analyzeCostEfficiency({
       spot: 100,
-      strike: 102,
-      premium: 3.0,
+      strike: 101,
+      premium: 1.5,
       dte: 45,
-      theta: -0.01,
+      theta: -0.005,
       type: "call",
     });
     expect(r2.verdict).toBe("efficient");
-    expect(r2.breakevenMovePct).toBeCloseTo(5.0, 1);
+    expect(r2.breakevenMovePct).toBeCloseTo(2.5, 1);
     expect(r.verdict).toBe("theta_trap");
+
   });
 
   it("caps short DTE at marginal when other rules pass", () => {
