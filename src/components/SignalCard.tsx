@@ -281,3 +281,50 @@ function TechStatsLine({ signal }: { signal: Signal }) {
     </div>
   );
 }
+
+function CostEfficiencyBadge({ signal }: { signal: Signal }) {
+  const strike = signal.strike != null ? Number(signal.strike) : null;
+  const premium = signal.premium != null ? Number(signal.premium) : null;
+  const spot = Number((signal as any).price);
+  const dte = signal.dte;
+  const cm: any = (signal as any).technical_metrics?.contract ?? {};
+  const theta = typeof cm.theta === "number" ? cm.theta : null;
+  if (
+    strike == null || premium == null || !Number.isFinite(spot) || spot <= 0 ||
+    !Number.isFinite(premium) || premium <= 0 || dte == null
+  ) {
+    return null;
+  }
+  const type: "call" | "put" = signal.direction === "CALL" ? "call" : "put";
+  const r = analyzeCostEfficiency({ premium, strike, spot, dte, theta, type });
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded border px-1.5 py-0 text-[10px] font-semibold cursor-help",
+              COST_EFFICIENCY_CLASS[r.verdict],
+            )}
+            aria-label={`Cost efficiency: ${COST_EFFICIENCY_LABEL[r.verdict]}`}
+          >
+            <span>{COST_EFFICIENCY_ICON[r.verdict]}</span>
+            <span>{COST_EFFICIENCY_LABEL[r.verdict]}</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-xs">
+          <div className="font-semibold mb-1">Cost efficiency · {COST_EFFICIENCY_LABEL[r.verdict]}</div>
+          <ul className="space-y-0.5 text-muted-foreground">
+            {r.thetaDragPct != null && <li>Theta drag: {r.thetaDragPct.toFixed(2)}%/day</li>}
+            {r.breakevenMovePct != null && <li>Breakeven move: {r.breakevenMovePct.toFixed(2)}%</li>}
+            {r.premiumPctOfEquity != null && <li>Premium % of equity: {r.premiumPctOfEquity.toFixed(1)}%</li>}
+            {r.reasons.map((reason, i) => (
+              <li key={i} className="text-foreground/80">· {reason}</li>
+            ))}
+          </ul>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
