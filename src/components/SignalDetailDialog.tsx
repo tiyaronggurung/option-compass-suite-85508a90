@@ -15,6 +15,13 @@ import type { ConfirmationMatrix as MatrixT } from "@/lib/confirmations";
 import { TechnicalTrendCard } from "@/components/TechnicalTrendCard";
 import { effectiveConfidence, alignment } from "@/lib/techAdjust";
 import { Sparkles } from "lucide-react";
+import {
+  analyzeCostEfficiency,
+  COST_EFFICIENCY_CLASS,
+  COST_EFFICIENCY_ICON,
+  COST_EFFICIENCY_LABEL,
+} from "@/lib/costEfficiency";
+
 
 interface Props {
   signal: Signal | null;
