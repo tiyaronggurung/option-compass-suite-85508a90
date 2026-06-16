@@ -1999,6 +1999,10 @@ export type Database = {
           daily_cap: number
         }[]
       }
+      credit_paper_cash_for_partial: {
+        Args: { p_amount: number }
+        Returns: undefined
+      }
       get_leaderboard: {
         Args: { _window?: string }
         Returns: {
