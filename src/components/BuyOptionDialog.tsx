@@ -23,6 +23,14 @@ import { buyOptionAsPaperTrade, type SelectedContract, type BuyOptionReceipt } f
 import { buildProjection, breakeven, daysToExpiry } from "@/lib/blackScholes";
 import { computeEntryQuality } from "@/lib/entryQuality";
 import { getUsMarketStatus } from "@/lib/marketHours";
+import {
+  analyzeCostEfficiency,
+  COST_EFFICIENCY_CLASS,
+  COST_EFFICIENCY_ICON,
+  COST_EFFICIENCY_LABEL,
+} from "@/lib/costEfficiency";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 // Per-signal last selection memory (side/expiry/strike/qty), kept in localStorage.
 type SavedSelection = { side: "call" | "put"; expiry: string; strike: number | null; qty: number };
@@ -533,7 +541,45 @@ export function BuyOptionDialog(props: Props) {
                             isSelected ? "border-primary text-primary" : "border-border"
                           )}>{fmtMoney(r.ask)}</span>
                         </div>
-                        <div className="text-right flex items-center justify-end">
+                        <div className="text-right flex items-center justify-end gap-1">
+                          {(() => {
+                            const ceDte = daysToExpiry(r.expiry);
+                            const ce = analyzeCostEfficiency({
+                              premium: mid,
+                              strike: r.strike,
+                              spot,
+                              dte: ceDte,
+                              theta: r.theta ?? null,
+                              type: r.type,
+                            });
+                            return (
+                              <TooltipProvider delayDuration={150}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      className={cn(
+                                        "inline-flex h-5 w-5 items-center justify-center rounded border text-[11px] font-bold cursor-help",
+                                        COST_EFFICIENCY_CLASS[ce.verdict],
+                                      )}
+                                      aria-label={`Cost efficiency: ${COST_EFFICIENCY_LABEL[ce.verdict]}`}
+                                    >
+                                      {COST_EFFICIENCY_ICON[ce.verdict]}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs text-xs">
+                                    <div className="font-semibold mb-1">Cost efficiency · {COST_EFFICIENCY_LABEL[ce.verdict]}</div>
+                                    <ul className="space-y-0.5 text-muted-foreground">
+                                      {ce.thetaDragPct != null && <li>Theta drag: {ce.thetaDragPct.toFixed(2)}%/day</li>}
+                                      {ce.breakevenMovePct != null && <li>Breakeven move: {ce.breakevenMovePct.toFixed(2)}%</li>}
+                                      {ce.reasons.map((reason, i) => (
+                                        <li key={i} className="text-foreground/80">· {reason}</li>
+                                      ))}
+                                    </ul>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })()}
                           {(() => {
                             const q = computeEntryQuality(r);
                             const color =
@@ -548,6 +594,7 @@ export function BuyOptionDialog(props: Props) {
                             );
                           })()}
                         </div>
+
                       </button>
                     </div>
                   );

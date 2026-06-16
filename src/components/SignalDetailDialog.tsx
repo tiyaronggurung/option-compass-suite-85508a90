@@ -15,6 +15,13 @@ import type { ConfirmationMatrix as MatrixT } from "@/lib/confirmations";
 import { TechnicalTrendCard } from "@/components/TechnicalTrendCard";
 import { effectiveConfidence, alignment } from "@/lib/techAdjust";
 import { Sparkles } from "lucide-react";
+import {
+  analyzeCostEfficiency,
+  COST_EFFICIENCY_CLASS,
+  COST_EFFICIENCY_ICON,
+  COST_EFFICIENCY_LABEL,
+} from "@/lib/costEfficiency";
+
 
 interface Props {
   signal: Signal | null;
@@ -183,11 +190,47 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
                 {contractMeta?.reason && (
                   <div className="text-[11px] text-muted-foreground pt-1">{contractMeta.reason}</div>
                 )}
+                {(() => {
+                  const strike = s.strike != null ? Number(s.strike) : null;
+                  const premium = contractMeta?.mid ?? (s.premium != null ? Number(s.premium) : null);
+                  const spot = Number((s as any).price);
+                  const dte = s.dte;
+                  const theta = (s.technical_metrics as any)?.contract?.theta ?? null;
+                  if (
+                    strike == null || premium == null || !Number.isFinite(spot) || spot <= 0 ||
+                    !Number.isFinite(premium) || premium <= 0 || dte == null
+                  ) return null;
+                  const type: "call" | "put" = s.direction === "CALL" ? "call" : "put";
+                  const r = analyzeCostEfficiency({ premium, strike, spot, dte, theta, type });
+                  return (
+                    <div className="pt-2 mt-1 border-t border-border/50">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-muted-foreground">Cost efficiency</span>
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded border px-1.5 py-0 text-[11px] font-semibold",
+                            COST_EFFICIENCY_CLASS[r.verdict],
+                          )}
+                        >
+                          {COST_EFFICIENCY_ICON[r.verdict]} {COST_EFFICIENCY_LABEL[r.verdict]}
+                        </span>
+                      </div>
+                      <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                        {r.thetaDragPct != null && <li>Theta drag: {r.thetaDragPct.toFixed(2)}%/day</li>}
+                        {r.breakevenMovePct != null && <li>Breakeven move: {r.breakevenMovePct.toFixed(2)}%</li>}
+                        {r.reasons.map((reason, i) => (
+                          <li key={i}>· {reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <div className="text-xs text-muted-foreground">No contract match yet.</div>
             )}
           </div>
+
 
           <InstitutionalBreakdown sc={(s as any).score_components} tier={(s as any).tier} />
 
