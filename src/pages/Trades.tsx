@@ -638,6 +638,23 @@ function PartialCloseDialog({
     } as any).eq("id", trade.id);
     if (parentErr) { setSubmitting(false); return toast.error(`Parent update failed: ${parentErr.message}`); }
 
+    // 1b) Refund cash for the slice we removed from the parent's cost basis.
+    //     The child insert below will re-debit this same slice cost via the trigger,
+    //     so net cash impact of steps 1+2 is zero (cash only moves on the close in step 3).
+    //     Without this refund, every partial close under-credits cash by sliceCost.
+    const { error: refundErr } = await (supabase as any).rpc("credit_paper_cash_for_partial", {
+      p_amount: Number(sliceCost.toFixed(2)),
+    });
+    if (refundErr) {
+      // Roll back parent reduction to keep state consistent.
+      await supabase.from("paper_trades").update({
+        contracts: totalContracts,
+        total_cost: Number((entryPremium * multiplier * totalContracts).toFixed(2)),
+      } as any).eq("id", trade.id);
+      setSubmitting(false);
+      return toast.error(`Cash refund failed: ${refundErr.message}`);
+    }
+
     // 2) Insert child OPEN row (clones option contract identity from parent).
     //    Trigger debits cash for the slice cost.
     const { data: child, error: insErr } = await supabase.from("paper_trades").insert({
