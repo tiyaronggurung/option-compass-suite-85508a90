@@ -95,7 +95,7 @@ export default function Dashboard() {
   const [buyOpen, setBuyOpen] = useState(false);
   const [buySignal, setBuySignal] = useState<Signal | null>(null);
   const [cashBalance, setCashBalance] = useState<number>(0);
-  const [minDevelopingScore, setMinDevelopingScore] = useState(60);
+  const [minDevelopingScore, setMinDevelopingScore] = useState(65);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   // Deep-link target from notifications bell: /app?signal=<id>
@@ -146,7 +146,7 @@ export default function Dashboard() {
     (async () => {
       const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }, { data: pa }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
-        supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 60).order("created_at", { ascending: false }).limit(30),
+        supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 65).order("created_at", { ascending: false }).limit(30),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
@@ -157,9 +157,9 @@ export default function Dashboard() {
       ]);
       if (cancel) return;
       setSignals(s ?? []);
-      // Merge visible signals with effective score 60-69 into developing list.
-      const filteredDev = (dev ?? []).filter((x: any) => (effectiveConfidence(x) ?? 0) >= 60);
-      const visibleDeveloping = (s ?? []).filter((x: any) => !x.is_demo && (effectiveConfidence(x) ?? 0) >= 60 && (effectiveConfidence(x) ?? 0) < 70);
+      // Merge visible signals with effective score 65-69 into developing list.
+      const filteredDev = (dev ?? []).filter((x: any) => (effectiveConfidence(x) ?? 0) >= 65);
+      const visibleDeveloping = (s ?? []).filter((x: any) => !x.is_demo && (effectiveConfidence(x) ?? 0) >= 65 && (effectiveConfidence(x) ?? 0) < 70);
       setDeveloping([...filteredDev, ...visibleDeveloping]);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
@@ -177,13 +177,13 @@ export default function Dashboard() {
         const ns = payload.new as Signal;
         const effConf = effectiveConfidence(ns as any) ?? 0;
         if (ns.hidden) {
-          if (ns.tier === "rejected" && effConf >= 60) {
+          if (ns.tier === "rejected" && effConf >= 65) {
             setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
           }
           return;
         }
-        // Visible signals: 70+ go to top grid, 60-69 surface in developing, <60 dropped.
-        if (effConf < 60) return;
+        // Visible signals: 70+ go to top grid, 65-69 surface in developing, <65 dropped.
+        if (effConf < 65) return;
         if (effConf < 70) {
           setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
           return;
@@ -282,7 +282,7 @@ export default function Dashboard() {
     const cutoff = now - 24 * 60 * 60_000;
     const base = developing.filter((s) => {
       const eff = effectiveConfidence(s as any) ?? 0;
-      if (eff < Math.max(60, minDevelopingScore)) return false;
+      if (eff < Math.max(65, minDevelopingScore)) return false;
       if (eff > 69) return false;
       const t = new Date(s.created_at).getTime();
       if (t < cutoff) return false;
@@ -662,7 +662,7 @@ export default function Dashboard() {
                 Developing Signals
               </h2>
               <p className="text-xs text-muted-foreground">
-                Below Threshold — Not Tradeable Yet · score 60–69 · last 24h only
+                Below Threshold — Not Tradeable Yet · score 65–69 · last 24h only
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -670,14 +670,14 @@ export default function Dashboard() {
                 <span className="text-xs text-muted-foreground">Min score</span>
                 <input
                   type="range"
-                  min={60}
+                  min={65}
                   max={69}
                   step={1}
-                  value={Math.max(60, minDevelopingScore)}
+                  value={Math.max(65, minDevelopingScore)}
                   onChange={(e) => setMinDevelopingScore(Number(e.target.value))}
                   className="w-24 accent-primary"
                 />
-                <span className="text-xs font-medium tabular-nums w-5">{Math.max(60, minDevelopingScore)}</span>
+                <span className="text-xs font-medium tabular-nums w-5">{Math.max(65, minDevelopingScore)}</span>
               </div>
               <Button
                 size="sm"
