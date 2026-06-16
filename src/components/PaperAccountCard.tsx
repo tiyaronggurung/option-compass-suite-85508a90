@@ -23,6 +23,7 @@ type OpenTradeMark = {
   id: string;
   status: string;
   current_value: number | null;
+  current_pl: number | null;
   entry_premium: number | null;
   entry_price: number | null;
   multiplier: number | null;
