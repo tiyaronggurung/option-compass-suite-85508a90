@@ -16,7 +16,7 @@
 // Auth: admin user OR service-role (scheduled). Never places orders. Never auto-closes.
 // Market-hours gated to America/New_York, Mon-Fri, 09:30-16:00 for cron triggers.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -97,14 +97,14 @@ Deno.serve(async (req) => {
     let requestUserId: string | null = null;
     let isAdminUser = false;
     if (!isServiceRole && trigger !== "cron") {
-      if (!authHeader) return json({ error: "Unauthorized" }, 401);
+      if (!authHeader.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
       const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
-      const { data: ud } = await userClient.auth.getUser();
-      const user = ud?.user;
-      if (!user) return json({ error: "Unauthorized" }, 401);
-      requestUserId = user.id;
+      const { data: cd, error: cErr } = await userClient.auth.getClaims(bearer);
+      const sub = cd?.claims?.sub;
+      if (cErr || !sub) return json({ error: "Unauthorized" }, 401);
+      requestUserId = sub;
       const { data: roleRow } = await admin
-        .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
+        .from("user_roles").select("role").eq("user_id", sub).eq("role", "admin").maybeSingle();
       isAdminUser = !!roleRow;
     }
 
