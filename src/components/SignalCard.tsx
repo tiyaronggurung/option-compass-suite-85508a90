@@ -16,6 +16,14 @@ import { classifySignalSource } from "@/lib/signalSource";
 import { useLiveQuote } from "@/hooks/useLiveQuote";
 import { SignalRadar } from "@/components/SignalRadar";
 import { effectiveConfidence } from "@/lib/techAdjust";
+import {
+  analyzeCostEfficiency,
+  COST_EFFICIENCY_CLASS,
+  COST_EFFICIENCY_ICON,
+  COST_EFFICIENCY_LABEL,
+} from "@/lib/costEfficiency";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 
 type Props = {
