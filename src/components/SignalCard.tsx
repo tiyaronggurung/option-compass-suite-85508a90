@@ -158,6 +158,8 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
               ) : (
                 <span>· No contract yet</span>
               )}
+              <CostEfficiencyBadge signal={signal} />
+
             </div>
           </div>
         </div>
