@@ -23,6 +23,14 @@ import { buyOptionAsPaperTrade, type SelectedContract, type BuyOptionReceipt } f
 import { buildProjection, breakeven, daysToExpiry } from "@/lib/blackScholes";
 import { computeEntryQuality } from "@/lib/entryQuality";
 import { getUsMarketStatus } from "@/lib/marketHours";
+import {
+  analyzeCostEfficiency,
+  COST_EFFICIENCY_CLASS,
+  COST_EFFICIENCY_ICON,
+  COST_EFFICIENCY_LABEL,
+} from "@/lib/costEfficiency";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 // Per-signal last selection memory (side/expiry/strike/qty), kept in localStorage.
 type SavedSelection = { side: "call" | "put"; expiry: string; strike: number | null; qty: number };
