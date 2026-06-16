@@ -130,8 +130,12 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
   const equity = cash + openValue;
   const totalPL = equity - startingBalance;
   const totalPLPct = startingBalance > 0 ? (totalPL / startingBalance) * 100 : 0;
-  const dayPL = equity - dayStart;
-  const dayPLPct = dayStart > 0 ? (dayPL / dayStart) * 100 : 0;
+  // Day P/L = realized today (trades closed today) + unrealized P/L on still-open positions.
+  // This matches user expectation that "today" sums today's realized wins/losses, even when
+  // a position was opened the prior session and closed today.
+  const openUnrealized = openTrades.reduce((s, t) => s + Number(t.current_pl ?? 0), 0);
+  const dayPL = todayRealized + openUnrealized;
+  const dayPLPct = startingBalance > 0 ? (dayPL / startingBalance) * 100 : 0;
   const buyingPower = Math.max(0, cash);
 
   // Roll over day_start_equity once per NY day so "today" reflects only today's change.
