@@ -23,6 +23,7 @@ type OpenTradeMark = {
   id: string;
   status: string;
   current_value: number | null;
+  current_pl: number | null;
   entry_premium: number | null;
   entry_price: number | null;
   multiplier: number | null;
@@ -69,7 +70,7 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
       const [accRes, tradesRes, closedRes] = await Promise.all([
         (supabase as any).from("paper_accounts").select("*").eq("user_id", user!.id).maybeSingle(),
         supabase.from("paper_trades")
-          .select("id,status,current_value,entry_premium,entry_price,multiplier,contracts,total_cost")
+          .select("id,status,current_value,current_pl,entry_premium,entry_price,multiplier,contracts,total_cost")
           .eq("user_id", user!.id).eq("status", "OPEN"),
         supabase.from("paper_trades")
           .select("current_pl,closed_at,status")
@@ -129,8 +130,12 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
   const equity = cash + openValue;
   const totalPL = equity - startingBalance;
   const totalPLPct = startingBalance > 0 ? (totalPL / startingBalance) * 100 : 0;
-  const dayPL = equity - dayStart;
-  const dayPLPct = dayStart > 0 ? (dayPL / dayStart) * 100 : 0;
+  // Day P/L = realized today (trades closed today) + unrealized P/L on still-open positions.
+  // This matches user expectation that "today" sums today's realized wins/losses, even when
+  // a position was opened the prior session and closed today.
+  const openUnrealized = openTrades.reduce((s, t) => s + Number(t.current_pl ?? 0), 0);
+  const dayPL = todayRealized + openUnrealized;
+  const dayPLPct = startingBalance > 0 ? (dayPL / startingBalance) * 100 : 0;
   const buyingPower = Math.max(0, cash);
 
   // Roll over day_start_equity once per NY day so "today" reflects only today's change.
