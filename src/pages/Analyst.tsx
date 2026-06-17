@@ -90,11 +90,13 @@ export default function Analyst() {
     setLoadingSentiment(true);
     (async () => {
       try {
+        // Skip if no valid session — avoids 401s from stale/expired tokens.
         const { data: sess } = await supabase.auth.getSession();
         const token = sess.session?.access_token;
+        if (!token) return;
         const base = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
         const res = await fetch(`${base}/uw-ticker-sentiment?ticker=${encodeURIComponent(ticker)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
           const j = await res.json();
