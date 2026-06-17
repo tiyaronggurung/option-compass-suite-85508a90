@@ -90,16 +90,24 @@ export default function Analyst() {
     setLoadingSentiment(true);
     (async () => {
       try {
+        // Skip if no valid session — avoids 401s from stale/expired tokens.
         const { data: sess } = await supabase.auth.getSession();
-        const token = sess.session?.access_token;
+        if (!sess.session?.access_token) return;
+        const { data, error } = await supabase.functions.invoke("uw-ticker-sentiment", {
+          method: "GET",
+          headers: { "x-ticker": ticker },
+          // invoke doesn't support query params directly; pass via URL below
+        } as any);
+        // Fallback: invoke can't append query string, so use fetch with the live token
         const base = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
         const res = await fetch(`${base}/uw-ticker-sentiment?ticker=${encodeURIComponent(ticker)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${sess.session.access_token}` },
         });
         if (res.ok) {
           const j = await res.json();
           if (!cancel) setSentiment(j as TickerSentiment);
         }
+        void data; void error;
       } catch { /* ignore */ }
       finally { if (!cancel) setLoadingSentiment(false); }
     })();
