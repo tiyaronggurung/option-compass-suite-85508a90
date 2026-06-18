@@ -649,6 +649,7 @@ export default function Dashboard() {
                   onReject={dismiss}
                   onDetails={(sig) => setDetailSignal(sig)}
                   outcome={signalOutcome(s, trades, dismissedIds)}
+                  recentSignals={signals ?? undefined}
                 />
               </div>
             ))}
@@ -716,6 +717,7 @@ export default function Dashboard() {
                             onReject={dismiss}
                             onDetails={(sig) => setDetailSignal(sig)}
                             outcome={signalOutcome(s, trades, dismissedIds)}
+                            recentSignals={signals ?? undefined}
                             subLabel={
                               (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
                                 ? "Near Watchlist — Paper Test"
@@ -738,6 +740,7 @@ export default function Dashboard() {
         open={!!detailSignal}
         onOpenChange={(v) => !v && setDetailSignal(null)}
         outcome={detailSignal ? signalOutcome(detailSignal, trades, dismissedIds) : undefined}
+        recentSignals={signals ?? undefined}
       />
 
       <BuyOptionDialog

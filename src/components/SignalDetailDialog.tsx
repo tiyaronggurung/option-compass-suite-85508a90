@@ -21,6 +21,8 @@ import {
   COST_EFFICIENCY_ICON,
   COST_EFFICIENCY_LABEL,
 } from "@/lib/costEfficiency";
+import { PersistenceBadge } from "@/components/PersistenceBadge";
+import { computeFrequency, type FrequencyObservation } from "@/lib/frequencyScore";
 
 
 interface Props {
@@ -29,9 +31,11 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   outcome?: SignalOutcome;
   rankBreakdown?: RankBreakdown;
+  /** Recent signals from frontend client state used to compute persistence. Display-only. */
+  recentSignals?: Signal[];
 }
 
-export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBreakdown }: Props) {
+export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBreakdown, recentSignals }: Props) {
   const { isAdmin } = useIsAdmin();
   const [siblings, setSiblings] = useState<Signal[] | null>(null);
   const [current, setCurrent] = useState<Signal | null>(signal);
@@ -231,8 +235,30 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
             )}
           </div>
 
+          {(() => {
+            const eff = effectiveConfidence(s as any) ?? s.confidence ?? 0;
+            const current: FrequencyObservation = {
+              strength: eff,
+              direction: s.direction as "CALL" | "PUT",
+            };
+            const history: FrequencyObservation[] = (recentSignals ?? [])
+              .filter((x) => x.id !== s.id && x.ticker === s.ticker)
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .map((x) => ({
+                strength: effectiveConfidence(x as any) ?? x.confidence ?? 0,
+                direction: x.direction as "CALL" | "PUT",
+              }));
+            const frequency = history.length > 0 ? computeFrequency(current, history) : null;
+            return (
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <span className="text-muted-foreground text-xs">Persistence</span>
+                <PersistenceBadge frequency={frequency} />
+              </div>
+            );
+          })()}
 
           <InstitutionalBreakdown sc={(s as any).score_components} tier={(s as any).tier} />
+
 
           <ComponentBreakdown tm={s.technical_metrics as any} />
 
