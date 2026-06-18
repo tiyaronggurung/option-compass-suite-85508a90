@@ -717,6 +717,7 @@ export default function Dashboard() {
                             onReject={dismiss}
                             onDetails={(sig) => setDetailSignal(sig)}
                             outcome={signalOutcome(s, trades, dismissedIds)}
+                            recentSignals={signals ?? undefined}
                             subLabel={
                               (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
                                 ? "Near Watchlist — Paper Test"
