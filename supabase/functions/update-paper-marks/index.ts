@@ -406,24 +406,57 @@ function parseOccSymbol(occ: string): { expiry: string } | null {
 }
 
 // Batched chain fetch — one UW call per (ticker, expiry) covering many OCCs.
+// In-memory cache deduplicates calls across rapid (5s) client polls hitting
+// the same warm function instance. TTL=4s for fresh data; on 429 we fall back
+// to the last-known rows (up to STALE_MS old) so far-DTE cards keep updating
+// instead of going "unavailable" during UW rate-limit windows.
+const CHAIN_TTL_MS = 4_000;
+const CHAIN_STALE_MS = 60_000;
+type ChainCacheEntry = { rows: any[]; at: number };
+const chainCache = new Map<string, ChainCacheEntry>();
+const chainInflight = new Map<string, Promise<any[] | null>>();
+
 async function fetchUnusualWhalesChainRows(ticker: string, expiry: string): Promise<any[] | null> {
   const key = Deno.env.get("UNUSUAL_WHALES_API_KEY");
   if (!key) return null;
+  const cacheKey = `${ticker}|${expiry}`;
+  const now = Date.now();
+  const cached = chainCache.get(cacheKey);
+  if (cached && now - cached.at < CHAIN_TTL_MS) return cached.rows;
+
+  const inflight = chainInflight.get(cacheKey);
+  if (inflight) return inflight;
+
   const url = `https://api.unusualwhales.com/api/stock/${encodeURIComponent(ticker)}/option-contracts?expiry=${expiry}&limit=500`;
-  try {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
-    if (!res.ok) {
-      console.log("uw batch chain non-ok", { ticker, expiry, status: res.status });
+  const p = (async () => {
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
+      if (!res.ok) {
+        console.log("uw batch chain non-ok", { ticker, expiry, status: res.status });
+        // On 429 (or any non-ok), return the last-known rows if still within the stale window.
+        if (cached && now - cached.at < CHAIN_STALE_MS) {
+          console.log("uw batch chain serving stale", { ticker, expiry, age_ms: now - cached.at });
+          return cached.rows;
+        }
+        return null;
+      }
+      const json = await res.json().catch(() => null) as any;
+      const rows: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+      chainCache.set(cacheKey, { rows, at: Date.now() });
+      return rows;
+    } catch (e) {
+      console.warn("uw batch chain err", ticker, expiry, e);
+      if (cached && Date.now() - cached.at < CHAIN_STALE_MS) return cached.rows;
       return null;
+    } finally {
+      chainInflight.delete(cacheKey);
     }
-    const json = await res.json().catch(() => null) as any;
-    const rows: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-    return rows;
-  } catch (e) {
-    console.warn("uw batch chain err", ticker, expiry, e);
-    return null;
-  }
+  })();
+  chainInflight.set(cacheKey, p);
+  return p;
 }
+
+
 
 function chainRowToQuote(row: any): OptionQuote | null {
   const bid = num(row.nbbo_bid ?? row.bid);
