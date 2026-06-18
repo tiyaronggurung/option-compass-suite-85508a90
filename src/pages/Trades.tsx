@@ -96,9 +96,9 @@ export default function Trades() {
       } catch { /* swallow — UI will retry next tick */ }
       if (!cancelled) refreshRef.current?.();
     }
-    // Kick immediately so the user sees fresh prices fast, then poll every 30s.
+    // Kick immediately so the user sees fresh prices fast, then poll every 5s (UW chain).
     tick();
-    const id = setInterval(tick, 30_000);
+    const id = setInterval(tick, 5_000);
 
     return () => { cancelled = true; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

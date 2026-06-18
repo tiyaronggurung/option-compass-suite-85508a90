@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Activity, DollarSign, Flame, Radio, Tag as TagIcon, TrendingDown, TrendingUp, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeUpdatePaperMarks } from "@/lib/paperMarks";
 import { useAuth } from "@/hooks/useAuth";
 import { SignalCard } from "@/components/SignalCard";
 import { SignalDetailDialog } from "@/components/SignalDetailDialog";
@@ -391,6 +392,26 @@ export default function Dashboard() {
     setCashBalance(Number((pa as any)?.cash_balance ?? 0));
     reloadAlerts();
   }
+
+  // Poll UW option marks every 5s while the dashboard is visible and has open trades.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const hasOpen = (trades ?? []).some((t) => t.status === "OPEN");
+    if (!hasOpen) return;
+    async function tick() {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
+      try { await invokeUpdatePaperMarks({}); } catch { /* swallow */ }
+      if (cancelled) return;
+      const { data: t } = await supabase.from("paper_trades").select("*").eq("user_id", user!.id);
+      if (!cancelled && t) setTrades(t);
+    }
+    tick();
+    const id = setInterval(tick, 5_000);
+    return () => { cancelled = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, trades?.some((t) => t.status === "OPEN")]);
 
   // New primary action: open the Robinhood-style Buy Option modal.
   function approve(s: Signal) {
