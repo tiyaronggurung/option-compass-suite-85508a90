@@ -64,6 +64,23 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const effConf = effectiveConfidence(signal as any) ?? 0;
   if (effConf < 65) return null;
   const isHot = effConf >= 70;
+
+  const frequency = (() => {
+    if (!recentSignals || recentSignals.length === 0) return null;
+    const current: FrequencyObservation = {
+      strength: effConf || signal.confidence || 0,
+      direction: signal.direction as "CALL" | "PUT",
+    };
+    const history: FrequencyObservation[] = recentSignals
+      .filter((s) => s.id !== signal.id && s.ticker === signal.ticker)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .map((s) => ({
+        strength: (effectiveConfidence(s as any) ?? s.confidence ?? 0),
+        direction: s.direction as "CALL" | "PUT",
+      }));
+    if (history.length === 0) return null;
+    return computeFrequency(current, history);
+  })();
   return (
     <div className={cn("glass-card p-3 sm:p-4 ring-1 transition hover:ring-primary/40", ring, isHot && "animate-buzz-once ring-primary/60")}>
 
