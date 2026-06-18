@@ -235,8 +235,30 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
             )}
           </div>
 
+          {(() => {
+            const eff = effectiveConfidence(s as any) ?? s.confidence ?? 0;
+            const current: FrequencyObservation = {
+              strength: eff,
+              direction: s.direction as "CALL" | "PUT",
+            };
+            const history: FrequencyObservation[] = (recentSignals ?? [])
+              .filter((x) => x.id !== s.id && x.ticker === s.ticker)
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .map((x) => ({
+                strength: effectiveConfidence(x as any) ?? x.confidence ?? 0,
+                direction: x.direction as "CALL" | "PUT",
+              }));
+            const frequency = history.length > 0 ? computeFrequency(current, history) : null;
+            return (
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <span className="text-muted-foreground text-xs">Persistence</span>
+                <PersistenceBadge frequency={frequency} />
+              </div>
+            );
+          })()}
 
           <InstitutionalBreakdown sc={(s as any).score_components} tier={(s as any).tier} />
+
 
           <ComponentBreakdown tm={s.technical_metrics as any} />
 
