@@ -19,6 +19,7 @@ import { effectiveRisk, sumTodayRealizedPL, type RiskSettingsLike } from "@/lib/
 import { effectiveConfidence } from "@/lib/techAdjust";
 import { approveSignalAsPaperTrade } from "@/lib/approveSignal";
 import { RiskStatusCard } from "@/components/RiskStatusCard";
+import MarketBreadthMarquee from "@/components/MarketBreadthMarquee";
 import MarketOverviewStrip from "@/components/MarketOverviewStrip";
 import { PaperAccountCard } from "@/components/PaperAccountCard";
 import ProviderStatusBanner from "@/components/ProviderStatusBanner";
@@ -425,6 +426,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <MarketBreadthMarquee />
       <header className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between">
           <div className="min-w-0">
