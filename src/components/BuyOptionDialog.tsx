@@ -408,6 +408,7 @@ export function BuyOptionDialog(props: Props) {
                   <Stat label="Quantity" value={`${receipt.contracts}× contract${receipt.contracts > 1 ? "s" : ""}`} />
                   <Stat label="Fill premium" value={fmtMoney(receipt.fillPremium)} />
                   <Stat label="Total cost" value={fmtMoney(receipt.totalCost)} />
+                  <Stat label="Fee (entry)" value={fmtMoney(0.04 * receipt.contracts)} />
                   <Stat label="Remaining cash" value={fmtMoney(receipt.remainingCash)} />
                 </div>
                 <div className="flex justify-end gap-2 pt-1 border-t">
@@ -646,8 +647,9 @@ export function BuyOptionDialog(props: Props) {
                   </div>
                   <Stat label="Breakeven" value={fmtMoney(breakevenPrice)} />
                   <Stat label="Total cost" value={fmtMoney(totalCost)} accent={!buyingPowerOk ? "danger" : undefined} />
+                  <Stat label="Fee (entry)" value={fmtMoney(0.04 * (Number.isFinite(qty) ? qty : 0))} />
                   <Stat label="Buying power" value={fmtMoney(props.cashBalance)} />
-                  <Stat label="Max loss" value={fmtMoney(totalCost)} />
+                  <Stat label="Max loss" value={fmtMoney(totalCost + 0.04 * (Number.isFinite(qty) ? qty : 0) * 2)} />
                 </div>
 
                 {/* Projection */}

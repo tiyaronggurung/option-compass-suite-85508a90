@@ -810,8 +810,10 @@ export type Database = {
           day_pl_pct: number | null
           delta: number | null
           direction: Database["public"]["Enums"]["signal_direction"]
+          entry_fee: number
           entry_premium: number | null
           entry_price: number | null
+          exit_fee: number
           exit_premium: number | null
           exit_price: number | null
           exit_reason: Database["public"]["Enums"]["trade_close_reason"] | null
@@ -874,8 +876,10 @@ export type Database = {
           day_pl_pct?: number | null
           delta?: number | null
           direction: Database["public"]["Enums"]["signal_direction"]
+          entry_fee?: number
           entry_premium?: number | null
           entry_price?: number | null
+          exit_fee?: number
           exit_premium?: number | null
           exit_price?: number | null
           exit_reason?: Database["public"]["Enums"]["trade_close_reason"] | null
@@ -938,8 +942,10 @@ export type Database = {
           day_pl_pct?: number | null
           delta?: number | null
           direction?: Database["public"]["Enums"]["signal_direction"]
+          entry_fee?: number
           entry_premium?: number | null
           entry_price?: number | null
+          exit_fee?: number
           exit_premium?: number | null
           exit_price?: number | null
           exit_reason?: Database["public"]["Enums"]["trade_close_reason"] | null

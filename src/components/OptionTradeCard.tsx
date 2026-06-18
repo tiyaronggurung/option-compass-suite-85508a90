@@ -336,6 +336,15 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
             <Row k={closed ? "Exit" : "Current"} v={currentPremium != null ? `$${fmtPrice(currentPremium)}` : "—"} />
             <Row k="Market Value" v={currentValue != null ? `$${fmtPL(currentValue)}` : "—"} />
             <Row k="Total Cost" v={`$${fmtPL(totalCost)}`} />
+            <Row
+              k={closed ? "Fees (in+out)" : "Entry Fee"}
+              v={(() => {
+                const ef = Number(t.entry_fee ?? 0);
+                const xf = Number(t.exit_fee ?? 0);
+                const total = closed ? ef + xf : ef;
+                return `$${total.toFixed(2)}`;
+              })()}
+            />
           </div>
 
           {!closed && (quoteUnavailable || waitingForFirstQuote) && (
