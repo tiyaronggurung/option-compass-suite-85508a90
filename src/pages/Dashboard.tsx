@@ -649,6 +649,7 @@ export default function Dashboard() {
                   onReject={dismiss}
                   onDetails={(sig) => setDetailSignal(sig)}
                   outcome={signalOutcome(s, trades, dismissedIds)}
+                  recentSignals={signals ?? undefined}
                 />
               </div>
             ))}
