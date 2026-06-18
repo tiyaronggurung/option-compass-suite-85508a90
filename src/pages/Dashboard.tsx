@@ -740,6 +740,7 @@ export default function Dashboard() {
         open={!!detailSignal}
         onOpenChange={(v) => !v && setDetailSignal(null)}
         outcome={detailSignal ? signalOutcome(detailSignal, trades, dismissedIds) : undefined}
+        recentSignals={signals ?? undefined}
       />
 
       <BuyOptionDialog
