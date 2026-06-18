@@ -21,6 +21,8 @@ import {
   COST_EFFICIENCY_ICON,
   COST_EFFICIENCY_LABEL,
 } from "@/lib/costEfficiency";
+import { PersistenceBadge } from "@/components/PersistenceBadge";
+import { computeFrequency, type FrequencyObservation } from "@/lib/frequencyScore";
 
 
 interface Props {
@@ -29,9 +31,11 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   outcome?: SignalOutcome;
   rankBreakdown?: RankBreakdown;
+  /** Recent signals from frontend client state used to compute persistence. Display-only. */
+  recentSignals?: Signal[];
 }
 
-export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBreakdown }: Props) {
+export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBreakdown, recentSignals }: Props) {
   const { isAdmin } = useIsAdmin();
   const [siblings, setSiblings] = useState<Signal[] | null>(null);
   const [current, setCurrent] = useState<Signal | null>(signal);
