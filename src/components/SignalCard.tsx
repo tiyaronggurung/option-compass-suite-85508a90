@@ -23,7 +23,8 @@ import {
   COST_EFFICIENCY_LABEL,
 } from "@/lib/costEfficiency";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
+import { PersistenceBadge } from "@/components/PersistenceBadge";
+import { computeFrequency, type FrequencyObservation } from "@/lib/frequencyScore";
 
 
 type Props = {
@@ -34,6 +35,8 @@ type Props = {
   watchlist?: Set<string>;
   outcome?: SignalOutcome;
   subLabel?: string;
+  /** Recent signals from frontend client state used to compute persistence. Display-only. */
+  recentSignals?: Signal[];
 };
 
 export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none", subLabel }: Props) {
