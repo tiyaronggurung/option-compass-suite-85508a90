@@ -39,7 +39,7 @@ type Props = {
   recentSignals?: Signal[];
 };
 
-export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none", subLabel }: Props) {
+export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, outcome = "none", subLabel, recentSignals }: Props) {
   const isCall = signal.direction === "CALL";
   const liveQuote = useLiveQuote(signal.ticker);
   const snapshotPrice = Number(signal.price);
