@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Activity, DollarSign, Flame, Radio, Tag as TagIcon, TrendingDown, TrendingUp, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeUpdatePaperMarks } from "@/lib/paperMarks";
 import { useAuth } from "@/hooks/useAuth";
 import { SignalCard } from "@/components/SignalCard";
 import { SignalDetailDialog } from "@/components/SignalDetailDialog";
