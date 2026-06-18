@@ -1,12 +1,17 @@
-// Live option chain via Tradier (migrated from Unusual Whales).
+// Live option chain via Unusual Whales (reverted from Tradier so the chain panel
+// matches the source used by update-paper-marks — UW everywhere).
+//
 // POST { ticker: string, expiry?: string } ->
-//   { ticker, spot, expiries: string[], expiry, rows: ChainRow[] }
-// Same I/O shape as before — frontend (OptionsChainPanel, etc.) unchanged.
+//   { ticker, spot, expiries: string[], expiry, rows: ChainRow[], ... }
+//
+// Same I/O shape as the previous Tradier implementation — frontend unchanged.
+// Tradeoff (per user): UW chain often limits to ≤60 DTE and can 429 on bursts.
+// We mitigate with per-isolate caching + stale-on-error fallback.
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const TRADIER_KEY = Deno.env.get("TRADIER_API_KEY") ?? "";
-const TRADIER_BASE = "https://api.tradier.com/v1";
+const UW_KEY = Deno.env.get("UNUSUAL_WHALES_API_KEY") ?? "";
+const UW_BASE = "https://api.unusualwhales.com/api";
 
 type ChainRow = {
   symbol: string;
@@ -26,18 +31,17 @@ type ChainRow = {
   iv: number | null;
 };
 
-async function tradier(path: string, params: Record<string, string>, timeoutMs = 8000): Promise<any> {
-  const qs = new URLSearchParams(params).toString();
+async function uw(path: string, timeoutMs = 8000): Promise<any> {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`${TRADIER_BASE}${path}?${qs}`, {
-      headers: { Authorization: `Bearer ${TRADIER_KEY}`, Accept: "application/json" },
+    const res = await fetch(`${UW_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${UW_KEY}`, Accept: "application/json" },
       signal: ctrl.signal,
     });
     if (!res.ok) {
       const t = await res.text().catch(() => "");
-      throw new Error(`tradier ${path} ${res.status}: ${t.slice(0, 120)}`);
+      throw new Error(`uw ${path} ${res.status}: ${t.slice(0, 120)}`);
     }
     return await res.json();
   } finally {
@@ -51,12 +55,20 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Per-isolate caches (same strategy as before).
+// OCC: AAPL260710C00320000 -> { strike: 320, type: "call" }
+function parseOcc(occ: string): { strike: number; type: "call" | "put" } | null {
+  const m = /^[A-Z]{1,6}\d{6}([CP])(\d{8})$/.exec(String(occ).trim().toUpperCase());
+  if (!m) return null;
+  return { type: m[1] === "C" ? "call" : "put", strike: parseInt(m[2], 10) / 1000 };
+}
+
+// Per-isolate caches (same strategy as before — collapses 5s client polls and
+// survives short UW 429 windows by serving last-known data).
 const CACHE_TTL_MS = 8_000;
 const META_TTL_MS = 120_000;
 const LAST_GOOD_TTL_MS = 600_000;
 type CacheEntry = { at: number; payload: any };
-type MetaEntry = { at: number; spot: number | null; expiries: string[] };
+type MetaEntry = { at: number; expiries: string[] };
 const responseCache = new Map<string, CacheEntry>();
 const metaCache = new Map<string, MetaEntry>();
 const lastGoodCache = new Map<string, CacheEntry>();
@@ -64,7 +76,8 @@ const inflight = new Map<string, Promise<any>>();
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  // Auth gate — prevent anonymous quota abuse.
+
+  // Auth gate.
   const authHeader = req.headers.get("Authorization") ?? "";
   if (!authHeader.startsWith("Bearer ")) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -85,11 +98,12 @@ Deno.serve(async (req) => {
       });
     }
   }
-  if (!TRADIER_KEY) {
-    return new Response(JSON.stringify({ error: "TRADIER_API_KEY not configured" }), {
+  if (!UW_KEY) {
+    return new Response(JSON.stringify({ error: "UNUSUAL_WHALES_API_KEY not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
   try {
     const body = await req.json().catch(() => ({}));
     const ticker = String(body?.ticker ?? "").toUpperCase().trim();
@@ -117,82 +131,77 @@ Deno.serve(async (req) => {
         const meta = metaCache.get(metaKey);
         const metaFresh = meta && now - meta.at < META_TTL_MS;
 
-        let spot: number | null = metaFresh ? meta!.spot : null;
         let expiries: string[] = metaFresh ? meta!.expiries : [];
-        let stateErr: string | null = null;
         let expiryErr: string | null = null;
 
         if (!metaFresh) {
-          const [quoteRes, expRes] = await Promise.allSettled([
-            tradier("/markets/quotes", { symbols: ticker, greeks: "false" }),
-            tradier("/markets/options/expirations", { symbol: ticker, includeAllRoots: "true", strikes: "false" }),
-          ]);
-
-          if (quoteRes.status === "fulfilled") {
-            const qq = quoteRes.value?.quotes?.quote;
-            const row = Array.isArray(qq) ? qq[0] : qq;
-            spot = numOrNull(row?.last) ?? numOrNull(row?.close) ?? numOrNull(row?.prevclose);
-          } else {
-            stateErr = (quoteRes.reason as Error)?.message ?? String(quoteRes.reason);
-            if (meta) spot = meta.spot;
-          }
-
-          const today = new Date();
-          today.setUTCHours(0, 0, 0, 0);
-          if (expRes.status === "fulfilled") {
-            const raw = expRes.value?.expirations?.date;
-            const arr: string[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+          try {
+            const expJson = await uw(`/stock/${encodeURIComponent(ticker)}/expiry-breakdown`);
+            const arr: any[] = Array.isArray(expJson?.data) ? expJson.data : Array.isArray(expJson) ? expJson : [];
+            const today = new Date();
+            today.setUTCHours(0, 0, 0, 0);
             const set = new Set<string>();
-            for (const e of arr) {
+            for (const row of arr) {
+              const e = row?.expires ?? row?.expiry ?? row?.expiration ?? row?.expires_at;
               if (typeof e !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e)) continue;
               const d = new Date(e + "T00:00:00Z");
               const dte = Math.round((d.getTime() - today.getTime()) / 86_400_000);
-              if (dte >= 0 && dte <= 60) set.add(e);
+              // UW often caps; honor whatever UW returns up to ~120 DTE for safety.
+              if (dte >= 0 && dte <= 120) set.add(e);
             }
             expiries = Array.from(set).sort();
-          } else {
-            expiryErr = (expRes.reason as Error)?.message ?? String(expRes.reason);
+            if (expiries.length > 0) metaCache.set(metaKey, { at: Date.now(), expiries });
+          } catch (e) {
+            expiryErr = (e as Error)?.message ?? String(e);
             if (meta) expiries = meta.expiries;
-          }
-
-          if (expiries.length > 0) {
-            metaCache.set(metaKey, { at: Date.now(), spot, expiries });
           }
         }
 
-        let expiry = requestedExpiry && expiries.includes(requestedExpiry) ? requestedExpiry : expiries[0] ?? "";
+        let expiry = requestedExpiry && expiries.includes(requestedExpiry)
+          ? requestedExpiry
+          : expiries[0] ?? "";
         if (!expiry && requestedExpiry) expiry = requestedExpiry;
 
         let rows: ChainRow[] = [];
+        let spot: number | null = null;
         let contractsError: string | null = null;
         if (expiry) {
           try {
-            const chainJson = await tradier("/markets/options/chains", {
-              symbol: ticker, expiration: expiry, greeks: "true",
-            });
-            const raw = chainJson?.options?.option;
-            const arr: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
-            rows = arr.map((c) => {
-              const g = c.greeks ?? {};
+            const chainJson = await uw(
+              `/stock/${encodeURIComponent(ticker)}/option-contracts?expiry=${expiry}&limit=500`,
+            );
+            const arr: any[] = Array.isArray(chainJson?.data) ? chainJson.data : Array.isArray(chainJson) ? chainJson : [];
+            for (const c of arr) {
+              const occ = String(c.option_symbol ?? c.symbol ?? "").trim().toUpperCase();
+              if (!occ) continue;
+              const parsed = parseOcc(occ);
+              if (!parsed) continue;
+              const bid = numOrNull(c.nbbo_bid ?? c.bid);
+              const ask = numOrNull(c.nbbo_ask ?? c.ask);
+              const last = numOrNull(c.last_price ?? c.last ?? c.mark);
               const row: ChainRow = {
-                symbol: String(c.symbol ?? ""),
+                symbol: occ,
                 underlying: String(c.underlying ?? ticker),
-                expiry: String(c.expiration_date ?? expiry),
-                strike: numOrNull(c.strike) ?? 0,
-                type: String(c.option_type ?? "").toLowerCase() === "put" ? "put" : "call",
-                bid: numOrNull(c.bid),
-                ask: numOrNull(c.ask),
-                last: numOrNull(c.last),
-                volume: numOrNull(c.volume),
-                open_interest: numOrNull(c.open_interest),
-                delta: numOrNull(g.delta),
-                gamma: numOrNull(g.gamma),
-                theta: numOrNull(g.theta),
-                vega: numOrNull(g.vega),
-                iv: numOrNull(g.mid_iv ?? g.smv_vol ?? g.ask_iv ?? g.bid_iv),
+                expiry: String(c.expiry ?? c.expiration ?? expiry),
+                strike: parsed.strike,
+                type: parsed.type,
+                bid, ask, last,
+                volume: numOrNull(c.volume) != null ? Math.round(numOrNull(c.volume)!) : null,
+                open_interest: numOrNull(c.open_interest ?? c.oi) != null
+                  ? Math.round(numOrNull(c.open_interest ?? c.oi)!) : null,
+                delta: numOrNull(c.delta),
+                gamma: numOrNull(c.gamma),
+                theta: numOrNull(c.theta),
+                vega: numOrNull(c.vega),
+                iv: numOrNull(c.implied_volatility ?? c.iv),
               };
-              return row;
-            }).filter((r) => r.symbol);
+              rows.push(row);
+              // UW frequently surfaces underlying price on each row — sample first non-null.
+              if (spot == null) {
+                const s = numOrNull(c.underlying_price ?? c.spot ?? c.price);
+                if (s && s > 0) spot = s;
+              }
+            }
             rows.sort((a, b) => a.strike - b.strike);
           } catch (e) {
             contractsError = (e as Error).message;
@@ -203,10 +212,10 @@ Deno.serve(async (req) => {
           ticker, spot, expiries, expiry, rows,
           fetched_at: new Date().toISOString(),
           contracts_error: contractsError,
-          state_error: stateErr,
+          state_error: null,
           expiry_error: expiryErr,
           stale: false,
-          source: "tradier",
+          source: "unusual_whales",
         };
 
         if (rows.length === 0) {
