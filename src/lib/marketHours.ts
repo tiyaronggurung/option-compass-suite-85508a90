@@ -9,7 +9,7 @@ export type MarketStatus = {
   reason: string; // human-readable reason when closed
 };
 
-// US equity/options full market closures (NYSE/CBOE). Early closes (1pm ET) not enumerated.
+// US equity/options full market closures (NYSE/CBOE).
 // Keep in sync with the duplicate set in supabase/functions/*/index.ts gates.
 export const US_MARKET_HOLIDAYS: ReadonlySet<string> = new Set([
   // 2025
@@ -20,7 +20,14 @@ export const US_MARKET_HOLIDAYS: ReadonlySet<string> = new Set([
   "2026-07-03","2026-09-07","2026-11-26","2026-12-25",
   // 2027
   "2027-01-01","2027-01-18","2027-02-15","2027-03-26","2027-05-31","2027-06-18",
-  "2027-07-05","2027-09-06","2027-11-25","2027-12-24",
+  "2027-07-05","2027-09-06","2027-11-25","2027-12-25",
+]);
+
+// Early-close days (NYSE closes at 1:00 PM ET). Options follow the same schedule.
+export const US_MARKET_EARLY_CLOSE_DAYS: ReadonlySet<string> = new Set([
+  "2025-11-28","2025-12-24",
+  "2026-11-27","2026-12-24",
+  "2027-11-26","2027-12-24",
 ]);
 
 function nyDateString(d: Date): string {
@@ -46,16 +53,24 @@ export function getUsMarketStatus(d: Date = new Date()): MarketStatus {
   if (weekday === "Sat" || weekday === "Sun") {
     return { open: false, reason: "Market closed — weekend. Option buys resume Monday 9:30 AM ET." };
   }
-  if (US_MARKET_HOLIDAYS.has(nyDateString(d))) {
+  const ymd = nyDateString(d);
+  if (US_MARKET_HOLIDAYS.has(ymd)) {
     return { open: false, reason: "Market closed — US holiday. Option buys resume next trading day at 9:30 AM ET." };
   }
   const mins = hour * 60 + minute;
+  const earlyClose = US_MARKET_EARLY_CLOSE_DAYS.has(ymd);
+  const closeMins = earlyClose ? 13 * 60 : 16 * 60;
 
   if (mins < 9 * 60 + 30) {
     return { open: false, reason: "Pre-market — option buys open at 9:30 AM ET." };
   }
-  if (mins >= 16 * 60) {
-    return { open: false, reason: "After-hours — option market is closed. Buys resume at 9:30 AM ET next trading day." };
+  if (mins >= closeMins) {
+    return {
+      open: false,
+      reason: earlyClose
+        ? "Early close — option market closed at 1:00 PM ET. Buys resume at 9:30 AM ET next trading day."
+        : "After-hours — option market is closed. Buys resume at 9:30 AM ET next trading day.",
+    };
   }
   return { open: true, reason: "" };
 }
