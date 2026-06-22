@@ -179,13 +179,13 @@ export default function Dashboard() {
         const ns = payload.new as Signal;
         const effConf = effectiveConfidence(ns as any) ?? 0;
         if (ns.hidden) {
-          if (ns.tier === "rejected" && effConf >= 65) {
+          if (ns.tier === "rejected" && effConf >= 60) {
             setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
           }
           return;
         }
-        // Visible signals: 70+ go to top grid, 65-69 surface in developing, <65 dropped.
-        if (effConf < 65) return;
+        // Visible signals: 70+ go to top grid, 60-69 surface in developing, <60 dropped.
+        if (effConf < 60) return;
         if (effConf < 70) {
           setDeveloping((prev) => (prev ? [ns, ...prev] : [ns]));
           return;
