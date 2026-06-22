@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, Brain, CheckCircle2, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Brain, CheckCircle2, Clock, Flame, Info, LogOut, Radio, Scissors, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
 import { daysToExpiry } from "@/lib/blackScholes";
+import { getSignalExitGuide, EXIT_GUIDE_CLASS } from "@/lib/signalExitGuide";
+
 import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
 import { getTier, TIER_META } from "@/lib/signalTiers";
@@ -195,6 +197,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <ExitGuideBadge signal={signal} />
         <RiskBadge level={signal.risk_level} />
         {effConf >= 80 && (
           <Badge className="bg-primary/15 text-primary border-0 gap-1 text-[10px] px-1.5 py-0">
@@ -212,6 +215,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
           </Badge>
         )}
       </div>
+
 
       <ConfirmationBadge
         className="mt-2"
@@ -352,4 +356,35 @@ function CostEfficiencyBadge({ signal }: { signal: Signal }) {
     </TooltipProvider>
   );
 }
+
+function ExitGuideBadge({ signal }: { signal: Signal }) {
+  const guide = getSignalExitGuide(signal);
+  if (!guide) return null;
+  const icon = guide.band === "EXIT" ? <LogOut className="h-3 w-3" /> : <Scissors className="h-3 w-3" />;
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            className={cn(
+              "border gap-1 text-[10px] px-1.5 py-0 cursor-help",
+              EXIT_GUIDE_CLASS[guide.band],
+            )}
+          >
+            {icon} {guide.band}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-xs">
+          <div className="font-semibold mb-1">Exit guidance · {guide.band}</div>
+          <ul className="space-y-0.5 text-muted-foreground">
+            {guide.reasons.map((reason, i) => (
+              <li key={i} className={i === 0 ? "text-foreground/80" : ""}>· {reason}</li>
+            ))}
+          </ul>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 
