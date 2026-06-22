@@ -8,6 +8,7 @@ import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
+import { daysToExpiry } from "@/lib/blackScholes";
 import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
 import { getTier, TIER_META } from "@/lib/signalTiers";
