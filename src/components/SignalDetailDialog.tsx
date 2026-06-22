@@ -13,6 +13,8 @@ import type { RankBreakdown } from "@/lib/rankSignals";
 import { ConfirmationMatrix } from "@/components/ConfirmationMatrix";
 import type { ConfirmationMatrix as MatrixT } from "@/lib/confirmations";
 import { TechnicalTrendCard } from "@/components/TechnicalTrendCard";
+import { IntradayCard } from "@/components/IntradayCard";
+import { daysToExpiry } from "@/lib/blackScholes";
 import { effectiveConfidence, alignment } from "@/lib/techAdjust";
 import { Sparkles } from "lucide-react";
 import {
