@@ -8,6 +8,7 @@ import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
+import { daysToExpiry } from "@/lib/blackScholes";
 import { ConfirmationBadge } from "@/components/ConfirmationBadge";
 import type { ConfirmationMatrix } from "@/lib/confirmations";
 import { getTier, TIER_META } from "@/lib/signalTiers";
@@ -105,8 +106,10 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
                   <span>{tierMeta.emoji}</span> {tierMeta.label}
                 </Badge>
               )}
-              {signal.dte === 0 && (
-                <Badge className="bg-warn/15 text-warn border-0 text-[10px] px-1.5 py-0">0DTE</Badge>
+              {daysToExpiry(signal.expiry) <= 1 && (
+                <Badge className="bg-warn/15 text-warn border-0 gap-1 text-[10px] px-1.5 py-0" title="Same-day / 0DTE signal — monitored intraday">
+                  <Zap className="h-3 w-3" /> 0DTE
+                </Badge>
               )}
               {signal.is_demo ? (
                 <Badge variant="outline" className="border-border text-muted-foreground gap-1 text-[10px] px-1.5 py-0" title="Seeded demo signal">
