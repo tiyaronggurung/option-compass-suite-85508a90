@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, Brain, CheckCircle2, Clock, Flame, Info, Radio, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Brain, CheckCircle2, Clock, Flame, Info, LogOut, Radio, Scissors, ShieldAlert, TestTube, Timer, X, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
