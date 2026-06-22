@@ -275,6 +275,17 @@ export function SignalDetailDialog({ signal, open, onOpenChange, outcome, rankBr
 
           <InsiderActivity ticker={s.ticker} />
 
+          {/* 0DTE / same-day: show intraday structure above daily trend */}
+          {daysToExpiry(s.expiry) <= 1 && (
+            <div className="pt-2 border-t border-border space-y-1.5">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Intraday structure (0DTE)</div>
+              <IntradayCard
+                ticker={s.ticker}
+                signalDirection={s.direction as "CALL" | "PUT"}
+              />
+            </div>
+          )}
+
           <div className="pt-2 border-t border-border space-y-1.5">
             <div className="text-xs uppercase tracking-wide text-muted-foreground">Technical trend</div>
             <TechnicalTrendCard
