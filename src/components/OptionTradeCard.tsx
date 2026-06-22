@@ -17,6 +17,7 @@ import { fmtPrice, fmtPL, timeAgo, type PaperTrade } from "@/lib/signalHelpers";
 import { cn } from "@/lib/utils";
 import { TradeTimelinePanel } from "@/components/TradeTimelinePanel";
 import { computeExitScore, dteFromExpiry, bandColor, type ExitScore } from "@/lib/exitScore";
+import { TrendlineBiasBadge } from "@/components/TrendlineBiasBadge";
 
 type Props = {
   trade: PaperTrade;
@@ -287,6 +288,15 @@ export function OptionTradeCard({ trade, onClose, onClosePartial, onAddMore, onR
 
       {/* Exit Score panel */}
       {!closed && exitScore && <ExitScorePanel score={exitScore} />}
+
+      {/* 1m trendline + candle-run bias — DTE-aware live advisory */}
+      {!closed && trade.ticker && (
+        <TrendlineBiasBadge
+          ticker={trade.ticker}
+          direction={(String(t.option_type ?? trade.direction ?? "").toUpperCase() === "PUT" ? "PUT" : "CALL") as "CALL" | "PUT"}
+          dte={Math.max(0, dteFromExpiry(t.expiry) ?? 0)}
+        />
+      )}
 
 
 
