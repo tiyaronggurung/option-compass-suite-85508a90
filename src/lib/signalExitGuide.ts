@@ -34,7 +34,14 @@ export function getSignalExitGuide(signal: Signal): SignalExitGuide | null {
     reasons.push("Signal weakening");
   }
 
+  const freshness = getFreshness(signal);
+  if (freshness === "expired") {
+    level = 2;
+    reasons.push("Signal freshness expired");
+  }
+
   const dte = signal.dte ?? daysToExpiry(signal.expiry);
+
   if (dte != null && dte <= 1) {
     level = 2;
     reasons.push(dte === 0 ? "0DTE — expires today" : "1DTE — expires tomorrow");
