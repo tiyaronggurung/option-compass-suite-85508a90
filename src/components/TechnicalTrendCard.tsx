@@ -35,6 +35,20 @@ export interface TechSnapshot {
       matches: { name: string; bias: "bullish" | "bearish" | "neutral"; kind: "reversal" | "continuation" | "indecision"; strength: number; bar_index: number; bar_date: string; note: string }[];
       summary: { bullScore: number; bearScore: number; net: number };
     };
+    chart_patterns?: {
+      name: string;
+      bias: "bullish" | "bearish" | "neutral";
+      status: "forming" | "confirmed" | "invalidated";
+      start_date: string; end_date: string;
+      neckline: number | null;
+      breakout_level: number | null;
+      target: number | null;
+      stop: number | null;
+      confidence: number;
+      note: string;
+    }[];
+    pattern_score?: number;
+    expected_move?: { horizon_days: number; upper: number; lower: number; prob_inside: number }[];
   };
 }
 
@@ -202,6 +216,79 @@ export function TechnicalTrendCard({ ticker, signalDirection, baseConfidence, on
           </ul>
         </div>
       )}
+
+      {/* Chart patterns (additive — does not affect tech_score) */}
+      {p.chart_patterns && p.chart_patterns.length > 0 && (
+        <div className="pt-2 border-t border-border space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Chart patterns</div>
+            {typeof p.pattern_score === "number" && (
+              <span className="text-[10px] text-muted-foreground">
+                pattern bias <span className={cn("font-mono", p.pattern_score > 0 ? "text-emerald-500" : p.pattern_score < 0 ? "text-rose-500" : "")}>{p.pattern_score > 0 ? "+" : ""}{p.pattern_score}</span>
+              </span>
+            )}
+          </div>
+          <ul className="space-y-1.5">
+            {p.chart_patterns.slice(0, 5).map((cp, i) => (
+              <li key={i} className="rounded border border-border/60 px-2 py-1.5 space-y-1">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={cn(
+                      "inline-block w-1.5 h-1.5 rounded-full shrink-0",
+                      cp.bias === "bullish" ? "bg-emerald-500" : cp.bias === "bearish" ? "bg-rose-500" : "bg-muted-foreground",
+                    )} />
+                    <span className="font-medium truncate">{cp.name}</span>
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded border shrink-0",
+                      cp.status === "confirmed"
+                        ? "border-emerald-500/40 text-emerald-500 bg-emerald-500/10"
+                        : "border-border text-muted-foreground",
+                    )}>
+                      {cp.status}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground shrink-0 font-mono">{cp.confidence}%</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground">{cp.note}</div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                  {cp.breakout_level != null && (
+                    <span><span className="text-muted-foreground">break</span> <span className="font-mono">${fmt(cp.breakout_level)}</span></span>
+                  )}
+                  {cp.target != null && (
+                    <span><span className="text-muted-foreground">target</span> <span className="font-mono text-emerald-500">${fmt(cp.target)}</span></span>
+                  )}
+                  {cp.stop != null && (
+                    <span><span className="text-muted-foreground">stop</span> <span className="font-mono text-rose-500">${fmt(cp.stop)}</span></span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Expected move cone (ATR-based, 1σ bands) */}
+      {p.expected_move && p.expected_move.length > 0 && (
+        <div className="pt-2 border-t border-border space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Expected move (ATR-based, ±1σ)</div>
+            <span className="text-[10px] text-muted-foreground">~68% inside band</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            {p.expected_move.map((em) => (
+              <div key={em.horizon_days} className="rounded border border-border/60 px-2 py-1.5 text-center">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {em.horizon_days === 1 ? "1 day" : `${em.horizon_days} days`}
+                </div>
+                <div className="font-mono text-[11px] text-emerald-500">${fmt(em.upper)}</div>
+                <div className="font-mono text-[11px] text-rose-500">${fmt(em.lower)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+
 
       <div className="text-[10px] text-muted-foreground">
         Computed {new Date(snap.computed_at).toLocaleString()} · Educational use only, not financial advice.

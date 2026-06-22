@@ -59,7 +59,11 @@ export default function Technical() {
         <div className="grid gap-4 lg:grid-cols-5">
           <div className="lg:col-span-3 space-y-4">
             {snap?.payload?.recent_bars && snap.payload.recent_bars.length > 0 ? (
-              <TechnicalChart bars={snap.payload.recent_bars} />
+              <TechnicalChart
+                bars={snap.payload.recent_bars}
+                patterns={(snap.payload as any).chart_patterns}
+                expectedMove={(snap.payload as any).expected_move}
+              />
             ) : (
               <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
                 Loading chart…

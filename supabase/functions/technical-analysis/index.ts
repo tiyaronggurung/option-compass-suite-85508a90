@@ -7,6 +7,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { detectCandlePatterns, summarizeCandles, type CandleMatch } from "../_shared/candlePatterns.ts";
+import { detectChartPatterns, computeExpectedMove, patternsToScore } from "../_shared/chartPatterns.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -372,8 +373,14 @@ Deno.serve(async (req) => {
 
     const payload = buildVerdict(bars);
 
+    // Additive enrichment — does NOT touch tech_score / verdict / reasons.
+    // Consumers can opt-in to `pattern_score` separately.
+    const chart_patterns = detectChartPatterns(bars);
+    const pattern_score = patternsToScore(chart_patterns);
+    const expected_move = computeExpectedMove(bars, [1, 5, 20]);
+
     const recentBars = bars.slice(-200).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
-    const fullPayload = { ...payload, recent_bars: recentBars };
+    const fullPayload = { ...payload, chart_patterns, pattern_score, expected_move, recent_bars: recentBars };
 
     const { data: saved } = await supabase
       .from("technical_snapshots")
