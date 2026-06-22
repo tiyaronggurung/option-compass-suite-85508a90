@@ -112,7 +112,7 @@ export function PaperAccountCard({ compact = false }: { compact?: boolean }) {
 
   if (!user) return null;
 
-  const startingBalance = Number(account?.starting_balance ?? 10000);
+  const startingBalance = Number(account?.starting_balance ?? 1000);
   const cash = Number(account?.cash_balance ?? startingBalance);
   const dayStart = Number(account?.day_start_equity ?? startingBalance);
 
