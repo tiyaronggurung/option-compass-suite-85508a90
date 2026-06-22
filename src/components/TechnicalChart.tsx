@@ -135,10 +135,12 @@ function computeFibChannel(bars: ChartBar[], lookback = 90) {
   };
 }
 
-export function TechnicalChart({ bars, height = 380 }: Props) {
+export function TechnicalChart({ bars, height = 380, patterns, expectedMove }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [showFib, setShowFib] = useState(false);
+  const [showPatterns, setShowPatterns] = useState(false);
+
 
   useEffect(() => {
     if (!containerRef.current || !bars || bars.length === 0) return;
