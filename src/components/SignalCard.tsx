@@ -197,6 +197,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <ExitGuideBadge signal={signal} />
         <RiskBadge level={signal.risk_level} />
         {effConf >= 80 && (
           <Badge className="bg-primary/15 text-primary border-0 gap-1 text-[10px] px-1.5 py-0">
@@ -214,6 +215,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
           </Badge>
         )}
       </div>
+
 
       <ConfirmationBadge
         className="mt-2"
