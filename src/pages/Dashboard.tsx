@@ -97,7 +97,7 @@ export default function Dashboard() {
   const [buyOpen, setBuyOpen] = useState(false);
   const [buySignal, setBuySignal] = useState<Signal | null>(null);
   const [cashBalance, setCashBalance] = useState<number>(0);
-  const [minDevelopingScore, setMinDevelopingScore] = useState(65);
+  const [minDevelopingScore, setMinDevelopingScore] = useState(60);
   const watchSet = useMemo(() => new Set(watch), [watch]);
 
   // Deep-link target from notifications bell: /app?signal=<id>
