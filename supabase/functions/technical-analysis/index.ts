@@ -7,6 +7,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { detectCandlePatterns, summarizeCandles, type CandleMatch } from "../_shared/candlePatterns.ts";
+import { detectChartPatterns, computeExpectedMove, patternsToScore } from "../_shared/chartPatterns.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
