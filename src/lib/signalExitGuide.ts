@@ -28,7 +28,7 @@ export function getSignalExitGuide(signal: Signal): SignalExitGuide | null {
     level = 2;
     reasons.push("Signal invalidated — thesis broken");
   } else if (lifecycle === "weakening") {
-    level = Math.max(level, 1);
+    level = Math.max(level, 1) as 0 | 1 | 2;
     reasons.push("Signal weakening");
   }
 
@@ -37,9 +37,10 @@ export function getSignalExitGuide(signal: Signal): SignalExitGuide | null {
     level = 2;
     reasons.push(dte === 0 ? "0DTE — expires today" : "1DTE — expires tomorrow");
   } else if (dte != null && dte <= 3) {
-    level = Math.max(level, 1);
+    level = Math.max(level, 1) as 0 | 1 | 2;
     reasons.push(`${dte}DTE — theta pressure rising`);
   }
+
 
   const strike = signal.strike != null ? Number(signal.strike) : null;
   const premium = signal.premium != null ? Number(signal.premium) : null;
