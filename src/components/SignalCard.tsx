@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
+import { fmtPrice, type Signal, timeAgo, fmtSignalTime } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
