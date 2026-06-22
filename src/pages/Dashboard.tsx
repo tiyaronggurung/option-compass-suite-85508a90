@@ -148,7 +148,7 @@ export default function Dashboard() {
     (async () => {
       const [{ data: s }, { data: dev }, { data: t }, { data: w }, { data: settings }, { data: actions }, { data: pc }, { data: rs }, { data: pa }] = await Promise.all([
         supabase.from("signals").select("*").eq("hidden", false).order("created_at", { ascending: false }).limit(100),
-        supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 65).order("created_at", { ascending: false }).limit(30),
+        supabase.from("signals").select("*").eq("hidden", true).eq("tier", "rejected").gte("confidence", 60).order("created_at", { ascending: false }).limit(30),
         supabase.from("paper_trades").select("*").eq("user_id", user!.id),
         supabase.from("watchlist_items").select("ticker").eq("user_id", user!.id),
         supabase.from("app_settings").select("signal_mode").eq("id", "global").maybeSingle(),
@@ -159,9 +159,9 @@ export default function Dashboard() {
       ]);
       if (cancel) return;
       setSignals(s ?? []);
-      // Merge visible signals with effective score 65-69 into developing list.
-      const filteredDev = (dev ?? []).filter((x: any) => (effectiveConfidence(x) ?? 0) >= 65);
-      const visibleDeveloping = (s ?? []).filter((x: any) => !x.is_demo && (effectiveConfidence(x) ?? 0) >= 65 && (effectiveConfidence(x) ?? 0) < 70);
+      // Merge visible signals with effective score 60-69 into developing list.
+      const filteredDev = (dev ?? []).filter((x: any) => (effectiveConfidence(x) ?? 0) >= 60);
+      const visibleDeveloping = (s ?? []).filter((x: any) => !x.is_demo && (effectiveConfidence(x) ?? 0) >= 60 && (effectiveConfidence(x) ?? 0) < 70);
       setDeveloping([...filteredDev, ...visibleDeveloping]);
       setTrades(t ?? []);
       setWatch((w ?? []).map((x: any) => x.ticker));
