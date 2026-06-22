@@ -62,7 +62,7 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
   const showLifecycleBadge = lifecycleState !== "active";
 
   const effConf = effectiveConfidence(signal as any) ?? 0;
-  if (effConf < 65) return null;
+  if (effConf < 60) return null;
   const isHot = effConf >= 70;
 
   const frequency = (() => {
