@@ -255,7 +255,93 @@ export function TechnicalChart({ bars, height = 380, patterns, expectedMove }: P
       }
     }
 
+    // --- Chart-pattern overlay (optional, OFF by default) ---
+    // Draws each pattern's neckline / target / stop as horizontal-ish lines
+    // spanning the pattern's date range, plus an expected-move cone shaded
+    // forward from the last bar.
+    if (showPatterns && patterns && patterns.length > 0) {
+      const t0 = times[0];
+      const tLast = times[times.length - 1];
+      const colorFor = (bias: string) =>
+        bias === "bullish" ? "#10b981" : bias === "bearish" ? "#ef4444" : "#94a3b8";
+      for (const p of patterns) {
+        const start = (toTs(p.start_date) as number) < (t0 as number) ? t0 : toTs(p.start_date);
+        const end = (toTs(p.end_date) as number) > (tLast as number) ? tLast : toTs(p.end_date);
+        if (p.neckline != null) {
+          const s = chart.addSeries(LineSeries, {
+            color: colorFor(p.bias),
+            lineWidth: p.status === "confirmed" ? 2 : 1,
+            lineStyle: p.status === "confirmed" ? 0 : 2,
+            priceLineVisible: false, lastValueVisible: false,
+            title: `${p.name} neckline`,
+            autoscaleInfoProvider: () => null,
+          });
+          s.setData([
+            { time: start, value: p.neckline },
+            { time: end, value: p.neckline },
+          ] as any);
+        }
+        if (p.target != null) {
+          const s = chart.addSeries(LineSeries, {
+            color: "#10b981", lineWidth: 1, lineStyle: 3,
+            priceLineVisible: false, lastValueVisible: false,
+            title: `${p.name} target`,
+            autoscaleInfoProvider: () => null,
+          });
+          s.setData([
+            { time: end, value: p.target },
+            { time: tLast, value: p.target },
+          ] as any);
+        }
+        if (p.stop != null) {
+          const s = chart.addSeries(LineSeries, {
+            color: "#ef4444", lineWidth: 1, lineStyle: 3,
+            priceLineVisible: false, lastValueVisible: false,
+            title: `${p.name} stop`,
+            autoscaleInfoProvider: () => null,
+          });
+          s.setData([
+            { time: end, value: p.stop },
+            { time: tLast, value: p.stop },
+          ] as any);
+        }
+      }
+    }
+
+    // --- Expected-move cone (optional, shares the patterns toggle) ---
+    if (showPatterns && expectedMove && expectedMove.length > 0) {
+      const last = bars[bars.length - 1];
+      const tLastSec = toTs(last.t) as number;
+      const lastPx = last.c;
+      // Build forward time points. Use 1d steps (~86400s) so cones project to
+      // the right of the last bar even though we don't have future bars.
+      const sorted = [...expectedMove].sort((a, b) => a.horizon_days - b.horizon_days);
+      const maxH = sorted[sorted.length - 1].horizon_days;
+      const points = (kind: "upper" | "lower") => {
+        const arr = [{ time: tLastSec as UTCTimestamp, value: lastPx }];
+        for (const em of sorted) {
+          arr.push({ time: (tLastSec + em.horizon_days * 86400) as UTCTimestamp, value: em[kind] });
+        }
+        return arr;
+      };
+      const up = chart.addSeries(LineSeries, {
+        color: "#10b981", lineWidth: 1, lineStyle: 2,
+        priceLineVisible: false, lastValueVisible: false,
+        title: `EM +1σ (${maxH}d)`,
+        autoscaleInfoProvider: () => null,
+      });
+      up.setData(points("upper") as any);
+      const dn = chart.addSeries(LineSeries, {
+        color: "#ef4444", lineWidth: 1, lineStyle: 2,
+        priceLineVisible: false, lastValueVisible: false,
+        title: `EM −1σ (${maxH}d)`,
+        autoscaleInfoProvider: () => null,
+      });
+      dn.setData(points("lower") as any);
+    }
+
     chart.timeScale().fitContent();
+
 
     const ro = new ResizeObserver(() => {
       if (chartRef.current && el) {
