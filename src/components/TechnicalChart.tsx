@@ -355,7 +355,7 @@ export function TechnicalChart({ bars, height = 380, patterns, expectedMove }: P
       chart.remove();
       chartRef.current = null;
     };
-  }, [bars, height, showFib]);
+  }, [bars, height, showFib, showPatterns, patterns, expectedMove]);
 
   if (!bars || bars.length === 0) {
     return (
