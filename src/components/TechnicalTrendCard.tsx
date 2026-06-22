@@ -35,6 +35,20 @@ export interface TechSnapshot {
       matches: { name: string; bias: "bullish" | "bearish" | "neutral"; kind: "reversal" | "continuation" | "indecision"; strength: number; bar_index: number; bar_date: string; note: string }[];
       summary: { bullScore: number; bearScore: number; net: number };
     };
+    chart_patterns?: {
+      name: string;
+      bias: "bullish" | "bearish" | "neutral";
+      status: "forming" | "confirmed" | "invalidated";
+      start_date: string; end_date: string;
+      neckline: number | null;
+      breakout_level: number | null;
+      target: number | null;
+      stop: number | null;
+      confidence: number;
+      note: string;
+    }[];
+    pattern_score?: number;
+    expected_move?: { horizon_days: number; upper: number; lower: number; prob_inside: number }[];
   };
 }
 
