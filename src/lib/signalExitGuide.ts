@@ -1,7 +1,9 @@
 import type { Signal } from "@/lib/signalHelpers";
 import { getLifecycleState } from "@/lib/signalLifecycle";
+import { getFreshness } from "@/lib/signalFreshness";
 import { daysToExpiry } from "@/lib/blackScholes";
 import { analyzeCostEfficiency } from "@/lib/costEfficiency";
+
 
 export type ExitGuideBand = "HOLD" | "TRIM" | "EXIT";
 
