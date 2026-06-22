@@ -6,6 +6,7 @@
 // derives a verdict (bullish/neutral/bearish) + numeric score in [-100, +100], caches for 15min.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { detectCandlePatterns, summarizeCandles, type CandleMatch } from "../_shared/candlePatterns.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -254,8 +255,30 @@ function buildVerdict(bars: Bar[]) {
   else if (volRatio >= 1.5 && !up) { score -= 10; reasons.push({ label: `Volume ${volRatio.toFixed(1)}× avg on down day`, pts: -10, bullish: false }); }
 
   // Proximity to S/R
-  if (distToSupport < 2 && distToSupport >= 0) { score += 5; reasons.push({ label: "Near 50-day support", pts: 5, bullish: true }); }
-  if (distToResistance < 2 && distToResistance >= 0) { score -= 5; reasons.push({ label: "Near 50-day resistance", pts: -5, bullish: false }); }
+  const nearSupport = distToSupport < 2 && distToSupport >= 0;
+  const nearResistance = distToResistance < 2 && distToResistance >= 0;
+  if (nearSupport) { score += 5; reasons.push({ label: "Near 50-day support", pts: 5, bullish: true }); }
+  if (nearResistance) { score -= 5; reasons.push({ label: "Near 50-day resistance", pts: -5, bullish: false }); }
+
+  // Candlestick patterns (last 5 bars)
+  const candleMatches: CandleMatch[] = detectCandlePatterns(bars, 5);
+  const candleSummary = summarizeCandles(candleMatches);
+  for (const m of candleMatches) {
+    // Only the last 2 bars influence scoring; older ones are informational.
+    const recency = bars.length - 1 - m.bar_index;
+    if (recency > 1 || m.bias === "neutral") continue;
+    const atKey = (m.bias === "bullish" && nearSupport) || (m.bias === "bearish" && nearResistance);
+    const base = m.kind === "reversal" ? (atKey ? 15 : 8) : m.kind === "continuation" ? 5 : 0;
+    const pts = (m.bias === "bullish" ? 1 : -1) * base * (m.strength / 3);
+    if (pts === 0) continue;
+    const rounded = Math.round(pts);
+    score += rounded;
+    reasons.push({
+      label: `Candle: ${m.name}${atKey ? (m.bias === "bullish" ? " at support" : " at resistance") : ""}`,
+      pts: rounded,
+      bullish: rounded > 0,
+    });
+  }
 
   // Clamp
   if (score > 100) score = 100;
@@ -288,6 +311,10 @@ function buildVerdict(bars: Bar[]) {
       avg_volume_20: Math.round(avgVol20),
       last_volume: lastVol,
       volume_ratio: +volRatio.toFixed(2),
+    },
+    candles: {
+      matches: candleMatches,
+      summary: candleSummary,
     },
     bars_used: bars.length,
   };
