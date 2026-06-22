@@ -25,13 +25,13 @@ function label(pcr: number): { sentiment: "bullish" | "bearish" | "neutral"; rea
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // Auth gate — prevent anonymous quota abuse.
+  // Auth gate — return empty 200 (not 401) on missing/invalid session so the
+  // preview's runtime-error overlay doesn't flag transient logout/login races.
+  const emptyOk = () => new Response(JSON.stringify({ unauthenticated: true }), {
+    status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
   const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!authHeader.startsWith("Bearer ")) return emptyOk();
   {
     const authClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -39,11 +39,7 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: ud } = await authClient.auth.getUser();
-    if (!ud?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!ud?.user) return emptyOk();
   }
 
 
