@@ -357,3 +357,34 @@ function CostEfficiencyBadge({ signal }: { signal: Signal }) {
   );
 }
 
+function ExitGuideBadge({ signal }: { signal: Signal }) {
+  const guide = getSignalExitGuide(signal);
+  if (!guide) return null;
+  const icon = guide.band === "EXIT" ? <LogOut className="h-3 w-3" /> : <Scissors className="h-3 w-3" />;
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            className={cn(
+              "border gap-1 text-[10px] px-1.5 py-0 cursor-help",
+              EXIT_GUIDE_CLASS[guide.band],
+            )}
+          >
+            {icon} {guide.band}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-xs">
+          <div className="font-semibold mb-1">Exit guidance · {guide.band}</div>
+          <ul className="space-y-0.5 text-muted-foreground">
+            {guide.reasons.map((reason, i) => (
+              <li key={i} className={i === 0 ? "text-foreground/80" : ""}>· {reason}</li>
+            ))}
+          </ul>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+
