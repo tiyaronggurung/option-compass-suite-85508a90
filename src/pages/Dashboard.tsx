@@ -742,7 +742,7 @@ export default function Dashboard() {
                             outcome={signalOutcome(s, trades, dismissedIds)}
                             recentSignals={signals ?? undefined}
                             subLabel={
-                              (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 65
+                              (effectiveConfidence(s as any) ?? s.confidence ?? 0) >= 60
                                 ? "Near Watchlist — Paper Test"
                                 : "Paper Test Candidate"
                             }
