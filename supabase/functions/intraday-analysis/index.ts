@@ -29,28 +29,35 @@ const cache = new Map<string, { at: number; payload: any }>();
 
 // ---------- Tradier timesales ----------
 async function fetchIntradayBars(symbol: string): Promise<Bar[]> {
-  // Tradier returns timestamps in US/Eastern. Ask for 5-min bars across the
-  // last 3 calendar days (covers weekends / overnight). We'll filter to the
-  // latest session client-side.
-  const end = new Date();
-  const start = new Date(end.getTime() - 3 * 86400000);
-  const fmt = (d: Date) => {
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(d.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${day} 00:00`;
+  // Tradier timesales returns timestamps in US/Eastern. Use date-only window
+  // (5 calendar days back → today) so weekends / overnight gaps are handled,
+  // then filter to the latest session client-side.
+  const toET = (d: Date) => {
+    // Convert a UTC date to ET YYYY-MM-DD using Intl, which handles DST.
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(d);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
   };
-  const url = `https://api.tradier.com/v1/markets/timesales?` + new URLSearchParams({
+  const now = new Date();
+  const startDate = new Date(now.getTime() - 5 * 86400000);
+  const params = new URLSearchParams({
     symbol,
     interval: "5min",
-    start: fmt(start),
-    end: fmt(end),
+    start: toET(startDate),
+    end: toET(now),
     session_filter: "open",
   });
+  const url = `https://api.tradier.com/v1/markets/timesales?${params.toString()}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${TRADIER_KEY}`, Accept: "application/json" },
   });
-  if (!res.ok) throw new Error(`tradier_${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`tradier_${res.status}: ${body.slice(0, 160)}`);
+  }
   const json = await res.json();
   const raw = json?.series?.data;
   const arr: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
