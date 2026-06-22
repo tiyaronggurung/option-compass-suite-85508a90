@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-import { fmtPrice, type Signal, timeAgo } from "@/lib/signalHelpers";
+import { fmtPrice, type Signal, timeAgo, fmtSignalTime } from "@/lib/signalHelpers";
 import { deriveTags, type TagId } from "@/lib/signalTags";
 import { OUTCOME_CLASS, OUTCOME_LABEL, type SignalOutcome } from "@/lib/signalOutcome";
 import { getCountdownLabel, getFreshness } from "@/lib/signalFreshness";
@@ -151,9 +151,10 @@ export function SignalCard({ signal, onApprove, onReject, onDetails, watchlist, 
               <div className="text-[11px] text-primary/80 font-medium mt-0.5">{subLabel}</div>
             )}
             <div className="text-[11px] text-muted-foreground flex items-center gap-x-2 gap-y-0.5 mt-1 flex-wrap">
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1" title={`Signal placed at ${fmtSignalTime(signal.created_at)} ET`}>
                 <Clock className="h-3 w-3" />
                 {timeAgo(signal.created_at)}
+                <span className="text-[10px] text-muted-foreground/80">· {fmtSignalTime(signal.created_at)}</span>
               </span>
               <span
                 className="ticker-mono"
