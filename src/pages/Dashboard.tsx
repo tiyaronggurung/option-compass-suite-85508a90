@@ -284,7 +284,7 @@ export default function Dashboard() {
     const cutoff = now - 24 * 60 * 60_000;
     const base = developing.filter((s) => {
       const eff = effectiveConfidence(s as any) ?? 0;
-      if (eff < Math.max(65, minDevelopingScore)) return false;
+      if (eff < Math.max(60, minDevelopingScore)) return false;
       if (eff > 69) return false;
       const t = new Date(s.created_at).getTime();
       if (t < cutoff) return false;
