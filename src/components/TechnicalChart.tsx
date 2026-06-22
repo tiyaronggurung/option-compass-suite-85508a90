@@ -18,9 +18,28 @@ export interface ChartBar {
   v: number;
 }
 
+export interface OverlayPattern {
+  name: string;
+  bias: "bullish" | "bearish" | "neutral";
+  status: "forming" | "confirmed" | "invalidated";
+  start_date: string;
+  end_date: string;
+  neckline: number | null;
+  target: number | null;
+  stop: number | null;
+}
+
+export interface OverlayExpectedMove {
+  horizon_days: number;
+  upper: number;
+  lower: number;
+}
+
 interface Props {
   bars: ChartBar[];
   height?: number;
+  patterns?: OverlayPattern[];
+  expectedMove?: OverlayExpectedMove[];
 }
 
 // ---- Indicator helpers ----
