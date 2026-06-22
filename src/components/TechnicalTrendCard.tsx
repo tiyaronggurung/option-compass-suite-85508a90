@@ -31,6 +31,10 @@ export interface TechSnapshot {
       volume_ratio: number;
     };
     recent_bars?: { t: string; o: number; h: number; l: number; c: number; v: number }[];
+    candles?: {
+      matches: { name: string; bias: "bullish" | "bearish" | "neutral"; kind: "reversal" | "continuation" | "indecision"; strength: number; bar_index: number; bar_date: string; note: string }[];
+      summary: { bullScore: number; bearScore: number; net: number };
+    };
   };
 }
 
@@ -154,6 +158,33 @@ export function TechnicalTrendCard({ ticker, signalDirection, baseConfidence, on
         <Row k="Dist to resistance" v={`${fmt(ind.dist_to_resistance_pct)}%`} />
         <Row k="Vol vs 20d avg" v={`${fmt(ind.volume_ratio)}×`} tone={ind.volume_ratio >= 1.5 ? "good" : undefined} />
       </div>
+
+      {/* Candlestick patterns */}
+      {p.candles && p.candles.matches.length > 0 && (
+        <div className="pt-2 border-t border-border space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Candlestick patterns (last 5 bars)</div>
+            <span className="text-[10px] text-muted-foreground">
+              net <span className={cn("font-mono", p.candles.summary.net > 0 ? "text-emerald-500" : p.candles.summary.net < 0 ? "text-rose-500" : "")}>{p.candles.summary.net > 0 ? "+" : ""}{p.candles.summary.net}</span>
+            </span>
+          </div>
+          <ul className="space-y-1">
+            {p.candles.matches.slice(0, 8).map((m, i) => (
+              <li key={i} className="flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={cn(
+                    "inline-block w-1.5 h-1.5 rounded-full shrink-0",
+                    m.bias === "bullish" ? "bg-emerald-500" : m.bias === "bearish" ? "bg-rose-500" : "bg-muted-foreground",
+                  )} />
+                  <span className="truncate font-medium">{m.name}</span>
+                  <span className="text-[10px] text-muted-foreground">{"★".repeat(m.strength)}</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground shrink-0">{new Date(m.bar_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Reasons */}
       {p.reasons.length > 0 && (
