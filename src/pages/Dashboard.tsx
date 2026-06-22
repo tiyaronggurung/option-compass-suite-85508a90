@@ -686,7 +686,7 @@ export default function Dashboard() {
                 Developing Signals
               </h2>
               <p className="text-xs text-muted-foreground">
-                Below Threshold — Not Tradeable Yet · score 65–69 · last 24h only
+                Below Threshold — Not Tradeable Yet · score 60–69 · last 24h only
               </p>
             </div>
             <div className="flex items-center gap-2">
