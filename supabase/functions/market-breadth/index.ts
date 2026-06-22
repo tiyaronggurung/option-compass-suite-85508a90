@@ -1,7 +1,11 @@
 // Market breadth across 10 mega-caps. Calls Tradier directly (key already in secrets)
 // and returns up/down counts + a bullish/bearish/neutral bias.
 // Cached in-memory ~30s so the Technical page marquee can poll cheaply.
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
 
 const TRADIER_KEY = Deno.env.get("TRADIER_API_KEY") ?? "";
 const TICKERS = ["SPY", "QQQ", "NVDA", "TSLA", "AMD", "AAPL", "META", "MSFT", "AMZN", "GOOGL"];
