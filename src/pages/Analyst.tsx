@@ -96,8 +96,13 @@ export default function Analyst() {
         if (!token) return;
         const base = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
         const res = await fetch(`${base}/uw-ticker-sentiment?ticker=${encodeURIComponent(ticker)}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
         });
+        // 401 is expected during logout/login transitions — swallow silently.
+        if (res.status === 401) return;
         if (res.ok) {
           const j = await res.json();
           if (!cancel) setSentiment(j as TickerSentiment);
