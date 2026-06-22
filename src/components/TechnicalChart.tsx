@@ -385,6 +385,19 @@ export function TechnicalChart({ bars, height = 380, patterns, expectedMove }: P
           >
             Fib channel {showFib ? "ON" : "OFF"}
           </button>
+          {((patterns && patterns.length > 0) || (expectedMove && expectedMove.length > 0)) && (
+            <button
+              onClick={() => setShowPatterns((v) => !v)}
+              className={`px-2 py-0.5 rounded border text-[10px] transition-colors ${
+                showPatterns
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border hover:bg-accent"
+              }`}
+              title="Toggle chart-pattern necklines / targets / expected-move cone"
+            >
+              Patterns {showPatterns ? "ON" : "OFF"}
+            </button>
+          )}
         </div>
       </div>
       <div ref={containerRef} className="w-full" style={{ height }} />
@@ -396,6 +409,14 @@ export function TechnicalChart({ bars, height = 380, patterns, expectedMove }: P
           <Legend swatch="#f59e0b" label="1.0 rail" />
           <Legend swatch="#ef4444" label="1.618 ext" />
           <span className="opacity-70">Anchors: swing low/high in last 90 bars</span>
+        </div>
+      )}
+      {showPatterns && ((patterns && patterns.length > 0) || (expectedMove && expectedMove.length > 0)) && (
+        <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground pt-1 border-t border-border">
+          <Legend swatch="#10b981" label="bullish neckline / target" />
+          <Legend swatch="#ef4444" label="bearish neckline / stop" />
+          <Legend swatch="#94a3b8" label="neutral" />
+          <span className="opacity-70">Dotted = forming · solid = confirmed · projected cone right of last bar</span>
         </div>
       )}
     </div>
