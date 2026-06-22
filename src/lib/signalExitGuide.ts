@@ -62,9 +62,10 @@ export function getSignalExitGuide(signal: Signal): SignalExitGuide | null {
       level = 2;
       reasons.push("Theta trap — daily decay too high");
     } else if (ce.verdict === "marginal") {
-      level = Math.max(level, 1);
+      level = Math.max(level, 1) as 0 | 1 | 2;
       reasons.push("Cost efficiency marginal");
     }
+
   }
 
   if (reasons.length === 0) return null;
