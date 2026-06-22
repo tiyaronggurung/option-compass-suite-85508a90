@@ -694,14 +694,14 @@ export default function Dashboard() {
                 <span className="text-xs text-muted-foreground">Min score</span>
                 <input
                   type="range"
-                  min={65}
+                  min={60}
                   max={69}
                   step={1}
-                  value={Math.max(65, minDevelopingScore)}
+                  value={Math.max(60, minDevelopingScore)}
                   onChange={(e) => setMinDevelopingScore(Number(e.target.value))}
                   className="w-24 accent-primary"
                 />
-                <span className="text-xs font-medium tabular-nums w-5">{Math.max(65, minDevelopingScore)}</span>
+                <span className="text-xs font-medium tabular-nums w-5">{Math.max(60, minDevelopingScore)}</span>
               </div>
               <Button
                 size="sm"
