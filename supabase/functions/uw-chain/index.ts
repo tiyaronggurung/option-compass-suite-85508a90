@@ -12,6 +12,33 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const UW_KEY = Deno.env.get("UNUSUAL_WHALES_API_KEY") ?? "";
 const UW_BASE = "https://api.unusualwhales.com/api";
+const TRADIER_KEY = Deno.env.get("TRADIER_API_KEY") ?? "";
+const TRADIER_BASE = "https://api.tradier.com/v1";
+
+// Live underlying fallback. UW's option-contracts response doesn't always include
+// `underlying_price`, which left the dialog showing the signal's snapshot price
+// (often yesterday's). Tradier always returns a fresh last trade.
+async function fetchLiveSpot(ticker: string): Promise<number | null> {
+  if (!TRADIER_KEY) return null;
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(
+      `${TRADIER_BASE}/markets/quotes?symbols=${encodeURIComponent(ticker)}&greeks=false`,
+      { headers: { Authorization: `Bearer ${TRADIER_KEY}`, Accept: "application/json" }, signal: ctrl.signal },
+    );
+    clearTimeout(tid);
+    if (!res.ok) { await res.text().catch(() => ""); return null; }
+    const json = await res.json();
+    const q = json?.quotes?.quote;
+    const row = Array.isArray(q) ? q[0] : q;
+    const v = row?.last ?? row?.close ?? row?.prevclose;
+    const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
 
 type ChainRow = {
   symbol: string;
