@@ -21,6 +21,8 @@ import { SignalDetailDialog } from "@/components/SignalDetailDialog";
 import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 import { DisclaimerBar } from "@/components/Disclaimer";
 import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sourcePriority, type SourceFilter } from "@/lib/signalSource";
+import { regimeAdjustConfidence } from "@/lib/regimeAdjust";
+import { useMarketRegime } from "@/hooks/useMarketRegime";
 
 type Tab = "calls" | "puts" | "all";
 type MaxRisk = "LOW" | "MEDIUM" | "HIGH";
