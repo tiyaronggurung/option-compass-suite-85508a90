@@ -130,7 +130,7 @@ export default function TopSignals() {
       return true;
     });
     return rankSignals(base);
-  }, [signals, includeDebug]);
+  }, [signals, includeDebug, regime]);
 
   // Compute call vs put total contract volume across the broadly-filtered set
   // (before the call/put tab split) so the bias reflects the whole board.
