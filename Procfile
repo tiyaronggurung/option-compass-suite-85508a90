@@ -1,0 +1,1 @@
+worker: POLL_INTERVAL_SECONDS=60 python scripts/robinhood_executor.py
