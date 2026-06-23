@@ -21,6 +21,8 @@ import { SignalDetailDialog } from "@/components/SignalDetailDialog";
 import { BuyOptionDialog } from "@/components/BuyOptionDialog";
 import { DisclaimerBar } from "@/components/Disclaimer";
 import { SOURCE_FILTER_OPTIONS, matchesSourceFilter, sourcePriority, type SourceFilter } from "@/lib/signalSource";
+import { regimeAdjustConfidence } from "@/lib/regimeAdjust";
+import { useMarketRegime } from "@/hooks/useMarketRegime";
 
 type Tab = "calls" | "puts" | "all";
 type MaxRisk = "LOW" | "MEDIUM" | "HIGH";
@@ -29,6 +31,7 @@ const TOP_N: Record<Tab, number> = { calls: 10, puts: 10, all: 20 };
 
 export default function TopSignals() {
   const { user } = useAuth();
+  const regime = useMarketRegime();
   const [signals, setSignals] = useState<Signal[] | null>(null);
   const [trades, setTrades] = useState<PaperTrade[]>([]);
   const [watch, setWatch] = useState<string[]>([]);
@@ -118,15 +121,16 @@ export default function TopSignals() {
         if (s.is_demo) return false;
         if (s.status !== "LIVE") return false;
         if (isExpired(s)) return false;
-        // Match Dashboard hero gate: only surface signals with effective
-        // confidence >= 70. Anything weaker belongs in the Developing section.
+        // Regime-aware gate: in bear/high_vol PUTs get a small boost (and CALLs
+        // a small drag); in bull the reverse. Sideways = unchanged.
         const eff = effectiveConfidence(s as any) ?? 0;
-        if (eff < 70) return false;
+        const adj = regimeAdjustConfidence(eff, s.direction as "CALL" | "PUT", regime) ?? eff;
+        if (adj < 70) return false;
       }
       return true;
     });
     return rankSignals(base);
-  }, [signals, includeDebug]);
+  }, [signals, includeDebug, regime]);
 
   // Compute call vs put total contract volume across the broadly-filtered set
   // (before the call/put tab split) so the bias reflects the whole board.
