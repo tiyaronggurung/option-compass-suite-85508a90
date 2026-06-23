@@ -31,6 +31,7 @@ const TOP_N: Record<Tab, number> = { calls: 10, puts: 10, all: 20 };
 
 export default function TopSignals() {
   const { user } = useAuth();
+  const regime = useMarketRegime();
   const [signals, setSignals] = useState<Signal[] | null>(null);
   const [trades, setTrades] = useState<PaperTrade[]>([]);
   const [watch, setWatch] = useState<string[]>([]);
