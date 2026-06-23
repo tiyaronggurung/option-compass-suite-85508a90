@@ -235,6 +235,14 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Always ensure we return a fresh underlying spot. If UW didn't surface
+        // it on the contract rows, fall back to a live Tradier quote so the
+        // Buy Option dialog never shows yesterday's signal-snapshot price.
+        if (spot == null || !(spot > 0)) {
+          const live = await fetchLiveSpot(ticker);
+          if (live != null) spot = live;
+        }
+
         const payload: any = {
           ticker, spot, expiries, expiry, rows,
           fetched_at: new Date().toISOString(),
