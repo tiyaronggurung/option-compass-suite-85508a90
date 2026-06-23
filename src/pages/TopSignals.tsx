@@ -121,10 +121,11 @@ export default function TopSignals() {
         if (s.is_demo) return false;
         if (s.status !== "LIVE") return false;
         if (isExpired(s)) return false;
-        // Match Dashboard hero gate: only surface signals with effective
-        // confidence >= 70. Anything weaker belongs in the Developing section.
+        // Regime-aware gate: in bear/high_vol PUTs get a small boost (and CALLs
+        // a small drag); in bull the reverse. Sideways = unchanged.
         const eff = effectiveConfidence(s as any) ?? 0;
-        if (eff < 70) return false;
+        const adj = regimeAdjustConfidence(eff, s.direction as "CALL" | "PUT", regime) ?? eff;
+        if (adj < 70) return false;
       }
       return true;
     });
