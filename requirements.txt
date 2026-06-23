@@ -1,0 +1,4 @@
+robin_stocks==3.0.9
+supabase==2.10.0
+requests==2.32.3
+python-dotenv==1.0.1
