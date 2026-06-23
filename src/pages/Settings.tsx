@@ -100,6 +100,8 @@ export default function Settings() {
 
       <AutoEntryRulesPanel />
 
+      <BrokerExecutionPanel />
+
       <ActiveSessionPanel />
 
       <TwoFactorPanel />
