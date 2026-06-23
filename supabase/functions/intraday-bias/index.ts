@@ -299,8 +299,8 @@ Deno.serve(async (req) => {
 
     const bars = await fetch1mBars(ticker, lookbackMinForDTE(dte));
     if (bars.length < 10) {
-      return new Response(JSON.stringify({ error: "Not enough 1m bars", bars: bars.length }), {
-        status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({ ok: true, skipped: "no_bars", bars: bars.length }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     const payload = buildBias(bars, direction as "CALL" | "PUT", dte);
