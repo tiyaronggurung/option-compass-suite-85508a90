@@ -62,23 +62,25 @@ async function fetchBreadth() {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (!TRADIER_KEY) {
-    return new Response(JSON.stringify({ error: "TRADIER_API_KEY not configured" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  const ok = (payload: unknown) =>
+    new Response(JSON.stringify(payload), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  }
+
+  // Degrade gracefully: breadth is display-only, so never 500 the client.
+  if (!TRADIER_KEY) return ok({ unavailable: true, reason: "TRADIER_API_KEY not configured" });
+
   try {
     const now = Date.now();
     if (!cache || now - cache.at > TTL_MS) {
       const payload = await fetchBreadth();
       cache = { at: now, payload };
     }
-    return new Response(JSON.stringify(cache.payload), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return ok(cache.payload);
   } catch (e) {
-    return new Response(JSON.stringify({ error: (e as Error).message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Serve last-good payload if we have one, otherwise an explicit unavailable marker.
+    if (cache) return ok({ ...cache.payload, stale: true });
+    return ok({ unavailable: true, reason: (e as Error).message });
   }
 });
+
